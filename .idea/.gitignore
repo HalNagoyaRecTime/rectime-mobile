@@ -1,6 +1,6 @@
 # デフォルトの無視対象ファイル
 /shelf/
-/workspace.xml/
+/workspace.xml
 /deployment.xml
 
 # 無視されたデフォルトフォルダー (クエリファイルを含む)
