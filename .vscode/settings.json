@@ -1,0 +1,12 @@
+{
+    "kotlin.languageServer.enabled": true,
+    "kotlin.java.home": "${env:JAVA_HOME}",
+    "files.insertFinalNewline": true,
+    "editor.tabSize": 4,
+    "editor.detectIndentation": false,
+    "editor.semanticHighlighting.enabled": true,
+    "gradle.java.home": "${env:JAVA_HOME}",
+    "emulator.emulatorPathWindows": "${env:ANDROID_HOME}\\emulator",
+    "emulator.emulatorPathMac": "${env:ANDROID_HOME}/emulator",
+    "emulator.emulatorPathLinux": "${env:ANDROID_HOME}/emulator"
+}
