@@ -3,15 +3,27 @@
   "configurations": [
     {
       "type": "node-terminal",
-      "name": "Run Desktop 🔥",
+      "name": "Start Android",
       "request": "launch",
-      "command": "./gradlew :composeApp:hotRunJvm"
+      "command": "bash scripts/start-android.sh",
+      "windows": {
+        "command": "powershell -ExecutionPolicy Bypass -File scripts/start-android.ps1"
+      }
     },
     {
       "type": "node-terminal",
       "name": "Run Android",
       "request": "launch",
-      "command": "./gradlew :composeApp:installDebug && adb shell am start -n com.rectime.mobile/.MainActivity"
+      "command": "bash scripts/run-android.sh",
+      "windows": {
+        "command": "powershell -ExecutionPolicy Bypass -File scripts/run-android.ps1"
+      }
+    },
+    {
+      "type": "node-terminal",
+      "name": "Run Desktop 🔥",
+      "request": "launch",
+      "command": "./gradlew :composeApp:hotRunJvm --autoReload"
     },
     {
       "type": "node-terminal",
