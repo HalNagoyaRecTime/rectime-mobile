@@ -1,0 +1,11 @@
+{
+  "kotlin.languageServer.enabled": true,
+  "kotlin.java.home": "C:/Users/yukid/.gradle/jdks/eclipse_adoptium-17-amd64-windows.2",
+  "files.insertFinalNewline": true,
+  "editor.tabSize": 4,
+  "editor.detectIndentation": false,
+  "[kotlin]": {
+    "editor.defaultFormatter": "fwcd.kotlin"
+  },
+  "gradle.java.home": "C:/Users/yukid/.gradle/jdks/eclipse_adoptium-17-amd64-windows.2"
+}

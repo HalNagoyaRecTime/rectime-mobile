@@ -1,0 +1,94 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Desktop (Hot Reload)",
+      "type": "shell",
+      "command": "./gradlew",
+      "args": [":composeApp:hotRunJvm"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [],
+      "isBackground": true
+    },
+    {
+      "label": "Run Android (Emulator / Device)",
+      "type": "shell",
+      "command": "./gradlew :composeApp:installDebug && adb shell am start -n com.rectime.mobile/.MainActivity",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Android (Debug APK only)",
+      "type": "shell",
+      "command": "./gradlew",
+      "args": [":composeApp:assembleDebug"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "List AVDs",
+      "type": "shell",
+      "command": "%ANDROID_HOME%/emulator/emulator -list-avds",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Unit Tests (JVM)",
+      "type": "shell",
+      "command": "./gradlew",
+      "args": [":composeApp:jvmTest"],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Android Instrumented Tests",
+      "type": "shell",
+      "command": "./gradlew",
+      "args": [":composeApp:connectedDebugAndroidTest"],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clean",
+      "type": "shell",
+      "command": "./gradlew",
+      "args": ["clean"],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

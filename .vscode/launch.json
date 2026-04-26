@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node-terminal",
+      "name": "Run Desktop 🔥",
+      "request": "launch",
+      "command": "./gradlew :composeApp:hotRunJvm"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Run Android",
+      "request": "launch",
+      "command": "./gradlew :composeApp:installDebug && adb shell am start -n com.rectime.mobile/.MainActivity"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Test Android",
+      "request": "launch",
+      "command": "./gradlew :composeApp:connectedDebugAndroidTest"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Test Unit",
+      "request": "launch",
+      "command": "./gradlew :composeApp:jvmTest"
+    }
+  ]
+}
