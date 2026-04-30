@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node-terminal",
+      "name": "Start Android",
+      "request": "launch",
+      "command": "bash scripts/start-android.sh",
+      "windows": {
+        "command": "powershell -ExecutionPolicy Bypass -File scripts/start-android.ps1"
+      }
+    },
+    {
+      "type": "node-terminal",
+      "name": "Run Android",
+      "request": "launch",
+      "command": "bash scripts/run-android.sh",
+      "windows": {
+        "command": "powershell -ExecutionPolicy Bypass -File scripts/run-android.ps1"
+      }
+    },
+    {
+      "type": "node-terminal",
+      "name": "Run Desktop 🔥",
+      "request": "launch",
+      "command": "./gradlew :composeApp:hotRunJvm --autoReload"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Test Android",
+      "request": "launch",
+      "command": "./gradlew :composeApp:connectedDebugAndroidTest"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Test Unit",
+      "request": "launch",
+      "command": "./gradlew :composeApp:jvmTest"
+    }
+  ]
+}
