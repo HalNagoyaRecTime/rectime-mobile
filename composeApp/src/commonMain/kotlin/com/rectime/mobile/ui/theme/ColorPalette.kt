@@ -1,47 +1,6 @@
-package com.rectime.mobile
+package com.rectime.mobile.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-
-enum class ThemeMode {
-    System,
-    Light,
-    Dark,
-}
-
-enum class ThemeId {
-    Default,
-    Blue2024,
-}
-
-object LayoutTokens {
-    val headerAction = 44.dp
-    val bottomTabMinHeight = 54.dp
-    val rootBottomNavigationInset = 112.dp
-    val bottomInsetMin = 14.dp
-    const val sideMenuRevealRatio = 0.82f
-    val sideMenuRevealMin = 280.dp
-    val sideMenuRevealMax = 380.dp
-    const val sheetDismissProgress = 0.18f
-
-    const val backDismissProgress = 0.45f
-    const val backDismissVelocityX = 700f
-    const val sheetDismissVelocityY = 1000f
-    const val pushDismissDurationMs = 180
-    const val menuOpenCloseDamping = 24f
-    const val menuOpenCloseStiffness = 220f
-}
 
 data class AppColorTokens(
     val navigationBackground: Color,
@@ -153,91 +112,7 @@ private val blueDark = AppColorTokens(
     overlayBackdrop = Color(0xDE01060E),
 )
 
-private fun appColors(themeId: ThemeId, dark: Boolean): AppColorTokens {
-    return when (themeId) {
-        ThemeId.Default -> if (dark) defaultDark else defaultLight
-        ThemeId.Blue2024 -> if (dark) blueDark else blueLight
-    }
+internal fun appColors(themeId: ThemeId, dark: Boolean): AppColorTokens = when (themeId) {
+    ThemeId.Default -> if (dark) defaultDark else defaultLight
+    ThemeId.Blue2024 -> if (dark) blueDark else blueLight
 }
-
-class ThemeStateHolder(
-    initialMode: ThemeMode = ThemeMode.System,
-    initialThemeId: ThemeId = ThemeId.Default,
-) {
-    private var _mode by mutableStateOf(initialMode)
-    val mode: ThemeMode get() = _mode
-
-    private var _themeId by mutableStateOf(initialThemeId)
-    val themeId: ThemeId get() = _themeId
-
-    fun setMode(next: ThemeMode) {
-        _mode = next
-    }
-
-    fun setThemeId(next: ThemeId) {
-        _themeId = next
-    }
-}
-
-private val LocalAppColors = staticCompositionLocalOf<AppColorTokens> {
-    error("App colors not provided")
-}
-
-@Composable
-fun AppTheme(
-    themeStateHolder: ThemeStateHolder,
-    content: @Composable () -> Unit,
-) {
-    val dark = when (themeStateHolder.mode) {
-        ThemeMode.System -> isSystemInDarkTheme()
-        ThemeMode.Light -> false
-        ThemeMode.Dark -> true
-    }
-    val colors = appColors(themeStateHolder.themeId, dark)
-    val material = if (dark) {
-        darkColorScheme(
-            primary = colors.surfaceAccentStrong,
-            onPrimary = colors.textOnAccent,
-            secondary = colors.surfaceAccent,
-            onSecondary = colors.textPrimary,
-            background = colors.surfacePrimary,
-            onBackground = colors.textPrimary,
-            surface = colors.surfacePrimary,
-            onSurface = colors.textPrimary,
-            surfaceVariant = colors.surfaceMuted,
-            onSurfaceVariant = colors.textSecondary,
-            outline = colors.borderStrong,
-            scrim = colors.overlayBackdrop,
-        )
-    } else {
-        lightColorScheme(
-            primary = colors.surfaceAccentStrong,
-            onPrimary = colors.textOnAccent,
-            secondary = colors.surfaceAccent,
-            onSecondary = colors.textPrimary,
-            background = colors.surfacePrimary,
-            onBackground = colors.textPrimary,
-            surface = colors.surfacePrimary,
-            onSurface = colors.textPrimary,
-            surfaceVariant = colors.surfaceMuted,
-            onSurfaceVariant = colors.textSecondary,
-            outline = colors.borderStrong,
-            scrim = colors.overlayBackdrop,
-        )
-    }
-
-    CompositionLocalProvider(LocalAppColors provides colors) {
-        MaterialTheme(
-            colorScheme = material,
-            content = content,
-        )
-    }
-}
-
-object AppTheme {
-    val colors: AppColorTokens
-        @Composable
-        @ReadOnlyComposable
-        get() = LocalAppColors.current
-}
-
