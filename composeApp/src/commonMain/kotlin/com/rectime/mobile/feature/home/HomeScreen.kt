@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.feature.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +25,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.ui.component.HeaderActionButton
+import com.rectime.mobile.ui.component.PressSurface
+import com.rectime.mobile.ui.component.ScreenHeader
+import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bars
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
@@ -206,7 +210,7 @@ fun HomeScreen(
         }
 
         item {
-            Spacer(modifier = Modifier.height(LayoutTokens.rootBottomNavigationInset))
+            Spacer(modifier = Modifier.height(AppTheme.layout.rootBottomNavigationInset))
         }
     }
 }

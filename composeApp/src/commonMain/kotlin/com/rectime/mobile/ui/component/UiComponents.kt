@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.ui.component
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -33,6 +33,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.app.navigation.RootRoute
+import com.rectime.mobile.ui.theme.AppTheme
+import com.rectime.mobile.ui.theme.ThemeId
+import com.rectime.mobile.ui.theme.ThemeMode
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CalendarDays
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.House
@@ -110,11 +114,11 @@ fun ScreenHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(LayoutTokens.headerAction),
+            .height(AppTheme.layout.headerAction),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.size(LayoutTokens.headerAction), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(AppTheme.layout.headerAction), contentAlignment = Alignment.Center) {
             leading?.invoke()
         }
         Text(
@@ -122,7 +126,7 @@ fun ScreenHeader(
             color = AppTheme.colors.textPrimary,
             fontWeight = FontWeight.SemiBold,
         )
-        Box(modifier = Modifier.size(LayoutTokens.headerAction), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(AppTheme.layout.headerAction), contentAlignment = Alignment.Center) {
             trailing?.invoke()
         }
     }
@@ -150,7 +154,7 @@ fun BottomNavigationBar(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
-                .heightIn(min = LayoutTokens.bottomTabMinHeight),
+                .heightIn(min = AppTheme.layout.bottomTabMinHeight),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

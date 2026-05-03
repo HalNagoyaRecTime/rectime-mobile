@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.feature.schedule
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -23,6 +23,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.ui.component.HeaderActionButton
+import com.rectime.mobile.ui.component.PressSurface
+import com.rectime.mobile.ui.component.ScreenHeader
+import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bars
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
@@ -175,7 +179,7 @@ fun CalendarScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(LayoutTokens.rootBottomNavigationInset))
+        Spacer(modifier = Modifier.height(AppTheme.layout.rootBottomNavigationInset))
     }
 }
 

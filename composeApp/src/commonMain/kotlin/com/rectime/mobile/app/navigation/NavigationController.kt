@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.app.navigation
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf

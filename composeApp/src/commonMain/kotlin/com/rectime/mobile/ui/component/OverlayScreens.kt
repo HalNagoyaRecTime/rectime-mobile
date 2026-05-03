@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,6 +21,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.app.navigation.PushRoute
+import com.rectime.mobile.ui.theme.AppTheme
+import com.rectime.mobile.ui.theme.ThemeId
+import com.rectime.mobile.ui.theme.ThemeMode
+import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ArrowLeft
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CircleQuestion

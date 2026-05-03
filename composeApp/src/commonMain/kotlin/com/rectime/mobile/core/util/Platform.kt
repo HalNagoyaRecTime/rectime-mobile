@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.core.util
 
 interface Platform {
     val name: String

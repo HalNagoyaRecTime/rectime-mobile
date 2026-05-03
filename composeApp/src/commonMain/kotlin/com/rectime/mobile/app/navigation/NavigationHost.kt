@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.app.navigation
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
@@ -26,13 +26,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.feature.home.HomeScreen
+import com.rectime.mobile.feature.schedule.CalendarScreen
+import com.rectime.mobile.ui.component.BottomNavigationBar
+import com.rectime.mobile.ui.component.PushCardScreen
+import com.rectime.mobile.ui.component.SampleSheet
+import com.rectime.mobile.ui.component.SideMenu
+import com.rectime.mobile.ui.component.ThemeSheet
+import com.rectime.mobile.ui.theme.AppTheme
+import com.rectime.mobile.ui.theme.ThemeStateHolder
+import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -49,9 +58,10 @@ fun NavigationHost(
             .fillMaxSize()
             .background(AppTheme.colors.surfacePrimary),
     ) {
+        val layout = AppTheme.layout
         val revealWidthDp = maxOf(
-            LayoutTokens.sideMenuRevealMin,
-            minOf(maxWidth * LayoutTokens.sideMenuRevealRatio, LayoutTokens.sideMenuRevealMax),
+            layout.sideMenuRevealMin,
+            minOf(maxWidth * GestureTokens.sideMenuRevealRatio, layout.sideMenuRevealMax),
         )
         val densityScale = LocalDensity.current.density
         val revealWidthPx = revealWidthDp.value * densityScale
@@ -111,7 +121,7 @@ private fun RootLayer(
                 targetValue = state.menuProgress,
                 animationSpec = spring(
                     dampingRatio = 0.86f,
-                    stiffness = LayoutTokens.menuOpenCloseStiffness,
+                    stiffness = GestureTokens.menuOpenCloseStiffness,
                 ),
             )
         }
@@ -128,7 +138,7 @@ private fun RootLayer(
     }
     val safeProgress = renderedMenuProgress.coerceIn(0f, 1f)
     val offsetX = (safeProgress * revealWidthPx).roundToInt()
-    val cornerDp = 24.dp * safeProgress
+    val cornerDp = AppTheme.radius.xxl * safeProgress
 
     Box(
         modifier = Modifier
@@ -160,7 +170,7 @@ private fun RootLayer(
                         if (!canDragMenu || navigationController.state.activeGesture != ActiveGesture.Menu) {
                             return@detectHorizontalDragGestures
                         }
-                        if (navigationController.state.menuProgress > LayoutTokens.backDismissProgress) {
+                        if (navigationController.state.menuProgress > GestureTokens.backDismissProgress) {
                             navigationController.openMenu()
                         } else {
                             navigationController.closeMenu()
@@ -241,7 +251,7 @@ private fun PushLayer(
         val animator = Animatable(dragOffsetPx)
         animator.animateTo(
             targetValue = containerWidthPx,
-            animationSpec = tween(durationMillis = LayoutTokens.pushDismissDurationMs),
+            animationSpec = tween(durationMillis = GestureTokens.pushDismissDurationMs),
         ) {
             dragOffsetPx = value
         }
@@ -267,7 +277,7 @@ private fun PushLayer(
         state.pushStack.forEachIndexed { index, entry ->
             val isTop = index == state.pushStack.lastIndex
             val stackDepth = state.pushStack.lastIndex - index
-            val depthOffsetPx = (stackDepth * 12f)
+            val depthOffsetPx = (stackDepth * AppTheme.spacing.gutter.value * LocalDensity.current.density)
 
             val isMenuEnter = state.pushTransition.mode == PushTransitionMode.Enter &&
                 state.pushTransition.routeKey == entry.key
@@ -287,8 +297,8 @@ private fun PushLayer(
                     .background(
                         color = AppTheme.colors.surfacePrimary,
                         shape = RoundedCornerShape(
-                            topStart = if (isMenuEnter) 22.dp else 0.dp,
-                            bottomStart = if (isMenuEnter) 22.dp else 0.dp,
+                            topStart = if (isMenuEnter) AppTheme.radius.sheet else 0.dp,
+                            bottomStart = if (isMenuEnter) AppTheme.radius.sheet else 0.dp,
                         ),
                     )
                     .pointerInput(canBackGesture, containerWidthPx) {
@@ -314,7 +324,7 @@ private fun PushLayer(
                                 if (!canBackGesture) return@detectHorizontalDragGestures
                                 val velocity = backVelocityTracker.calculateVelocity().x
                                 val progress = (dragOffsetPx / containerWidthPx).coerceIn(0f, 1f)
-                                if (velocity > LayoutTokens.backDismissVelocityX || progress > LayoutTokens.backDismissProgress) {
+                                if (velocity > GestureTokens.backDismissVelocityX || progress > GestureTokens.backDismissProgress) {
                                     navigationController.requestPop()
                                 } else {
                                     coroutineScope.launch {
@@ -323,7 +333,7 @@ private fun PushLayer(
                                             targetValue = 0f,
                                             animationSpec = spring(
                                                 dampingRatio = 0.9f,
-                                                stiffness = LayoutTokens.menuOpenCloseStiffness,
+                                                stiffness = GestureTokens.menuOpenCloseStiffness,
                                             ),
                                         ) {
                                             dragOffsetPx = value
@@ -366,7 +376,7 @@ private fun SheetLayer(
             targetValue = 0f,
             animationSpec = spring(
                 dampingRatio = 0.9f,
-                stiffness = LayoutTokens.menuOpenCloseStiffness,
+                stiffness = GestureTokens.menuOpenCloseStiffness,
             ),
         ) {
             offsetPx = value
@@ -413,7 +423,10 @@ private fun SheetLayer(
                 .offset { IntOffset(0, offsetPx.roundToInt()) }
                 .background(
                     color = AppTheme.colors.sheetBackground,
-                    shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+                    shape = RoundedCornerShape(
+                        topStart = AppTheme.radius.sheet,
+                        topEnd = AppTheme.radius.sheet
+                    ),
                 )
                 .pointerInput(containerHeightPx) {
                     var sheetVelocityTracker = VelocityTracker()
@@ -434,8 +447,8 @@ private fun SheetLayer(
                         },
                         onDragEnd = {
                             val velocity = sheetVelocityTracker.calculateVelocity().y
-                            val dismissThreshold = containerHeightPx * LayoutTokens.sheetDismissProgress
-                            if (velocity > LayoutTokens.sheetDismissVelocityY || offsetPx > dismissThreshold) {
+                            val dismissThreshold = containerHeightPx * GestureTokens.sheetDismissProgress
+                            if (velocity > GestureTokens.sheetDismissVelocityY || offsetPx > dismissThreshold) {
                                 navigationController.requestDismissSheet()
                             } else {
                                 coroutineScope.launch {
@@ -444,7 +457,7 @@ private fun SheetLayer(
                                         targetValue = 0f,
                                         animationSpec = spring(
                                             dampingRatio = 0.9f,
-                                            stiffness = LayoutTokens.menuOpenCloseStiffness,
+                                            stiffness = GestureTokens.menuOpenCloseStiffness,
                                         ),
                                     ) {
                                         offsetPx = value
@@ -482,4 +495,3 @@ private fun SheetLayer(
         }
     }
 }
-

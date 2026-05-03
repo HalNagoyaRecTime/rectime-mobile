@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -6,6 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.rectime.mobile.app.navigation.NavigationController
+import com.rectime.mobile.app.navigation.NavigationHost
+import com.rectime.mobile.ui.theme.AppTheme
+import com.rectime.mobile.ui.theme.ThemeStateHolder
 
 @Composable
 @Preview

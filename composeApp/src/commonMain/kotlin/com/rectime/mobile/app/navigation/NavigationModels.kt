@@ -1,4 +1,4 @@
-package com.rectime.mobile
+package com.rectime.mobile.app.navigation
 
 enum class RootRoute {
     Home,

@@ -1,5 +1,6 @@
 package com.rectime.mobile
 
+import com.rectime.mobile.app.App
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
