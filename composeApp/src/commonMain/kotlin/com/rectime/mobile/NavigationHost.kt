@@ -12,8 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -101,28 +101,45 @@ private fun RootLayer(
         state.pushStack.isEmpty() &&
         state.pushTransition.mode == PushTransitionMode.Idle
 
-    val renderedMenuProgress = if (state.pushTransition.mode == PushTransitionMode.Enter) {
-        val source = state.pushTransition.sourceProgress.coerceIn(0f, 1f)
-        source + (0f - source) * state.pushTransition.progress.coerceIn(0f, 1f)
-    } else {
-        state.menuProgress
+    val menuAnimatable = remember { Animatable(state.menuProgress) }
+    LaunchedEffect(state.menuProgress, state.activeGesture) {
+        if (state.activeGesture == ActiveGesture.Menu) {
+            // ジェスチャー中は animatable を同期するだけ（レンダリングには使わない）
+            menuAnimatable.snapTo(state.menuProgress)
+        } else {
+            menuAnimatable.animateTo(
+                targetValue = state.menuProgress,
+                animationSpec = spring(
+                    dampingRatio = 0.86f,
+                    stiffness = LayoutTokens.menuOpenCloseStiffness,
+                ),
+            )
+        }
     }
-    val offsetX = (renderedMenuProgress * revealWidthPx).roundToInt()
-    val scale = 1f - (0.06f * renderedMenuProgress)
-    val cornerDp = 24.dp * renderedMenuProgress
+
+    // ジェスチャー中は state.menuProgress を直接使う（LaunchedEffect の1フレーム遅延を回避）
+    val renderedMenuProgress = when {
+        state.pushTransition.mode == PushTransitionMode.Enter -> {
+            val source = state.pushTransition.sourceProgress.coerceIn(0f, 1f)
+            source + (0f - source) * state.pushTransition.progress.coerceIn(0f, 1f)
+        }
+        state.activeGesture == ActiveGesture.Menu -> state.menuProgress
+        else -> menuAnimatable.value
+    }
+    val safeProgress = renderedMenuProgress.coerceIn(0f, 1f)
+    val offsetX = (safeProgress * revealWidthPx).roundToInt()
+    val cornerDp = 24.dp * safeProgress
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .offset { IntOffset(offsetX, 0) }
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
                 shadowElevation = 24f * renderedMenuProgress
             }
             .clip(RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp))
             .background(AppTheme.colors.surfacePrimary)
-            .pointerInput(canDragMenu, state.activeGesture, revealWidthPx) {
+            .pointerInput(canDragMenu, revealWidthPx) {
                 detectHorizontalDragGestures(
                     onDragStart = {
                         if (!canDragMenu) return@detectHorizontalDragGestures
@@ -184,7 +201,7 @@ private fun RootLayer(
                 onSelectRoot = { route -> navigationController.setRoot(route) },
                 modifier = Modifier
                     .align(androidx.compose.ui.Alignment.BottomCenter)
-                    .padding(bottom = 6.dp),
+                    .fillMaxWidth(),
             )
         }
 
@@ -274,7 +291,7 @@ private fun PushLayer(
                             bottomStart = if (isMenuEnter) 22.dp else 0.dp,
                         ),
                     )
-                    .pointerInput(canBackGesture, state.activeGesture, containerWidthPx) {
+                    .pointerInput(canBackGesture, containerWidthPx) {
                         var backVelocityTracker = VelocityTracker()
                         detectHorizontalDragGestures(
                             onDragStart = {
@@ -379,7 +396,7 @@ private fun SheetLayer(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(AppTheme.colors.overlayBackdrop.copy(alpha = scrimAlpha))
+                .background(AppTheme.colors.overlayBackdrop.copy(alpha = scrimAlpha * AppTheme.colors.overlayBackdrop.alpha))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -398,7 +415,7 @@ private fun SheetLayer(
                     color = AppTheme.colors.sheetBackground,
                     shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
                 )
-                .pointerInput(state.activeGesture, containerHeightPx) {
+                .pointerInput(containerHeightPx) {
                     var sheetVelocityTracker = VelocityTracker()
                     detectVerticalDragGestures(
                         onDragStart = {
@@ -442,22 +459,24 @@ private fun SheetLayer(
                     )
                 },
         ) {
-            when (sheetEntry.route) {
-                SheetRoute.ThemeSheet -> ThemeSheet(themeStateHolder = themeStateHolder)
-                SheetRoute.TicketSheet -> {
-                    SampleSheet(
-                        title = "マイQR",
-                        description = "チケット情報のワイヤー表示",
-                        onPrimaryAction = { navigationController.requestDismissSheet() },
-                    )
-                }
+            Box(modifier = Modifier.navigationBarsPadding()) {
+                when (sheetEntry.route) {
+                    SheetRoute.ThemeSheet -> ThemeSheet(themeStateHolder = themeStateHolder)
+                    SheetRoute.TicketSheet -> {
+                        SampleSheet(
+                            title = "マイQR",
+                            description = "チケット情報のワイヤー表示",
+                            onPrimaryAction = { navigationController.requestDismissSheet() },
+                        )
+                    }
 
-                SheetRoute.SampleSheet -> {
-                    SampleSheet(
-                        title = "SampleSheet",
-                        description = "fullレイアウトのボトムシート",
-                        onPrimaryAction = { navigationController.requestDismissSheet() },
-                    )
+                    SheetRoute.SampleSheet -> {
+                        SampleSheet(
+                            title = "SampleSheet",
+                            description = "fullレイアウトのボトムシート",
+                            onPrimaryAction = { navigationController.requestDismissSheet() },
+                        )
+                    }
                 }
             }
         }

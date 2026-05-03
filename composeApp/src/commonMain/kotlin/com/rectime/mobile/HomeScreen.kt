@@ -1,19 +1,38 @@
 package com.rectime.mobile
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bars
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Camera
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CirclePlay
+
+private data class TimelineEntry(val title: String, val meta: String, val isActive: Boolean)
 
 @Composable
 fun HomeScreen(
@@ -26,13 +45,14 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val timelineItems = listOf(
-        "09:30 受付開始 / 東ゲート",
-        "10:30 ウォームアップ / サブコート",
+        TimelineEntry("09:30 開会式", "アリーナ中央 / 司会進行あり", isActive = true),
+        TimelineEntry("10:30 予選第2組", "センターコート / 進行中", isActive = false),
     )
 
     LazyColumn(
         modifier = modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -40,30 +60,59 @@ fun HomeScreen(
             ScreenHeader(
                 title = "Home",
                 modifier = Modifier.padding(top = 12.dp),
-                leading = { HeaderActionButton(label = "≡", onClick = onOpenMenu) },
-                trailing = { HeaderActionButton(label = "通知", onClick = onOpenNotifications) },
+                leading = {
+                    HeaderActionButton(
+                        icon = SolidGroup.Bars,
+                        contentDescription = "メニュー",
+                        onClick = onOpenMenu,
+                    )
+                },
+                trailing = {
+                    HeaderActionButton(
+                        icon = SolidGroup.Bell,
+                        contentDescription = "通知",
+                        onClick = onOpenNotifications,
+                    )
+                },
             )
         }
 
         item {
             PressSurface(
                 onClick = onOpenMatchInfo,
-                color = AppTheme.colors.surfaceAccent,
+                color = AppTheme.colors.surfaceAccentStrong,
+                contentPadding = PaddingValues(22.dp),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "今日のメインカード",
-                        color = AppTheme.colors.textSecondary,
-                    )
-                    Text(
-                        text = "Rectime League 2026",
-                        color = AppTheme.colors.textPrimary,
+                        text = "本日のメインイベント",
+                        color = AppTheme.colors.textOnAccent.copy(alpha = 0.75f),
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        text = "MatchInfo を開く",
-                        color = AppTheme.colors.textPrimary,
+                        text = "100m走 決勝",
+                        color = AppTheme.colors.textOnAccent,
+                        fontWeight = FontWeight.ExtraBold,
                     )
+                    Text(
+                        text = "10:00〜11:30 / Aコート",
+                        color = AppTheme.colors.textOnAccent,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "詳細を見る",
+                            color = AppTheme.colors.textOnAccent,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Icon(
+                            imageVector = SolidGroup.ChevronRight,
+                            contentDescription = null,
+                            tint = AppTheme.colors.textOnAccent,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
                 }
             }
         }
@@ -73,24 +122,27 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                PressSurface(
+                ActionCard(
+                    icon = SolidGroup.CirclePlay,
+                    label = "次の試合",
+                    isPrimary = true,
                     onClick = onOpenDetail,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text("次の試合", color = AppTheme.colors.textPrimary)
-                }
-                PressSurface(
-                    onClick = onPresentTicket,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("マイQR", color = AppTheme.colors.textPrimary)
-                }
-                PressSurface(
+                )
+                ActionCard(
+                    icon = SolidGroup.Bell,
+                    label = "通知を確認",
+                    isPrimary = false,
                     onClick = onOpenOtherQuickAction,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text("お知らせ", color = AppTheme.colors.textPrimary)
-                }
+                )
+                ActionCard(
+                    icon = SolidGroup.Camera,
+                    label = "マイQR",
+                    isPrimary = false,
+                    onClick = onPresentTicket,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
@@ -100,26 +152,90 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 SummaryCard(
-                    title = "来場者数",
-                    value = "8,460",
+                    title = "来場者",
+                    value = "1,280",
                     modifier = Modifier.weight(1f),
                 )
                 SummaryCard(
                     title = "進行率",
-                    value = "62%",
+                    value = "68%",
+                    modifier = Modifier.weight(1f),
+                )
+                SummaryCard(
+                    title = "コート数",
+                    value = "12",
                     modifier = Modifier.weight(1f),
                 )
             }
         }
 
-        items(timelineItems) { timeline ->
-            PressSurface(onClick = onOpenNotifications) {
-                Text(text = timeline, color = AppTheme.colors.textPrimary)
+        item {
+            PressSurface(
+                onClick = onOpenNotifications,
+                color = AppTheme.colors.surfaceMuted,
+                contentPadding = PaddingValues(16.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "本日の動き",
+                        color = AppTheme.colors.textPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    timelineItems.forEach { entry ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (entry.isActive) AppTheme.colors.surfaceAccentStrong
+                                        else AppTheme.colors.textMuted,
+                                    ),
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(text = entry.title, color = AppTheme.colors.textPrimary)
+                                Text(text = entry.meta, color = AppTheme.colors.textSecondary)
+                            }
+                        }
+                    }
+                }
             }
         }
 
         item {
             Spacer(modifier = Modifier.height(LayoutTokens.rootBottomNavigationInset))
+        }
+    }
+}
+
+@Composable
+private fun ActionCard(
+    icon: ImageVector,
+    label: String,
+    isPrimary: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val bgColor = if (isPrimary) AppTheme.colors.surfaceAccentStrong else AppTheme.colors.surfacePrimary
+    val contentColor = if (isPrimary) AppTheme.colors.textOnAccent else AppTheme.colors.navigationActive
+
+    PressSurface(
+        onClick = onClick,
+        modifier = if (!isPrimary) modifier.border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(16.dp)) else modifier,
+        color = bgColor,
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 16.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(text = label, color = contentColor, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -132,8 +248,8 @@ private fun SummaryCard(
 ) {
     PressSurface(
         onClick = {},
-        modifier = modifier,
-        color = AppTheme.colors.surfaceMuted,
+        modifier = modifier.border(1.dp, AppTheme.colors.borderSubtle, RoundedCornerShape(16.dp)),
+        color = AppTheme.colors.surfacePrimary,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(text = title, color = AppTheme.colors.textSecondary)
@@ -141,4 +257,3 @@ private fun SummaryCard(
         }
     }
 }
-

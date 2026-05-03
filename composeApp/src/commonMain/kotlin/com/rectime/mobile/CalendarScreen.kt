@@ -2,8 +2,6 @@ package com.rectime.mobile
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bars
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
 private data class TimelineEvent(
     val title: String,
@@ -54,14 +56,27 @@ fun CalendarScreen(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(horizontal = 16.dp)
             .verticalScroll(rememberScrollState()),
     ) {
         ScreenHeader(
             title = "Calendar",
             modifier = Modifier.padding(top = 12.dp),
-            leading = { HeaderActionButton(label = "≡", onClick = onOpenMenu) },
-            trailing = { HeaderActionButton(label = "通知", onClick = onOpenNotifications) },
+            leading = {
+                HeaderActionButton(
+                    icon = SolidGroup.Bars,
+                    contentDescription = "メニュー",
+                    onClick = onOpenMenu,
+                )
+            },
+            trailing = {
+                HeaderActionButton(
+                    icon = SolidGroup.Bell,
+                    contentDescription = "通知",
+                    onClick = onOpenNotifications,
+                )
+            },
         )
 
         Text(
@@ -74,7 +89,7 @@ fun CalendarScreen(
             Column(modifier = Modifier.width(56.dp)) {
                 for (hour in hourStart until hourEnd) {
                     Text(
-                        text = "%02d:00".format(hour),
+                        text = "${hour.toString().padStart(2, '0')}:00",
                         color = AppTheme.colors.textMuted,
                         modifier = Modifier.height(hourHeight),
                     )

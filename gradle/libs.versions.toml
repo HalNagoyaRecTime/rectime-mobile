@@ -1,5 +1,6 @@
 [versions]
 agp = "8.13.2"
+composeIconCollections = "7.1.0"
 android-compileSdk = "36"
 android-minSdk = "26"
 android-targetSdk = "36"
@@ -35,6 +36,7 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMul
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
+compose-icon-collections-fontawesome = { module = "com.woowla.compose.icon.collections:fontawesome", version.ref = "composeIconCollections" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

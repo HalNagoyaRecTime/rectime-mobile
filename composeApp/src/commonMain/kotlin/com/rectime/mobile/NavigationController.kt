@@ -45,16 +45,12 @@ class NavigationController {
             pushStack = current.pushStack + entry,
             menuProgress = if (shouldRunMenuEnter) current.menuProgress else 0f,
             activeGesture = ActiveGesture.None,
-            pushTransition = if (shouldRunMenuEnter) {
-                PushTransitionState(
-                    mode = PushTransitionMode.Enter,
-                    routeKey = entry.key,
-                    progress = 0f,
-                    sourceProgress = current.menuProgress,
-                )
-            } else {
-                PushTransitionState()
-            },
+            pushTransition = PushTransitionState(
+                mode = PushTransitionMode.Enter,
+                routeKey = entry.key,
+                progress = 0f,
+                sourceProgress = if (shouldRunMenuEnter) current.menuProgress else 0f,
+            ),
         )
     }
 

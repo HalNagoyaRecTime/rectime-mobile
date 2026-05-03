@@ -8,13 +8,27 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ArrowLeft
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CircleQuestion
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Code
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Palette
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Trophy
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Wrench
 
 @Composable
 fun SideMenu(
@@ -27,8 +41,9 @@ fun SideMenu(
         modifier = modifier
             .fillMaxHeight()
             .width(revealWidthDp)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -39,19 +54,58 @@ fun SideMenu(
             Text(text = "operator@rectime.app", color = AppTheme.colors.textSecondary)
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        MenuItem("Operator", onClick = { onPushFromMenu(PushRoute.OperatorMenu) })
-        MenuItem("MatchInfo", onClick = { onPushFromMenu(PushRoute.MatchInfo) })
-        MenuItem("Settings", onClick = { onPushFromMenu(PushRoute.Settings) })
-        MenuItem("HelpCenter", onClick = { onPushFromMenu(PushRoute.HelpCenter) })
-        MenuItem("Dev", onClick = { onPushFromMenu(PushRoute.Dev) })
-        MenuItem("Theme", onClick = onPresentThemeSheet)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            MenuItem(
+                icon = SolidGroup.Wrench,
+                title = "運営メニュー",
+                onClick = { onPushFromMenu(PushRoute.OperatorMenu) },
+            )
+            MenuItem(
+                icon = SolidGroup.Trophy,
+                title = "対戦情報",
+                onClick = { onPushFromMenu(PushRoute.MatchInfo) },
+            )
+            MenuItem(
+                icon = SolidGroup.Gear,
+                title = "設定",
+                onClick = { onPushFromMenu(PushRoute.Settings) },
+            )
+            MenuItem(
+                icon = SolidGroup.CircleQuestion,
+                title = "ヘルプセンター",
+                onClick = { onPushFromMenu(PushRoute.HelpCenter) },
+            )
+            MenuItem(
+                icon = SolidGroup.Code,
+                title = "開発メニュー",
+                onClick = { onPushFromMenu(PushRoute.Dev) },
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MenuItem(
+                icon = SolidGroup.Palette,
+                title = "テーマ変更",
+                onClick = onPresentThemeSheet,
+            )
+            Text(
+                text = "rectime",
+                color = AppTheme.colors.textMuted,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+            )
+        }
     }
 }
 
 @Composable
 private fun MenuItem(
+    icon: ImageVector,
     title: String,
     onClick: () -> Unit,
 ) {
@@ -59,7 +113,18 @@ private fun MenuItem(
         onClick = onClick,
         color = AppTheme.colors.navigationSurface,
     ) {
-        Text(text = title, color = AppTheme.colors.textPrimary)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = AppTheme.colors.textSecondary,
+                modifier = Modifier.size(16.dp),
+            )
+            Text(text = title, color = AppTheme.colors.textPrimary)
+        }
     }
 }
 
@@ -92,6 +157,7 @@ fun PushCardScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -100,7 +166,18 @@ fun PushCardScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             PressSurface(onClick = onRequestPop, modifier = Modifier.weight(1f)) {
-                Text("戻る", color = AppTheme.colors.textPrimary)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = SolidGroup.ArrowLeft,
+                        contentDescription = null,
+                        tint = AppTheme.colors.textPrimary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text("戻る", color = AppTheme.colors.textPrimary)
+                }
             }
             PressSurface(onClick = onPresentSampleSheet, modifier = Modifier.weight(1f)) {
                 Text("SampleSheet", color = AppTheme.colors.textPrimary)
@@ -209,4 +286,3 @@ fun SampleSheet(
         }
     }
 }
-
