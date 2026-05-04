@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.schedule
+package com.rectime.mobile.feature.calendar
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
