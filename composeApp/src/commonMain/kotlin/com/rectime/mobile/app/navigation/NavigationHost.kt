@@ -33,12 +33,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.feature.home.HomeScreen
-import com.rectime.mobile.feature.schedule.CalendarScreen
+import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.result.PushCardScreen
+import com.rectime.mobile.feature.result.SampleSheet
+import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.component.BottomNavigationBar
-import com.rectime.mobile.ui.component.PushCardScreen
-import com.rectime.mobile.ui.component.SampleSheet
 import com.rectime.mobile.ui.component.SideMenu
-import com.rectime.mobile.ui.component.ThemeSheet
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.rectime.mobile.ui.token.GestureTokens
