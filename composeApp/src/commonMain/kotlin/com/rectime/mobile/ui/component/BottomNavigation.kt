@@ -43,7 +43,7 @@ fun BottomNavigationBar(
 ) {
     val items = listOf(
         NavigationItemConfig(RootRoute.Home, "ホーム", SolidGroup.House),
-        NavigationItemConfig(RootRoute.Calendar, "日程", SolidGroup.CalendarDays),
+        NavigationItemConfig(RootRoute.Calendar, "カレンダー", SolidGroup.CalendarDays),
     )
 
     Column(
