@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,8 +39,6 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Camera
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CirclePlay
 
-private data class TimelineEntry(val title: String, val meta: String, val isActive: Boolean)
-
 @Composable
 fun HomeScreen(
     onOpenMenu: () -> Unit,
@@ -47,11 +48,9 @@ fun HomeScreen(
     onPresentTicket: () -> Unit,
     onOpenOtherQuickAction: () -> Unit,
     modifier: Modifier = Modifier,
+    viewModel: HomeViewModel = remember { HomeViewModel() },
 ) {
-    val timelineItems = listOf(
-        TimelineEntry("09:30 開会式", "アリーナ中央 / 司会進行あり", isActive = true),
-        TimelineEntry("10:30 予選第2組", "センターコート / 進行中", isActive = false),
-    )
+    val uiState by viewModel.uiState.collectAsState()
 
     LazyColumn(
         modifier = modifier
@@ -185,7 +184,7 @@ fun HomeScreen(
                         color = AppTheme.colors.textPrimary,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    timelineItems.forEach { entry ->
+                    uiState.timelineItems.forEach { entry ->
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
