@@ -6,11 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import com.rectime.mobile.feature.calendar.CalendarScreen
 import com.rectime.mobile.feature.home.HomeScreen
-import com.rectime.mobile.feature.result.PushCardScreen
-import com.rectime.mobile.feature.result.SampleSheet
-import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.component.SideMenu
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
@@ -41,13 +37,13 @@ fun NavigationHost(
         // Background Side Menu
         SideMenu(
             revealWidthDp = revealWidthDp,
-            onPushFromMenu = { route ->
-                navigationController.push(
-                    route = route,
-                    source = PushTransitionSource.SideMenu,
-                )
+            onPushFromMenu = { screen ->
+                navigationController.push(screen)
             },
-            onPresentThemeSheet = { navigationController.presentSheet(SheetRoute.ThemeSheet) },
+            onPresentThemeSheet = { sheet -> 
+                navigationController.presentSheet(sheet) 
+            },
+            themeStateHolder = themeStateHolder,
             modifier = Modifier.background(AppTheme.colors.navigationBackground),
         )
 
@@ -56,67 +52,20 @@ fun NavigationHost(
             state = state,
             navigationController = navigationController,
             revealWidthPx = revealWidthPx,
-        ) {
-            // --- UI Content Selection (Root) ---
-            when (state.rootRoute) {
-                RootRoute.Home -> {
-                    HomeScreen(
-                        onOpenMenu = { navigationController.openMenu() },
-                        onOpenNotifications = { navigationController.push(PushRoute.Notifications) },
-                        onOpenMatchInfo = { navigationController.push(PushRoute.MatchInfo) },
-                        onOpenDetail = { navigationController.push(PushRoute.Detail) },
-                        onPresentTicket = { navigationController.presentSheet(SheetRoute.TicketSheet) },
-                        onOpenOtherQuickAction = { navigationController.push(PushRoute.Notifications) },
-                    )
-                }
-                RootRoute.Calendar -> {
-                    CalendarScreen(
-                        onOpenMenu = { navigationController.openMenu() },
-                        onOpenNotifications = { navigationController.push(PushRoute.Notifications) },
-                        onOpenEventDetail = { navigationController.push(PushRoute.Detail) },
-                    )
-                }
-            }
-        }
+        )
 
         // Layer 2: Push Stack (Detail screens)
         PushLayer(
             state = state,
             navigationController = navigationController,
             containerWidthPx = containerWidthPx,
-        ) { route ->
-            // --- UI Content Selection (Push) ---
-            PushCardScreen(
-                route = route,
-                onRequestPop = { navigationController.requestPop() },
-                onPresentSampleSheet = { navigationController.presentSheet(SheetRoute.SampleSheet) },
-            )
-        }
+        )
 
         // Layer 3: Sheet (Modals)
         SheetLayer(
             state = state,
             navigationController = navigationController,
             containerHeightPx = containerHeightPx,
-        ) { route ->
-            // --- UI Content Selection (Sheet) ---
-            when (route) {
-                SheetRoute.ThemeSheet -> ThemeSheet(themeStateHolder = themeStateHolder)
-                SheetRoute.TicketSheet -> {
-                    SampleSheet(
-                        title = "マイQR",
-                        description = "チケット情報のワイヤー表示",
-                        onPrimaryAction = { navigationController.requestDismissSheet() },
-                    )
-                }
-                SheetRoute.SampleSheet -> {
-                    SampleSheet(
-                        title = "SampleSheet",
-                        description = "fullレイアウトのボトムシート",
-                        onPrimaryAction = { navigationController.requestDismissSheet() },
-                    )
-                }
-            }
-        }
+        )
     }
 }

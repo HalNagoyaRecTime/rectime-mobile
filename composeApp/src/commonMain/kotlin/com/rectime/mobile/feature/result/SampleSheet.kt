@@ -9,11 +9,41 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.app.navigation.NavigationController
+import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.theme.AppTheme
 
+/**
+ * Placeholder Sheets
+ */
+
+object SampleSheet : Screen {
+    override val key: String = "sample_sheet"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        SampleSheetUI(
+            title = "SampleSheet",
+            description = "fullレイアウトのボトムシート",
+            onPrimaryAction = { navigationController.requestDismissSheet() }
+        )
+    }
+}
+
+object TicketSheet : Screen {
+    override val key: String = "ticket_sheet"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        SampleSheetUI(
+            title = "マイQR",
+            description = "チケット情報のワイヤー表示",
+            onPrimaryAction = { navigationController.requestDismissSheet() }
+        )
+    }
+}
+
 @Composable
-fun SampleSheet(
+private fun SampleSheetUI(
     title: String,
     description: String,
     onPrimaryAction: () -> Unit,

@@ -23,27 +23,29 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.rectime.mobile.app.navigation.RootRoute
+import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.home.HomeScreen
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CalendarDays
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.House
 
 private data class NavigationItemConfig(
-    val route: RootRoute,
+    val screen: Screen,
     val label: String,
     val icon: ImageVector,
 )
 
 @Composable
 fun BottomNavigationBar(
-    currentRoute: RootRoute,
-    onSelectRoot: (RootRoute) -> Unit,
+    currentScreen: Screen,
+    onSelectRoot: (Screen) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val items = listOf(
-        NavigationItemConfig(RootRoute.Home, "ホーム", SolidGroup.House),
-        NavigationItemConfig(RootRoute.Calendar, "カレンダー", SolidGroup.CalendarDays),
+        NavigationItemConfig(HomeScreen, "ホーム", SolidGroup.House),
+        NavigationItemConfig(CalendarScreen, "日程", SolidGroup.CalendarDays),
     )
 
     Column(
@@ -71,8 +73,8 @@ fun BottomNavigationBar(
                 BottomNavigationItem(
                     label = item.label,
                     icon = item.icon,
-                    selected = currentRoute == item.route,
-                    onClick = { onSelectRoot(item.route) },
+                    selected = currentScreen.key == item.screen.key,
+                    onClick = { onSelectRoot(item.screen) },
                     modifier = Modifier.weight(1f),
                 )
             }

@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
+import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.home.HomeScreen
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
@@ -30,8 +32,8 @@ fun RootLayer(
     state: NavigationState,
     navigationController: NavigationController,
     revealWidthPx: Float,
-    content: @Composable () -> Unit, // Slot API: Content is passed from outside
 ) {
+    val rootScreen = state.rootScreen ?: return
     val canDragMenu = state.sheet == null &&
         state.pushStack.isEmpty() &&
         state.pushTransition.mode == PushTransitionMode.Idle
@@ -108,12 +110,15 @@ fun RootLayer(
             },
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Display the passed content
-            content()
+            ScreenLifecycleWrapper(rootScreen) {
+                rootScreen.Content(navigationController)
+            }
 
             BottomNavigationBar(
-                currentRoute = state.rootRoute,
-                onSelectRoot = { route -> navigationController.setRoot(route) },
+                currentScreen = rootScreen,
+                onSelectRoot = { screen -> 
+                    navigationController.setRoot(screen)
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(),

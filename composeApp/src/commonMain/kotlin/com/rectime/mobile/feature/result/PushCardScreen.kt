@@ -15,38 +15,111 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.rectime.mobile.app.navigation.PushRoute
+import com.rectime.mobile.app.navigation.NavigationController
+import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ArrowLeft
 
+/**
+ * Specialized Screen Objects for Push Stack
+ */
+
+data class DetailScreen(val id: String) : Screen {
+    override val key: String = "detail_$id"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        PushCardScreenUI(
+            title = "Match Detail",
+            description = "試合詳細のワイヤー画面 (ID: $id)",
+            navigationController = navigationController
+        )
+    }
+}
+
+object NotificationsScreen : Screen {
+    override val key: String = "notifications"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        PushCardScreenUI(
+            title = "Notifications",
+            description = "通知一覧のワイヤー画面",
+            navigationController = navigationController
+        )
+    }
+}
+
+object SettingsScreen : Screen {
+    override val key: String = "settings"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        PushCardScreenUI(
+            title = "Settings",
+            description = "設定画面のワイヤー画面",
+            navigationController = navigationController
+        )
+    }
+}
+
+object HelpCenterScreen : Screen {
+    override val key: String = "help_center"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        PushCardScreenUI(
+            title = "Help Center",
+            description = "ヘルプセンターのワイヤー画面",
+            navigationController = navigationController
+        )
+    }
+}
+
+object MatchInfoScreen : Screen {
+    override val key: String = "match_info"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        PushCardScreenUI(
+            title = "Match Info",
+            description = "大会情報のワイヤー画面",
+            navigationController = navigationController
+        )
+    }
+}
+
+object OperatorMenuScreen : Screen {
+    override val key: String = "operator_menu"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        PushCardScreenUI(
+            title = "Operator Menu",
+            description = "運営メニューのワイヤー画面",
+            navigationController = navigationController
+        )
+    }
+}
+
+object DevScreen : Screen {
+    override val key: String = "dev"
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        PushCardScreenUI(
+            title = "Developer Tools",
+            description = "開発者向けワイヤー画面",
+            navigationController = navigationController
+        )
+    }
+}
+
+/**
+ * Shared UI for placeholder push cards
+ */
 @Composable
-fun PushCardScreen(
-    route: PushRoute,
-    onRequestPop: () -> Unit,
-    onPresentSampleSheet: () -> Unit,
+private fun PushCardScreenUI(
+    title: String,
+    description: String,
+    navigationController: NavigationController,
     modifier: Modifier = Modifier,
 ) {
-    val title = when (route) {
-        PushRoute.Detail -> "Detail"
-        PushRoute.Notifications -> "Notifications"
-        PushRoute.Settings -> "Settings"
-        PushRoute.HelpCenter -> "HelpCenter"
-        PushRoute.MatchInfo -> "MatchInfo"
-        PushRoute.OperatorMenu -> "OperatorMenu"
-        PushRoute.Dev -> "Dev"
-    }
-    val description = when (route) {
-        PushRoute.Detail -> "試合詳細のワイヤー画面"
-        PushRoute.Notifications -> "通知一覧のワイヤー画面"
-        PushRoute.Settings -> "設定画面のワイヤー画面"
-        PushRoute.HelpCenter -> "ヘルプセンターのワイヤー画面"
-        PushRoute.MatchInfo -> "大会情報のワイヤー画面"
-        PushRoute.OperatorMenu -> "運営メニューのワイヤー画面"
-        PushRoute.Dev -> "開発者向けワイヤー画面"
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -58,7 +131,10 @@ fun PushCardScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            PressSurface(onClick = onRequestPop, modifier = Modifier.weight(1f)) {
+            PressSurface(
+                onClick = { navigationController.requestPop() },
+                modifier = Modifier.weight(1f)
+            ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -72,7 +148,10 @@ fun PushCardScreen(
                     Text("戻る", color = AppTheme.colors.textPrimary)
                 }
             }
-            PressSurface(onClick = onPresentSampleSheet, modifier = Modifier.weight(1f)) {
+            PressSurface(
+                onClick = { navigationController.presentSheet(SampleSheet) },
+                modifier = Modifier.weight(1f)
+            ) {
                 Text("SampleSheet", color = AppTheme.colors.textPrimary)
             }
         }

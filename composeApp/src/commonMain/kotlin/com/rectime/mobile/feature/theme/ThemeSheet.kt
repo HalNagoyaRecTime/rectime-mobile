@@ -10,14 +10,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.app.navigation.NavigationController
+import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeId
 import com.rectime.mobile.ui.theme.ThemeMode
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 
+/**
+ * ThemeSheet as a self-contained Navigation Box (Data Class for parameters)
+ */
+data class ThemeSheet(val themeStateHolder: ThemeStateHolder) : Screen {
+    override val key: String = "theme_sheet"
+
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        ThemeSheetUI(themeStateHolder = themeStateHolder)
+    }
+}
+
 @Composable
-fun ThemeSheet(themeStateHolder: ThemeStateHolder) {
+private fun ThemeSheetUI(themeStateHolder: ThemeStateHolder) {
     Column(
         modifier = Modifier
             .fillMaxWidth()

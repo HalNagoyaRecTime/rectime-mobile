@@ -21,8 +21,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.rectime.mobile.app.navigation.PushRoute
+import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.result.DevScreen
+import com.rectime.mobile.feature.result.HelpCenterScreen
+import com.rectime.mobile.feature.result.MatchInfoScreen
+import com.rectime.mobile.feature.result.OperatorMenuScreen
+import com.rectime.mobile.feature.result.SettingsScreen
+import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.theme.AppTheme
+import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CircleQuestion
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Code
@@ -32,7 +39,7 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Trophy
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Wrench
 
 private data class SideMenuItemConfig(
-    val route: PushRoute?,
+    val screen: Screen?,
     val title: String,
     val icon: ImageVector,
     val onClickOverride: (() -> Unit)? = null,
@@ -41,20 +48,26 @@ private data class SideMenuItemConfig(
 @Composable
 fun SideMenu(
     revealWidthDp: Dp,
-    onPushFromMenu: (PushRoute) -> Unit,
-    onPresentThemeSheet: () -> Unit,
+    onPushFromMenu: (Screen) -> Unit,
+    onPresentThemeSheet: (Screen) -> Unit,
+    themeStateHolder: ThemeStateHolder,
     modifier: Modifier = Modifier,
 ) {
     val mainItems = listOf(
-        SideMenuItemConfig(PushRoute.OperatorMenu, "運営メニュー", SolidGroup.Wrench),
-        SideMenuItemConfig(PushRoute.MatchInfo, "対戦情報", SolidGroup.Trophy),
-        SideMenuItemConfig(PushRoute.Settings, "設定", SolidGroup.Gear),
-        SideMenuItemConfig(PushRoute.HelpCenter, "ヘルプセンター", SolidGroup.CircleQuestion),
-        SideMenuItemConfig(PushRoute.Dev, "開発メニュー", SolidGroup.Code),
+        SideMenuItemConfig(OperatorMenuScreen, "運営メニュー", SolidGroup.Wrench),
+        SideMenuItemConfig(MatchInfoScreen, "対戦情報", SolidGroup.Trophy),
+        SideMenuItemConfig(SettingsScreen, "設定", SolidGroup.Gear),
+        SideMenuItemConfig(HelpCenterScreen, "ヘルプセンター", SolidGroup.CircleQuestion),
+        SideMenuItemConfig(DevScreen, "開発メニュー", SolidGroup.Code),
     )
 
     val footerItems = listOf(
-        SideMenuItemConfig(null, "テーマ変更", SolidGroup.Palette, onClickOverride = onPresentThemeSheet),
+        SideMenuItemConfig(
+            screen = null, 
+            title = "テーマ変更", 
+            icon = SolidGroup.Palette, 
+            onClickOverride = { onPresentThemeSheet(ThemeSheet(themeStateHolder)) }
+        ),
     )
 
     Column(
@@ -86,7 +99,7 @@ fun SideMenu(
                 MenuItem(
                     icon = item.icon,
                     title = item.title,
-                    onClick = { item.route?.let { onPushFromMenu(it) } },
+                    onClick = { item.screen?.let { onPushFromMenu(it) } },
                 )
             }
         }

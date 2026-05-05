@@ -28,6 +28,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.app.navigation.NavigationController
+import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.result.DetailScreen
+import com.rectime.mobile.feature.result.NotificationsScreen
+import com.rectime.mobile.feature.result.TicketSheet
 import com.rectime.mobile.ui.component.HeaderActionButton
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.ScreenHeader
@@ -39,8 +45,27 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Camera
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CirclePlay
 
+/**
+ * HomeScreen as a self-contained Navigation Box
+ */
+object HomeScreen : Screen {
+    override val key: String = "home"
+
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        HomeScreenUI(
+            onOpenMenu = { navigationController.openMenu() },
+            onOpenNotifications = { navigationController.push(NotificationsScreen) },
+            onOpenMatchInfo = { /* navigationController.push(MatchInfoScreen) */ },
+            onOpenDetail = { navigationController.push(DetailScreen("main-event")) },
+            onPresentTicket = { navigationController.presentSheet(TicketSheet) },
+            onOpenOtherQuickAction = { navigationController.push(NotificationsScreen) },
+        )
+    }
+}
+
 @Composable
-fun HomeScreen(
+private fun HomeScreenUI(
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenMatchInfo: () -> Unit,

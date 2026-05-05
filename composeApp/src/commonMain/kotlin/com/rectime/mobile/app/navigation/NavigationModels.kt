@@ -1,26 +1,5 @@
 package com.rectime.mobile.app.navigation
 
-enum class RootRoute {
-    Home,
-    Calendar,
-}
-
-enum class PushRoute {
-    Detail,
-    Notifications,
-    Settings,
-    HelpCenter,
-    MatchInfo,
-    OperatorMenu,
-    Dev,
-}
-
-enum class SheetRoute {
-    ThemeSheet,
-    TicketSheet,
-    SampleSheet,
-}
-
 enum class ActiveGesture {
     None,
     Menu,
@@ -40,13 +19,13 @@ enum class PushTransitionMode {
 
 data class PushEntry(
     val key: String,
-    val route: PushRoute,
+    val screen: Screen,
     val source: PushTransitionSource,
 )
 
 data class SheetEntry(
     val key: String,
-    val route: SheetRoute,
+    val screen: Screen,
 )
 
 data class PushTransitionState(
@@ -57,7 +36,7 @@ data class PushTransitionState(
 )
 
 data class NavigationState(
-    val rootRoute: RootRoute = RootRoute.Home,
+    val rootScreen: Screen? = null,
     val pushStack: List<PushEntry> = emptyList(),
     val sheet: SheetEntry? = null,
     val menuProgress: Float = 0f,
@@ -66,4 +45,3 @@ data class NavigationState(
     val pushDismissRequestId: Long = 0,
     val sheetDismissRequestId: Long = 0,
 )
-

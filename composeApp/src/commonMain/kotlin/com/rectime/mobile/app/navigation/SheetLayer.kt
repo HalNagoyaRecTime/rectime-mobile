@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntOffset
+import com.rectime.mobile.feature.result.SampleSheet
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
@@ -36,7 +37,6 @@ fun SheetLayer(
     state: NavigationState,
     navigationController: NavigationController,
     containerHeightPx: Float,
-    content: @Composable (SheetRoute) -> Unit, // Slot API: Maps Route to UI
 ) {
     val sheetEntry = state.sheet ?: return
     var offsetPx by remember(sheetEntry.key) { mutableFloatStateOf(containerHeightPx * 0.35f) }
@@ -73,7 +73,7 @@ fun SheetLayer(
 
     val openness = (1f - (offsetPx / (containerHeightPx * 0.5f)).coerceIn(0f, 1f))
     val scrimAlpha = openness
-    val isSampleSheet = sheetEntry.route == SheetRoute.SampleSheet
+    val isSampleSheet = sheetEntry.screen is SampleSheet
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -146,8 +146,10 @@ fun SheetLayer(
                 },
         ) {
             Box(modifier = Modifier.navigationBarsPadding()) {
-                // Call routing lambda
-                content(sheetEntry.route)
+                // Render Screen Object with lifecycle
+                ScreenLifecycleWrapper(sheetEntry.screen) {
+                    sheetEntry.screen.Content(navigationController)
+                }
             }
         }
     }

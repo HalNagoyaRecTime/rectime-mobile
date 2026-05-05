@@ -34,7 +34,6 @@ fun PushLayer(
     state: NavigationState,
     navigationController: NavigationController,
     containerWidthPx: Float,
-    content: @Composable (PushRoute) -> Unit, // Slot API: Maps Route to UI
 ) {
     val topEntry = state.pushStack.lastOrNull() ?: return
     val topKey = topEntry.key
@@ -147,8 +146,10 @@ fun PushLayer(
                         )
                     },
             ) {
-                // Call routing lambda
-                content(entry.route)
+                // Render Screen Object with lifecycle
+                ScreenLifecycleWrapper(entry.screen) {
+                    entry.screen.Content(navigationController)
+                }
             }
         }
     }
