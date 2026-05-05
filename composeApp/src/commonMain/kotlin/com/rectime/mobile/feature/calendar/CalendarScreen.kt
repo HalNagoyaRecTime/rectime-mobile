@@ -25,8 +25,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.result.DetailScreen
-import com.rectime.mobile.feature.result.NotificationsScreen
+import com.rectime.mobile.feature.detail.DetailScreen
+import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.HeaderActionButton
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.ScreenHeader

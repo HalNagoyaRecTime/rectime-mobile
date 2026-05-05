@@ -22,21 +22,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.result.DevScreen
-import com.rectime.mobile.feature.result.HelpCenterScreen
-import com.rectime.mobile.feature.result.MatchInfoScreen
-import com.rectime.mobile.feature.result.OperatorMenuScreen
-import com.rectime.mobile.feature.result.SettingsScreen
+import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CircleQuestion
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Code
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Palette
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Trophy
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Wrench
 
 private data class SideMenuItemConfig(
     val screen: Screen?,
@@ -54,11 +46,7 @@ fun SideMenu(
     modifier: Modifier = Modifier,
 ) {
     val mainItems = listOf(
-        SideMenuItemConfig(OperatorMenuScreen, "運営メニュー", SolidGroup.Wrench),
-        SideMenuItemConfig(MatchInfoScreen, "対戦情報", SolidGroup.Trophy),
         SideMenuItemConfig(SettingsScreen, "設定", SolidGroup.Gear),
-        SideMenuItemConfig(HelpCenterScreen, "ヘルプセンター", SolidGroup.CircleQuestion),
-        SideMenuItemConfig(DevScreen, "開発メニュー", SolidGroup.Code),
     )
 
     val footerItems = listOf(

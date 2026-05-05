@@ -26,7 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntOffset
-import com.rectime.mobile.feature.result.SampleSheet
+import com.rectime.mobile.feature.ticket.TicketScreen
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
@@ -73,7 +73,7 @@ fun SheetLayer(
 
     val openness = (1f - (offsetPx / (containerHeightPx * 0.5f)).coerceIn(0f, 1f))
     val scrimAlpha = openness
-    val isSampleSheet = sheetEntry.screen is SampleSheet
+    val isTicketSheet = sheetEntry.screen is TicketScreen
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -92,7 +92,7 @@ fun SheetLayer(
             modifier = Modifier
                 .align(androidx.compose.ui.Alignment.BottomCenter)
                 .fillMaxWidth()
-                .then(if (isSampleSheet) Modifier.fillMaxSize(0.92f) else Modifier.wrapContentHeight())
+                .then(if (isTicketSheet) Modifier.wrapContentHeight() else Modifier.fillMaxSize(0.92f))
                 .offset { IntOffset(0, offsetPx.roundToInt()) }
                 .background(
                     color = AppTheme.colors.sheetBackground,
@@ -146,7 +146,6 @@ fun SheetLayer(
                 },
         ) {
             Box(modifier = Modifier.navigationBarsPadding()) {
-                // Render Screen Object with lifecycle
                 ScreenLifecycleWrapper(sheetEntry.screen) {
                     sheetEntry.screen.Content(navigationController)
                 }
