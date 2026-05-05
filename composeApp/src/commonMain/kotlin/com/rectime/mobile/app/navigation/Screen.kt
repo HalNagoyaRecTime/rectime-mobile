@@ -23,6 +23,11 @@ interface Screen {
      * Lifecycle hook called when the screen is removed from the navigation stack.
      */
     fun onDispose() {}
+
+    /**
+     * UI Property: Whether this screen should occupy full height when shown as a sheet.
+     */
+    val isFullHeight: Boolean get() = false
 }
 
 /**

@@ -30,11 +30,15 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Palette
 
+private sealed class SideMenuAction {
+    data class Push(val screen: Screen) : SideMenuAction()
+    data class Custom(val onClick: () -> Unit) : SideMenuAction()
+}
+
 private data class SideMenuItemConfig(
-    val screen: Screen?,
     val title: String,
     val icon: ImageVector,
-    val onClickOverride: (() -> Unit)? = null,
+    val action: SideMenuAction
 )
 
 @Composable
@@ -46,15 +50,20 @@ fun SideMenu(
     modifier: Modifier = Modifier,
 ) {
     val mainItems = listOf(
-        SideMenuItemConfig(SettingsScreen, "設定", SolidGroup.Gear),
+        SideMenuItemConfig(
+            title = "設定",
+            icon = SolidGroup.Gear,
+            action = SideMenuAction.Push(SettingsScreen)
+        ),
     )
 
     val footerItems = listOf(
         SideMenuItemConfig(
-            screen = null, 
-            title = "テーマ変更", 
-            icon = SolidGroup.Palette, 
-            onClickOverride = { onPresentThemeSheet(ThemeSheet(themeStateHolder)) }
+            title = "テーマ変更",
+            icon = SolidGroup.Palette,
+            action = SideMenuAction.Custom {
+                onPresentThemeSheet(ThemeSheet(themeStateHolder))
+            }
         ),
     )
 
@@ -87,18 +96,30 @@ fun SideMenu(
                 MenuItem(
                     icon = item.icon,
                     title = item.title,
-                    onClick = { item.screen?.let { onPushFromMenu(it) } },
+                    onClick = {
+                        when (val action = item.action) {
+                            is SideMenuAction.Push -> onPushFromMenu(action.screen)
+                            is SideMenuAction.Custom -> action.onClick()
+                        }
+                    },
                 )
             }
         }
 
         // Footer Section
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             footerItems.forEach { item ->
                 MenuItem(
                     icon = item.icon,
                     title = item.title,
-                    onClick = item.onClickOverride ?: {},
+                    onClick = {
+                        when (val action = item.action) {
+                            is SideMenuAction.Push -> onPushFromMenu(action.screen)
+                            is SideMenuAction.Custom -> action.onClick()
+                        }
+                    },
                 )
             }
             Text(

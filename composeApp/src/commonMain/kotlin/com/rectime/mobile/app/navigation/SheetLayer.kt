@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntOffset
-import com.rectime.mobile.feature.ticket.TicketScreen
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
@@ -73,7 +72,6 @@ fun SheetLayer(
 
     val openness = (1f - (offsetPx / (containerHeightPx * 0.5f)).coerceIn(0f, 1f))
     val scrimAlpha = openness
-    val isTicketSheet = sheetEntry.screen is TicketScreen
 
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
@@ -92,7 +90,10 @@ fun SheetLayer(
             modifier = Modifier
                 .align(androidx.compose.ui.Alignment.BottomCenter)
                 .fillMaxWidth()
-                .then(if (isTicketSheet) Modifier.wrapContentHeight() else Modifier.fillMaxSize(0.92f))
+                .then(
+                    if (sheetEntry.screen.isFullHeight) Modifier.fillMaxSize(0.92f) 
+                    else Modifier.wrapContentHeight()
+                )
                 .offset { IntOffset(0, offsetPx.roundToInt()) }
                 .background(
                     color = AppTheme.colors.sheetBackground,

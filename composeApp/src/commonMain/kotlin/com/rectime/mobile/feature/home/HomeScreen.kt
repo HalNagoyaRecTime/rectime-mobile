@@ -6,16 +6,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
-import com.rectime.mobile.feature.ticket.TicketScreen
 import com.rectime.mobile.ui.component.HeaderActionButton
 import com.rectime.mobile.ui.component.ScreenHeader
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
@@ -42,10 +37,7 @@ private fun HomeScreenUI(
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: HomeViewModel = remember { HomeViewModel() },
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-
     LazyColumn(
         modifier = modifier
             .fillMaxWidth()

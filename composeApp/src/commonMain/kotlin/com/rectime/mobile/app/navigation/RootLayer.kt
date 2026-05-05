@@ -96,10 +96,20 @@ fun RootLayer(
                 detectHorizontalDragGestures(
                     onDragStart = {
                         if (!canDragMenu) return@detectHorizontalDragGestures
+                        // 既に他のジェスチャー（Back等）が開始されている場合は無視
+                        if (navigationController.state.activeGesture != ActiveGesture.None) return@detectHorizontalDragGestures
+                        
                         navigationController.beginGesture(ActiveGesture.Menu)
                     },
                     onHorizontalDrag = { change, dragAmount ->
                         if (!canDragMenu) return@detectHorizontalDragGestures
+                        // Menuジェスチャー中であること、または他のジェスチャーが走っていないことを確認
+                        if (navigationController.state.activeGesture != ActiveGesture.Menu &&
+                            navigationController.state.activeGesture != ActiveGesture.None
+                        ) {
+                            return@detectHorizontalDragGestures
+                        }
+                        
                         change.consume()
                         val next = navigationController.state.menuProgress + (dragAmount / revealWidthPx)
                         navigationController.setMenuProgress(next)
