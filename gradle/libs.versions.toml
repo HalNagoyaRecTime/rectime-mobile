@@ -16,6 +16,8 @@ junit = "4.13.2"
 kotlin = "2.3.21"
 kotlinx-coroutines = "1.10.2"
 material3 = "1.10.0-alpha05"
+coil = "3.4.0"
+ktor = "3.4.3"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -37,6 +39,11 @@ compose-components-resources = { module = "org.jetbrains.compose.components:comp
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "kotlinx-coroutines" }
 compose-icon-collections-fontawesome = { module = "com.woowla.compose.icon.collections:fontawesome", version.ref = "composeIconCollections" }
+coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
+coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
+ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

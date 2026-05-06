@@ -81,7 +81,10 @@ fun SideMenu(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UserAvatar(initials = "RT")
+            UserAvatar(
+                initials = "RT",
+                imageUrl = "https://i.pravatar.cc/150?u=rt"
+            )
 
             Column {
                 Text(text = "HAL 太郎", color = AppTheme.colors.textPrimary)
