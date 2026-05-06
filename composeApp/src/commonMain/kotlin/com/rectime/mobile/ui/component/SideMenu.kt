@@ -76,13 +76,23 @@ fun SideMenu(
             .padding(horizontal = 16.dp, vertical = 20.dp),
     ) {
         // Profile Section
-        Column(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             UserAvatar(initials = "RT")
-            Text(text = "Rectime Operator", color = AppTheme.colors.textPrimary)
-            Text(text = "operator@rectime.app", color = AppTheme.colors.textSecondary)
+
+            Column {
+                Text(text = "HAL 太郎", color = AppTheme.colors.textPrimary)
+                Row {
+                    Text(text = "IA12B", color = AppTheme.colors.textSecondary)
+                    Text(text = "/", color = AppTheme.colors.textSecondary)
+                    Text(text = "99", color = AppTheme.colors.textSecondary)
+                    Text(text = "/", color = AppTheme.colors.textSecondary)
+                    Text(text = "12345", color = AppTheme.colors.textSecondary)
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -107,8 +117,9 @@ fun SideMenu(
         }
 
         // Footer Section
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row (
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             footerItems.forEach { item ->
                 MenuItem(
