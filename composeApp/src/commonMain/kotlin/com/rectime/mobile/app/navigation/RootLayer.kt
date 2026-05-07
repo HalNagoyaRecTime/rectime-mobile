@@ -9,23 +9,18 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.IntOffset
 import com.rectime.mobile.feature.calendar.CalendarScreen
 import com.rectime.mobile.feature.home.HomeScreen
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
-import kotlin.math.roundToInt
 
 /**
  * RootLayer（土台レイヤー）
@@ -76,19 +71,15 @@ fun RootLayer(
         else -> menuAnimatable.value
     }
     val safeProgress = renderedMenuProgress.coerceIn(0f, 1f)
-    val offsetX = (safeProgress * revealWidthPx).roundToInt()
-    val cornerDp = AppTheme.radius.xxl * safeProgress
     // ----------------------------
 
     // 【3. 土台となる「動く箱」の描画】
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .offset { IntOffset(offsetX, 0) } // サイドメニューが開く時に右にずれる
             .graphicsLayer {
-                shadowElevation = 24f * renderedMenuProgress // 浮いている感じの影
+                translationX = safeProgress * revealWidthPx
             }
-            .clip(RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp)) // ずれる時に角を丸くする
             .background(AppTheme.colors.surfacePrimary)
             .pointerInput(canDragMenu, revealWidthPx) {
                 // 【4. ジェスチャー判定】
