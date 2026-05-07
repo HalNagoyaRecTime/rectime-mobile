@@ -14,7 +14,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.rectime.mobile.core.model.UserProfile
 import com.rectime.mobile.ui.theme.AppTheme
+
+@Composable
+fun UserAvatar(
+    profile: UserProfile,
+    modifier: Modifier = Modifier
+) {
+    UserAvatar(
+        initials = profile.initials,
+        imageUrl = profile.imageUrl,
+        modifier = modifier
+    )
+}
 
 @Composable
 fun UserAvatar(
@@ -24,7 +37,6 @@ fun UserAvatar(
 ) {
     Box(
         modifier = modifier
-            .size(48.dp)
             .clip(CircleShape)
             .background(AppTheme.colors.surfaceAccentStrong),
         contentAlignment = Alignment.Center,

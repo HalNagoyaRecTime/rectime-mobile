@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.theme.AppTheme
@@ -81,19 +82,20 @@ fun SideMenu(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val user = MockUser.me
             UserAvatar(
-                initials = "RT",
-                imageUrl = "https://i.pravatar.cc/150?u=rt"
+                profile = user,
+                modifier = Modifier.size(48.dp)
             )
 
             Column {
-                Text(text = "HAL 太郎", color = AppTheme.colors.textPrimary)
+                Text(text = user.name, color = AppTheme.colors.textPrimary)
                 Row {
-                    Text(text = "IA12B", color = AppTheme.colors.textSecondary)
+                    Text(text = user.department ?: "", color = AppTheme.colors.textSecondary)
                     Text(text = "/", color = AppTheme.colors.textSecondary)
                     Text(text = "99", color = AppTheme.colors.textSecondary)
                     Text(text = "/", color = AppTheme.colors.textSecondary)
-                    Text(text = "12345", color = AppTheme.colors.textSecondary)
+                    Text(text = user.studentId ?: "", color = AppTheme.colors.textSecondary)
                 }
             }
         }
