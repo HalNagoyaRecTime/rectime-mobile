@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import com.rectime.mobile.feature.calendar.CalendarScreen
 import com.rectime.mobile.feature.home.HomeScreen
 import com.rectime.mobile.ui.component.BottomNavigationBar
@@ -44,13 +45,16 @@ fun RootLayer(
 
     // --- アニメーション計算ロジック ---
     val menuAnimatable = remember { Animatable(state.menuProgress) }
+    LaunchedEffect(state.activeGesture, state.menuProgress) {
+        if (state.activeGesture == ActiveGesture.Menu) {
+            menuAnimatable.snapTo(state.menuProgress)
+        }
+    }
     LaunchedEffect(
         state.activeGesture,
         if (state.activeGesture == ActiveGesture.Menu) null else state.menuProgress,
     ) {
-        if (state.activeGesture == ActiveGesture.Menu) {
-            menuAnimatable.snapTo(state.menuProgress)
-        } else {
+        if (state.activeGesture != ActiveGesture.Menu) {
             try {
                 navigationController.setTransitioning(true)
                 menuAnimatable.animateTo(
@@ -76,7 +80,7 @@ fun RootLayer(
     }
     val safeProgress = renderedMenuProgress.coerceIn(0f, 1f)
     val offsetX = (safeProgress * revealWidthPx).roundToInt()
-    val cornerDp = deviceCornerRadius * safeProgress
+    val cornerDp = if (safeProgress > 0f) deviceCornerRadius else 0.dp
     val layerShape = RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp)
     // ----------------------------
 
@@ -86,7 +90,6 @@ fun RootLayer(
             .fillMaxSize()
             .offset { IntOffset(offsetX, 0) } // サイドメニューが開く時に右にずれる
             .graphicsLayer {
-                shadowElevation = 24f * renderedMenuProgress // 浮いている感じの影
                 shape = layerShape
                 clip = safeProgress > 0f
             }
