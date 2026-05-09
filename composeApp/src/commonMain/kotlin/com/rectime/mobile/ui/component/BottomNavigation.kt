@@ -45,7 +45,7 @@ fun BottomNavigationBar(
 ) {
     val items = listOf(
         NavigationItemConfig(HomeScreen, "ホーム", SolidGroup.House),
-        NavigationItemConfig(CalendarScreen, "日程", SolidGroup.CalendarDays),
+        NavigationItemConfig(CalendarScreen, "カレンダー", SolidGroup.CalendarDays),
     )
 
     Column(
