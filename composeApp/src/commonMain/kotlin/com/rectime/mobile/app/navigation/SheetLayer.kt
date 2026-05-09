@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntOffset
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
+import com.rectime.mobile.ui.token.rememberDeviceCornerRadius
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -38,6 +39,7 @@ fun SheetLayer(
     containerHeightPx: Float,
 ) {
     val sheetEntry = state.sheet ?: return
+    val deviceCornerRadius = rememberDeviceCornerRadius()
     var offsetPx by remember(sheetEntry.key) { mutableFloatStateOf(containerHeightPx * 0.35f) }
     var handledDismissRequestId by remember { mutableLongStateOf(state.sheetDismissRequestId) }
     val coroutineScope = rememberCoroutineScope()
@@ -108,8 +110,8 @@ fun SheetLayer(
                 .background(
                     color = AppTheme.colors.sheetBackground,
                     shape = RoundedCornerShape(
-                        topStart = AppTheme.radius.sheet,
-                        topEnd = AppTheme.radius.sheet
+                        topStart = deviceCornerRadius,
+                        topEnd = deviceCornerRadius,
                     ),
                 )
                 .pointerInput(containerHeightPx) {

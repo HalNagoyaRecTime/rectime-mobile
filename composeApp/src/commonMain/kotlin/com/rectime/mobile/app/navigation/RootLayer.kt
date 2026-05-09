@@ -15,7 +15,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import com.rectime.mobile.feature.calendar.CalendarScreen
@@ -23,6 +22,7 @@ import com.rectime.mobile.feature.home.HomeScreen
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
+import com.rectime.mobile.ui.token.rememberDeviceCornerRadius
 import kotlin.math.roundToInt
 
 /**
@@ -39,14 +39,15 @@ fun RootLayer(
     revealWidthPx: Float,
     containerWidthPx: Float,
 ) {
-    // 【1. 今、何を表示すべきか？】
-    // NavigationController（状態管理）が持っている「rootScreen」を取り出します。
-    // ここが HomeScreen オブジェクトだったり CalendarScreen オブジェクトだったりします。
     val rootScreen = state.rootScreen ?: return
+    val deviceCornerRadius = rememberDeviceCornerRadius()
 
     // --- アニメーション計算ロジック ---
     val menuAnimatable = remember { Animatable(state.menuProgress) }
-    LaunchedEffect(state.menuProgress, state.activeGesture) {
+    LaunchedEffect(
+        state.activeGesture,
+        if (state.activeGesture == ActiveGesture.Menu) null else state.menuProgress,
+    ) {
         if (state.activeGesture == ActiveGesture.Menu) {
             menuAnimatable.snapTo(state.menuProgress)
         } else {
@@ -75,7 +76,8 @@ fun RootLayer(
     }
     val safeProgress = renderedMenuProgress.coerceIn(0f, 1f)
     val offsetX = (safeProgress * revealWidthPx).roundToInt()
-    val cornerDp = AppTheme.radius.xxl * safeProgress
+    val cornerDp = deviceCornerRadius * safeProgress
+    val layerShape = RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp)
     // ----------------------------
 
     // 【3. 土台となる「動く箱」の描画】
@@ -85,8 +87,9 @@ fun RootLayer(
             .offset { IntOffset(offsetX, 0) } // サイドメニューが開く時に右にずれる
             .graphicsLayer {
                 shadowElevation = 24f * renderedMenuProgress // 浮いている感じの影
+                shape = layerShape
+                clip = safeProgress > 0f
             }
-            .clip(RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp)) // ずれる時に角を丸くする
             .background(AppTheme.colors.surfacePrimary),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
