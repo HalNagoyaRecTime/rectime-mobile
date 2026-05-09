@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,9 +22,6 @@ import com.rectime.mobile.ui.component.UserAvatar
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
-/**
- * HomeScreen as a self-contained Navigation Box
- */
 object HomeScreen : Screen {
     override val key: String = "home"
 
@@ -42,38 +40,45 @@ private fun HomeScreenUI(
     onOpenNotifications: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(
+    Column(
         modifier = modifier
-            .fillMaxWidth()
+            .fillMaxSize()
             .statusBarsPadding()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            ScreenHeader(
-                title = "Home",
-                modifier = Modifier.padding(top = 12.dp),
-                leading = {
-                    PressSurface(
-                        onClick = onOpenMenu,
-                        color = androidx.compose.ui.graphics.Color.Transparent,
-                        contentPadding = PaddingValues(0.dp),
+        ScreenHeader(
+            title = "Home",
+            modifier = Modifier.padding(top = 12.dp),
+            leading = {
+                PressSurface(
+                    onClick = onOpenMenu,
+                    color = androidx.compose.ui.graphics.Color.Transparent,
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    UserAvatar(
+                        profile = MockUser.me,
                         modifier = Modifier.fillMaxSize()
-                    ) {
-                        UserAvatar(
-                            profile = MockUser.me,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                },
-                trailing = {
-                    HeaderActionButton(
-                        icon = SolidGroup.Bell,
-                        contentDescription = "通知",
-                        onClick = onOpenNotifications,
                     )
-                },
-            )
+                }
+            },
+            trailing = {
+                HeaderActionButton(
+                    icon = SolidGroup.Bell,
+                    contentDescription = "通知",
+                    onClick = onOpenNotifications,
+                )
+            },
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
+        ) {
+            // コンテンツアイテムをここに追加
         }
     }
 }
