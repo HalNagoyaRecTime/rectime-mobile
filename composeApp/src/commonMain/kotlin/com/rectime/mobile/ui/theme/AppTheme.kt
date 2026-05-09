@@ -8,9 +8,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.rectime.mobile.ui.token.rememberPlatformBtnStylePolicy
 
 enum class ThemeMode {
     System,
@@ -88,12 +90,17 @@ fun AppTheme(
             scrim = colors.overlayBackdrop,
         )
     }
+    val buttonStylePolicy = rememberPlatformBtnStylePolicy()
+    val appBtnTokens = remember(buttonStylePolicy.defaultVisualStyle) {
+        AppBtnTokens(defaultVisualStyle = buttonStylePolicy.defaultVisualStyle)
+    }
 
     CompositionLocalProvider(
         LocalAppColors provides colors,
         LocalAppSpacing provides AppSpacing(),
         LocalAppRadius provides AppRadius(),
         LocalAppLayout provides AppLayout(),
+        LocalAppBtnTokens provides appBtnTokens,
     ) {
         MaterialTheme(
             colorScheme = material,
@@ -122,4 +129,9 @@ object AppTheme {
         @Composable
         @ReadOnlyComposable
         get() = LocalAppLayout.current
+
+    val buttons: AppBtnTokens
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalAppBtnTokens.current
 }

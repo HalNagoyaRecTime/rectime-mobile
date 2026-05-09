@@ -58,16 +58,6 @@ fun SideMenu(
         ),
     )
 
-    val footerItems = listOf(
-        SideMenuItemConfig(
-            title = "テーマ変更",
-            icon = SolidGroup.Palette,
-            action = SideMenuAction.Custom {
-                onPresentThemeSheet(ThemeSheet(themeStateHolder))
-            }
-        ),
-    )
-
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -123,21 +113,24 @@ fun SideMenu(
 
         // Footer Section
         Row (
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            footerItems.forEach { item ->
-                MenuItem(
-                    icon = item.icon,
-                    title = item.title,
-                    onClick = {
-                        when (val action = item.action) {
-                            is SideMenuAction.Push -> onPushFromMenu(action.screen)
-                            is SideMenuAction.Custom -> action.onClick()
-                        }
-                    },
+            AppBtn(
+                onClick = { onPresentThemeSheet(ThemeSheet(themeStateHolder)) },
+                size = AppBtnSize.Md,
+            ) {
+                Icon(
+                    imageVector = SolidGroup.Palette,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = AppTheme.colors.textSecondary,
                 )
             }
+
+            Spacer(modifier = Modifier.weight(1f))
+
             Text(
                 text = "rectime",
                 color = AppTheme.colors.textMuted,
@@ -154,21 +147,10 @@ private fun MenuItem(
     title: String,
     onClick: () -> Unit,
 ) {
-    PressSurface(
+    SideMenuBtn(
+        icon = icon,
+        title = title,
         onClick = onClick,
-        color = AppTheme.colors.navigationSurface,
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = AppTheme.colors.textSecondary,
-                modifier = Modifier.size(16.dp),
-            )
-            Text(text = title, color = AppTheme.colors.textPrimary)
-        }
-    }
+        size = AppBtnSize.Md,
+    )
 }

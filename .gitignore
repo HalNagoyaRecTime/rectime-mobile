@@ -18,6 +18,8 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
-memo.md
 
-note
+memo.md
+AGENTS.md
+CLAUDE.md
+
