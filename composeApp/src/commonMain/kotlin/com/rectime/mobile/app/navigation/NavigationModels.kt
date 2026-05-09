@@ -45,4 +45,5 @@ data class NavigationState(
     val pushDismissRequestId: Long = 0,
     val sheetDismissRequestId: Long = 0,
     val backDragOffsetPx: Float = 0f,
+    val isTransitioning: Boolean = false,
 )

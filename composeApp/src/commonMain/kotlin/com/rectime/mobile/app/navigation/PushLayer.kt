@@ -37,28 +37,38 @@ fun PushLayer(
         if (state.pushDismissRequestId == handledDismissRequestId) return@LaunchedEffect
         handledDismissRequestId = state.pushDismissRequestId
 
-        val animator = Animatable(state.backDragOffsetPx)
-        animator.animateTo(
-            targetValue = containerWidthPx,
-            animationSpec = tween(durationMillis = GestureTokens.pushDismissDurationMs),
-        ) {
-            navigationController.setBackDragOffset(value)
+        try {
+            navigationController.setTransitioning(true)
+            val animator = Animatable(state.backDragOffsetPx)
+            animator.animateTo(
+                targetValue = containerWidthPx,
+                animationSpec = tween(durationMillis = GestureTokens.pushDismissDurationMs),
+            ) {
+                navigationController.setBackDragOffset(value)
+            }
+            navigationController.completePop(topKey)
+        } finally {
+            navigationController.setTransitioning(false)
         }
-        navigationController.completePop(topKey)
     }
 
     LaunchedEffect(state.pushTransition.mode, state.pushTransition.routeKey) {
         if (state.pushTransition.mode != PushTransitionMode.Enter) return@LaunchedEffect
         if (state.pushTransition.routeKey != topKey) return@LaunchedEffect
 
-        val animator = Animatable(0f)
-        animator.animateTo(
-            targetValue = 1f,
-            animationSpec = tween(durationMillis = 260),
-        ) {
-            navigationController.setPushEnterProgress(value)
+        try {
+            navigationController.setTransitioning(true)
+            val animator = Animatable(0f)
+            animator.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 260),
+            ) {
+                navigationController.setPushEnterProgress(value)
+            }
+            navigationController.finishPushEnter(topKey)
+        } finally {
+            navigationController.setTransitioning(false)
         }
-        navigationController.finishPushEnter(topKey)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

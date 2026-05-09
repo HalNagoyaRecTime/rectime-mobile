@@ -147,21 +147,15 @@ fun NavigationHost(
             modifier = Modifier.background(AppTheme.colors.navigationBackground),
         )
 
-        // Layer 1: Root (Home / Calendar)
+        // Layer 1: Root (Home / Calendar) — PushLayer を内部に含む
         RootLayer(
             state = state,
             navigationController = navigationController,
             revealWidthPx = revealWidthPx,
-        )
-
-        // Layer 2: Push Stack (Detail screens)
-        PushLayer(
-            state = state,
-            navigationController = navigationController,
             containerWidthPx = containerWidthPx,
         )
 
-        // Layer 3: Sheet (Modals)
+        // Layer 2: Sheet (Modals)
         SheetLayer(
             state = state,
             navigationController = navigationController,

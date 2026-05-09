@@ -43,15 +43,20 @@ fun SheetLayer(
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(sheetEntry.key, containerHeightPx) {
-        val animator = Animatable(offsetPx)
-        animator.animateTo(
-            targetValue = 0f,
-            animationSpec = spring(
-                dampingRatio = 0.9f,
-                stiffness = GestureTokens.menuOpenCloseStiffness,
-            ),
-        ) {
-            offsetPx = value
+        try {
+            navigationController.setTransitioning(true)
+            val animator = Animatable(offsetPx)
+            animator.animateTo(
+                targetValue = 0f,
+                animationSpec = spring(
+                    dampingRatio = 0.9f,
+                    stiffness = GestureTokens.menuOpenCloseStiffness,
+                ),
+            ) {
+                offsetPx = value
+            }
+        } finally {
+            navigationController.setTransitioning(false)
         }
     }
 
@@ -59,15 +64,20 @@ fun SheetLayer(
         if (state.sheetDismissRequestId == handledDismissRequestId) return@LaunchedEffect
         handledDismissRequestId = state.sheetDismissRequestId
 
-        val animator = Animatable(offsetPx)
-        animator.animateTo(
-            targetValue = containerHeightPx,
-            animationSpec = tween(durationMillis = 190),
-        ) {
-            offsetPx = value
+        try {
+            navigationController.setTransitioning(true)
+            val animator = Animatable(offsetPx)
+            animator.animateTo(
+                targetValue = containerHeightPx,
+                animationSpec = tween(durationMillis = 190),
+            ) {
+                offsetPx = value
+            }
+            navigationController.clearSheet(sheetEntry.key)
+            offsetPx = 0f
+        } finally {
+            navigationController.setTransitioning(false)
         }
-        navigationController.clearSheet(sheetEntry.key)
-        offsetPx = 0f
     }
 
     val openness = (1f - (offsetPx / (containerHeightPx * 0.5f)).coerceIn(0f, 1f))

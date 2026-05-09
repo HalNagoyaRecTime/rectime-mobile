@@ -69,10 +69,15 @@ class NavigationController(
     }
 
     fun resolveHorizontalGesture(): ActiveGesture = when {
+        state.isTransitioning -> ActiveGesture.None
         state.sheet != null -> ActiveGesture.None
         state.pushStack.isNotEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Back
         state.pushStack.isEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Menu
         else -> ActiveGesture.None
+    }
+
+    fun setTransitioning(value: Boolean) {
+        state = state.copy(isTransitioning = value)
     }
 
     fun setBackDragOffset(px: Float) {

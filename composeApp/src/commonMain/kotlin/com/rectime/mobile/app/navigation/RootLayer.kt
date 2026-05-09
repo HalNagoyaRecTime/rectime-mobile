@@ -37,6 +37,7 @@ fun RootLayer(
     state: NavigationState,
     navigationController: NavigationController,
     revealWidthPx: Float,
+    containerWidthPx: Float,
 ) {
     // 【1. 今、何を表示すべきか？】
     // NavigationController（状態管理）が持っている「rootScreen」を取り出します。
@@ -49,13 +50,18 @@ fun RootLayer(
         if (state.activeGesture == ActiveGesture.Menu) {
             menuAnimatable.snapTo(state.menuProgress)
         } else {
-            menuAnimatable.animateTo(
-                targetValue = state.menuProgress,
-                animationSpec = spring(
-                    dampingRatio = 0.86f,
-                    stiffness = GestureTokens.menuOpenCloseStiffness,
-                ),
-            )
+            try {
+                navigationController.setTransitioning(true)
+                menuAnimatable.animateTo(
+                    targetValue = state.menuProgress,
+                    animationSpec = spring(
+                        dampingRatio = 0.86f,
+                        stiffness = GestureTokens.menuOpenCloseStiffness,
+                    ),
+                )
+            } finally {
+                navigationController.setTransitioning(false)
+            }
         }
     }
 
@@ -84,20 +90,21 @@ fun RootLayer(
             .background(AppTheme.colors.surfacePrimary),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            
-            // 【5. ★中身の描画★】
-            // 冒頭で取り出した「rootScreen」の Content 関数を呼び出します。
-            // これにより、中身が Home なのか Calendar なのかを意識せずに描画できます。
             ScreenLifecycleWrapper(rootScreen) {
                 rootScreen.Content(navigationController)
             }
 
-            // 【6. 土台共通のパーツ】
-            // ボトムナビゲーションは、どの画面(Home/Calendar)でも共通で表示されるのでここに置きます。
+            // PushLayer はここに入れ子（BottomNav より背面）
+            // RootLayer のスライドと同期して一緒に動く
+            PushLayer(
+                state = state,
+                navigationController = navigationController,
+                containerWidthPx = containerWidthPx,
+            )
+
             BottomNavigationBar(
                 currentScreen = rootScreen,
-                onSelectRoot = { screen: Screen -> 
-                    // タップされたら、土台の画面をそのオブジェクトに差し替えます。
+                onSelectRoot = { screen: Screen ->
                     navigationController.setRoot(screen)
                 },
                 modifier = Modifier
