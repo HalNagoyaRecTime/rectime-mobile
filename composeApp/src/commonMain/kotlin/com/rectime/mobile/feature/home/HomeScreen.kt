@@ -16,9 +16,7 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.HeaderActionButton
-import com.rectime.mobile.ui.component.PressSurface
-import com.rectime.mobile.ui.component.ScreenHeader
-import com.rectime.mobile.ui.component.UserAvatar
+import com.rectime.mobile.ui.component.RootScreenHeader
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
@@ -46,22 +44,11 @@ private fun HomeScreenUI(
             .statusBarsPadding()
             .padding(horizontal = 16.dp),
     ) {
-        ScreenHeader(
+        RootScreenHeader(
             title = "Home",
+            profile = MockUser.me,
+            onOpenMenu = onOpenMenu,
             modifier = Modifier.padding(top = 12.dp),
-            leading = {
-                PressSurface(
-                    onClick = onOpenMenu,
-                    color = androidx.compose.ui.graphics.Color.Transparent,
-                    contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    UserAvatar(
-                        profile = MockUser.me,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            },
             trailing = {
                 HeaderActionButton(
                     icon = SolidGroup.Bell,

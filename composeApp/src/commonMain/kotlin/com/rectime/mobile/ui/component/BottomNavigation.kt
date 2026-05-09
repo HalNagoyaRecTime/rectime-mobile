@@ -97,11 +97,11 @@ private fun BottomNavigationItem(
         modifier = modifier,
         color = Color.Transparent,
         shape = RoundedCornerShape(8.dp),
-        contentPadding = PaddingValues(vertical = 10.dp),
+        contentPadding = PaddingValues(vertical = 1.dp),
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Icon(
                 imageVector = icon,

@@ -82,10 +82,12 @@ fun NavigationHost(
                         val velocity = velocityTracker.calculateVelocity().x
                         when (gesture) {
                             ActiveGesture.Menu -> {
-                                if (navigationController.state.menuProgress > GestureTokens.backDismissProgress) {
-                                    navigationController.openMenu()
-                                } else {
-                                    navigationController.closeMenu()
+                                val progress = navigationController.state.menuProgress
+                                when {
+                                    velocity > GestureTokens.menuFlingVelocityX -> navigationController.openMenu()
+                                    velocity < -GestureTokens.menuFlingVelocityX -> navigationController.closeMenu()
+                                    progress > GestureTokens.menuSettleProgress -> navigationController.openMenu()
+                                    else -> navigationController.closeMenu()
                                 }
                             }
                             ActiveGesture.Back -> {

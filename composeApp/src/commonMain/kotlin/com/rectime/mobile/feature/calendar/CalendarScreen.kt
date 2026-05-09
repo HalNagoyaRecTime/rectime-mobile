@@ -26,14 +26,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.HeaderActionButton
 import com.rectime.mobile.ui.component.PressSurface
-import com.rectime.mobile.ui.component.ScreenHeader
+import com.rectime.mobile.ui.component.RootScreenHeader
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bars
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
 private data class TimelineEvent(
@@ -81,16 +81,11 @@ private fun CalendarScreenUI(
             .statusBarsPadding()
             .padding(horizontal = 16.dp),
     ) {
-        ScreenHeader(
+        RootScreenHeader(
             title = "Calendar",
+            profile = MockUser.me,
+            onOpenMenu = onOpenMenu,
             modifier = Modifier.padding(top = 12.dp),
-            leading = {
-                HeaderActionButton(
-                    icon = SolidGroup.Bars,
-                    contentDescription = "メニュー",
-                    onClick = onOpenMenu,
-                )
-            },
             trailing = {
                 HeaderActionButton(
                     icon = SolidGroup.Bell,
