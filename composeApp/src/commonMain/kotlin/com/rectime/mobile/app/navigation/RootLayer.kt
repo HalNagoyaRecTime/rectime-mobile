@@ -4,23 +4,26 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import com.rectime.mobile.feature.calendar.CalendarScreen
 import com.rectime.mobile.feature.home.HomeScreen
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
+import kotlin.math.roundToInt
 
 /**
  * RootLayer（土台レイヤー）
@@ -39,12 +42,6 @@ fun RootLayer(
     // NavigationController（状態管理）が持っている「rootScreen」を取り出します。
     // ここが HomeScreen オブジェクトだったり CalendarScreen オブジェクトだったりします。
     val rootScreen = state.rootScreen ?: return
-
-    // 【2. ドラッグ可能かどうかの判定】
-    // シートが出ていない、かつ詳細画面(Push)が積まれていない時だけ、サイドメニューを出せます。
-    val canDragMenu = state.sheet == null &&
-        state.pushStack.isEmpty() &&
-        state.pushTransition.mode == PushTransitionMode.Idle
 
     // --- アニメーション計算ロジック ---
     val menuAnimatable = remember { Animatable(state.menuProgress) }
@@ -71,57 +68,20 @@ fun RootLayer(
         else -> menuAnimatable.value
     }
     val safeProgress = renderedMenuProgress.coerceIn(0f, 1f)
+    val offsetX = (safeProgress * revealWidthPx).roundToInt()
+    val cornerDp = AppTheme.radius.xxl * safeProgress
     // ----------------------------
 
     // 【3. 土台となる「動く箱」の描画】
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .offset { IntOffset(offsetX, 0) } // サイドメニューが開く時に右にずれる
             .graphicsLayer {
-                translationX = safeProgress * revealWidthPx
+                shadowElevation = 24f * renderedMenuProgress // 浮いている感じの影
             }
-            .background(AppTheme.colors.surfacePrimary)
-            .pointerInput(canDragMenu, revealWidthPx) {
-                // 【4. ジェスチャー判定】
-                // ここで指の動きを感知して、NavigationController に「今これくらいズレたよ」と伝えます。
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        if (!canDragMenu) return@detectHorizontalDragGestures
-                        // 既に他のジェスチャー（Back等）が開始されている場合は無視
-                        if (navigationController.state.activeGesture != ActiveGesture.None) return@detectHorizontalDragGestures
-                        
-                        navigationController.beginGesture(ActiveGesture.Menu)
-                    },
-                    onHorizontalDrag = { change, dragAmount ->
-                        if (!canDragMenu) return@detectHorizontalDragGestures
-                        // Menuジェスチャー中であること、または他のジェスチャーが走っていないことを確認
-                        if (navigationController.state.activeGesture != ActiveGesture.Menu &&
-                            navigationController.state.activeGesture != ActiveGesture.None
-                        ) {
-                            return@detectHorizontalDragGestures
-                        }
-                        
-                        change.consume()
-                        val next = navigationController.state.menuProgress + (dragAmount / revealWidthPx)
-                        navigationController.setMenuProgress(next)
-                    },
-                    onDragEnd = {
-                        if (!canDragMenu || navigationController.state.activeGesture != ActiveGesture.Menu) {
-                            return@detectHorizontalDragGestures
-                        }
-                        // 指を離した時、一定以上開いていれば全開、そうでなければ閉じます。
-                        if (navigationController.state.menuProgress > GestureTokens.backDismissProgress) {
-                            navigationController.openMenu()
-                        } else {
-                            navigationController.closeMenu()
-                        }
-                        navigationController.endGesture()
-                    },
-                    onDragCancel = {
-                        navigationController.endGesture()
-                    },
-                )
-            },
+            .clip(RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp)) // ずれる時に角を丸くする
+            .background(AppTheme.colors.surfacePrimary),
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             

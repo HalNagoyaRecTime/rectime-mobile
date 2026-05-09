@@ -44,7 +44,8 @@ class NavigationController(
         val entry = state.pushStack.find { it.key == key }
         state = state.copy(
             pushStack = state.pushStack.filter { it.key != key },
-            menuProgress = if (entry?.source == PushTransitionSource.SideMenu) 1f else 0f
+            menuProgress = if (entry?.source == PushTransitionSource.SideMenu) 1f else 0f,
+            backDragOffsetPx = 0f,
         )
     }
 
@@ -65,6 +66,17 @@ class NavigationController(
         if (state.sheet?.key == key) {
             state = state.copy(sheet = null)
         }
+    }
+
+    fun resolveHorizontalGesture(): ActiveGesture = when {
+        state.sheet != null -> ActiveGesture.None
+        state.pushStack.isNotEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Back
+        state.pushStack.isEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Menu
+        else -> ActiveGesture.None
+    }
+
+    fun setBackDragOffset(px: Float) {
+        state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
     }
 
     // Gesture control
