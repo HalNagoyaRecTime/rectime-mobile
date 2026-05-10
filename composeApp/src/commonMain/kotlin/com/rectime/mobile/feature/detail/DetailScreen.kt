@@ -19,11 +19,13 @@ data class DetailScreen(val id: String) : Screen {
             title = "詳細",
             onBack = { navigationController.requestPop() },
         ) {
-            Text(
-                text = "詳細情報の表示エリアです。",
-                color = AppTheme.colors.textSecondary,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
+            item {
+                Text(
+                    text = "詳細情報の表示エリアです。",
+                    color = AppTheme.colors.textSecondary,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            }
         }
     }
 }

@@ -19,43 +19,14 @@ object NotificationsScreen : Screen {
             title = "通知",
             onBack = { navigationController.requestPop() },
         ) {
-            Text(
-                text = "通知一覧の画面です。現在はプレースホルダを表示しています。\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧\n" +
-                        "通知一覧",
-                color = AppTheme.colors.textSecondary,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
+            item {
+                Text(
+                    text = "通知一覧の画面です。現在はプレースホルダを表示しています。\n" +
+                            "通知一覧\n".repeat(40).trimEnd(),
+                    color = AppTheme.colors.textSecondary,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            }
         }
     }
 }

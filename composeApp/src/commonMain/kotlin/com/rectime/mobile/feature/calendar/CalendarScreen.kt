@@ -6,20 +6,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,10 +27,8 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
 import com.rectime.mobile.ui.component.PressSurface
-import com.rectime.mobile.ui.component.RootHeader
+import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
@@ -68,7 +60,6 @@ private fun CalendarScreenUI(
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenEventDetail: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     val events = listOf(
         TimelineEvent("U18 準決勝", "Aコート", startMinuteOfDay = 10 * 60, durationMinutes = 80, lane = 0, laneCount = 2),
@@ -79,19 +70,22 @@ private fun CalendarScreenUI(
     val hourEnd = 22
     val hourHeight = 72.dp
     val nowMinute = 13 * 60 + 20
-    val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp + AppTheme.layout.headerAction + 12.dp
 
-    Box(
-        modifier = modifier.fillMaxSize(),
+    RootScreenScaffold(
+        title = "カレンダー",
+        profile = MockUser.me,
+        onOpenMenu = onOpenMenu,
+        onTrailingClick = onOpenNotifications,
+        trailing = {
+            Icon(
+                imageVector = SolidGroup.Bell,
+                contentDescription = "通知",
+                tint = AppTheme.colors.textPrimary,
+                modifier = Modifier.size(20.dp),
+            )
+        },
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = AppTheme.layout.screenHorizontalPadding),
-        ) {
-            Spacer(modifier = Modifier.height(topPadding))
-
+        item {
             Text(
                 text = "4月28日・火曜日",
                 color = AppTheme.colors.textSecondary,
@@ -187,27 +181,6 @@ private fun CalendarScreenUI(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(AppTheme.layout.rootBottomNavigationInset))
         }
-
-        RootHeader(
-            title = "カレンダー",
-            profile = MockUser.me,
-            onOpenMenu = onOpenMenu,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
-                .padding(top = 12.dp),
-            onTrailingClick = onOpenNotifications,
-            trailing = {
-                Icon(
-                    imageVector = SolidGroup.Bell,
-                    contentDescription = "通知",
-                    tint = AppTheme.colors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            },
-        )
     }
 }

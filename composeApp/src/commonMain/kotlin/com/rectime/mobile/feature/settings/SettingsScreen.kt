@@ -19,11 +19,13 @@ object SettingsScreen : Screen {
             title = "設定",
             onBack = { navigationController.requestPop() },
         ) {
-            Text(
-                text = "設定画面です。将来的にユーザー設定などを追加します。",
-                color = AppTheme.colors.textSecondary,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
+            item {
+                Text(
+                    text = "設定画面です。将来的にユーザー設定などを追加します。",
+                    color = AppTheme.colors.textSecondary,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+            }
         }
     }
 }
