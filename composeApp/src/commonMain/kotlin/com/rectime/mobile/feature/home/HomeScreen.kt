@@ -1,11 +1,15 @@
 package com.rectime.mobile.feature.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
@@ -39,17 +43,32 @@ private fun HomeScreenUI(
     onOpenNotifications: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = AppTheme.layout.screenHorizontalPadding),
+    val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp + AppTheme.layout.headerAction + 12.dp
+
+    Box(
+        modifier = modifier.fillMaxSize(),
     ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(
+                top = topPadding,
+                bottom = 12.dp,
+                start = AppTheme.layout.screenHorizontalPadding,
+                end = AppTheme.layout.screenHorizontalPadding,
+            ),
+        ) {
+            // コンテンツアイテムをここに追加
+        }
+
         RootScreenHeader(
-            title = "Home",
+            title = "ホーム",
             profile = MockUser.me,
             onOpenMenu = onOpenMenu,
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
+                .padding(top = 12.dp),
             trailing = {
                 HeaderActionButton(
                     icon = SolidGroup.Bell,
@@ -58,15 +77,5 @@ private fun HomeScreenUI(
                 )
             },
         )
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 12.dp),
-        ) {
-            // コンテンツアイテムをここに追加
-        }
     }
 }

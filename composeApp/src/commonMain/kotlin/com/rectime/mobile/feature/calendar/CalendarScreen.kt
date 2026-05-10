@@ -2,15 +2,19 @@ package com.rectime.mobile.feature.calendar
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -74,34 +78,19 @@ private fun CalendarScreenUI(
     val hourEnd = 22
     val hourHeight = 72.dp
     val nowMinute = 13 * 60 + 20
+    val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp + AppTheme.layout.headerAction + 12.dp
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
+    Box(
+        modifier = modifier.fillMaxSize(),
     ) {
-        RootScreenHeader(
-            title = "Calendar",
-            profile = MockUser.me,
-            onOpenMenu = onOpenMenu,
-            modifier = Modifier
-                .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
-                .padding(top = 12.dp),
-            trailing = {
-                HeaderActionButton(
-                    icon = SolidGroup.Bell,
-                    contentDescription = "通知",
-                    onClick = onOpenNotifications,
-                )
-            },
-        )
-
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = AppTheme.layout.screenHorizontalPadding),
         ) {
+            Spacer(modifier = Modifier.height(topPadding))
+
             Text(
                 text = "4月28日・火曜日",
                 color = AppTheme.colors.textSecondary,
@@ -200,5 +189,22 @@ private fun CalendarScreenUI(
 
             Spacer(modifier = Modifier.height(AppTheme.layout.rootBottomNavigationInset))
         }
+
+        RootScreenHeader(
+            title = "カレンダー",
+            profile = MockUser.me,
+            onOpenMenu = onOpenMenu,
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
+                .padding(top = 12.dp),
+            trailing = {
+                HeaderActionButton(
+                    icon = SolidGroup.Bell,
+                    contentDescription = "通知",
+                    onClick = onOpenNotifications,
+                )
+            },
+        )
     }
 }

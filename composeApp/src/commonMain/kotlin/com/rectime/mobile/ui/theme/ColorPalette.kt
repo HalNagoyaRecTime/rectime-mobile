@@ -25,7 +25,7 @@ data class AppColorTokens(
 )
 
 private val defaultLight = AppColorTokens(
-    navigationBackground = Color(0xFFF7F7FA),
+    navigationBackground = Color(0xFFFFFFFF),
     navigationActive = Color(0xFF1C1D22),
     navigationInactive = Color(0xFF8A8F9C),
     navigationSurface = Color(0xFFFDFDFF),
@@ -33,7 +33,7 @@ private val defaultLight = AppColorTokens(
     navigationShadow = Color(0x33000000),
     sheetBackground = Color(0xFFFFFFFF),
     sheetHandle = Color(0xFFCED1DA),
-    surfacePrimary = Color(0xFFF5F6FA),
+    surfacePrimary = Color(0xFFE0E1E5),
     surfaceMuted = Color(0xFFECEEFA),
     surfaceAccent = Color(0xFFE0EAFF),
     surfaceAccentStrong = Color(0xFF4169E1),
@@ -47,7 +47,7 @@ private val defaultLight = AppColorTokens(
 )
 
 private val defaultDark = AppColorTokens(
-    navigationBackground = Color(0xFF101217),
+    navigationBackground = Color(0xFF01040A),
     navigationActive = Color(0xFFE6E9F2),
     navigationInactive = Color(0xFF9097AA),
     navigationSurface = Color(0xFF181B23),
@@ -55,7 +55,7 @@ private val defaultDark = AppColorTokens(
     navigationShadow = Color(0x66000000),
     sheetBackground = Color(0xFF171A21),
     sheetHandle = Color(0xFF5A6273),
-    surfacePrimary = Color(0xFF0F1218),
+    surfacePrimary = Color(0xFF1F242F),
     surfaceMuted = Color(0xFF161B25),
     surfaceAccent = Color(0xFF1D2A46),
     surfaceAccentStrong = Color(0xFF6C8DFF),

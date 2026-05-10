@@ -69,13 +69,14 @@ fun AppBtn(
     val shape = CircleShape
     val effectiveContainerColor = if (enabled) containerColor else containerColor.copy(alpha = 0.6f)
     val effectiveContentColor = if (enabled) contentColor else contentColor.copy(alpha = 0.7f)
+    val effectiveBorderColor = if (enabled) borderColor else borderColor.copy(alpha = borderColor.alpha * 0.6f)
 
     Box(
         modifier = modifier
             .graphicsLayer(scaleX = scale, scaleY = scale, shape = shape, clip = true)
             .defaultMinSize(minHeight = metrics.minHeight)
             .background(color = effectiveContainerColor, shape = shape)
-            .border(width = 1.dp, color = borderColor, shape = shape)
+            .border(width = 1.dp, color = effectiveBorderColor, shape = shape)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
