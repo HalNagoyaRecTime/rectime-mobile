@@ -29,7 +29,7 @@ object NotificationsScreen : Screen {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = topPadding, horizontal = screenHorizontalPadding),
+                    .padding(top = topPadding, start = screenHorizontalPadding, end = screenHorizontalPadding),
             ) {
                 Text(
                     text = "通知一覧の画面です。現在はプレースホルダを表示しています。",

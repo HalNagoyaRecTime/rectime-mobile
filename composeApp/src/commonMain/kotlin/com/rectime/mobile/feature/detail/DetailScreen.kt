@@ -29,7 +29,7 @@ data class DetailScreen(val id: String) : Screen {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = topPadding, horizontal = screenHorizontalPadding),
+                    .padding(top = topPadding, start = screenHorizontalPadding, end = screenHorizontalPadding),
             ) {
                 Text(
                     text = "詳細情報の表示エリアです。",

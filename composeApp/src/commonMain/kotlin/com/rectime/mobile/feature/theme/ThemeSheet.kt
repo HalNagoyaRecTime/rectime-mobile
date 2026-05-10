@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.theme
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,21 +33,14 @@ data class ThemeSheet(val themeStateHolder: ThemeStateHolder) : Screen {
 
 @Composable
 private fun ThemeSheetUI(themeStateHolder: ThemeStateHolder, onClose: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        SheetHeader(
-            title = "テーマ",
-            onClose = onClose,
-            modifier = Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding),
-        )
+    val screenHorizontalPadding = AppTheme.layout.screenHorizontalPadding
+    val topPadding = AppTheme.layout.headerAction
 
+    Box(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
-                .padding(bottom = 24.dp),
+                .padding(top = topPadding, start = screenHorizontalPadding, end = screenHorizontalPadding, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(text = "mode", color = AppTheme.colors.textSecondary)
@@ -93,6 +87,14 @@ private fun ThemeSheetUI(themeStateHolder: ThemeStateHolder, onClose: () -> Unit
                 )
             }
         }
+
+        SheetHeader(
+            title = "テーマ",
+            onClose = onClose,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = screenHorizontalPadding),
+        )
     }
 }
 
