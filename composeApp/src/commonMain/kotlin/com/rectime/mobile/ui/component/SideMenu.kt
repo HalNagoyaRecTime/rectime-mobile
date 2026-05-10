@@ -1,6 +1,8 @@
 package com.rectime.mobile.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -82,9 +84,9 @@ fun SideMenu(
                 Text(text = user.name, color = AppTheme.colors.textPrimary)
                 Row {
                     Text(text = user.department ?: "", color = AppTheme.colors.textSecondary)
-                    Text(text = "/", color = AppTheme.colors.textSecondary)
+                    Text(text = " / ", color = AppTheme.colors.textSecondary)
                     Text(text = "99", color = AppTheme.colors.textSecondary)
-                    Text(text = "/", color = AppTheme.colors.textSecondary)
+                    Text(text = " / ", color = AppTheme.colors.textSecondary)
                     Text(text = user.studentId ?: "", color = AppTheme.colors.textSecondary)
                 }
             }
@@ -94,7 +96,9 @@ fun SideMenu(
 
         // Navigation Items
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             mainItems.forEach { item ->
