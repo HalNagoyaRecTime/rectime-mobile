@@ -41,10 +41,9 @@ class NavigationController(
     }
 
     fun completePop(key: String) {
-        val entry = state.pushStack.find { it.key == key }
         state = state.copy(
             pushStack = state.pushStack.filter { it.key != key },
-            menuProgress = if (entry?.source == PushTransitionSource.SideMenu) 1f else 0f,
+            menuProgress = 0f,
             backDragOffsetPx = 0f,
         )
     }
