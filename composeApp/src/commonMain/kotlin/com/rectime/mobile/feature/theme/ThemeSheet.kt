@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.PressSurface
-import com.rectime.mobile.ui.component.SheetHeader
+import com.rectime.mobile.ui.component.SheetAppBar
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeId
 import com.rectime.mobile.ui.theme.ThemeMode
@@ -88,7 +88,7 @@ private fun ThemeSheetUI(themeStateHolder: ThemeStateHolder, onClose: () -> Unit
             }
         }
 
-        SheetHeader(
+        SheetAppBar(
             title = "テーマ",
             onClose = onClose,
             modifier = Modifier

@@ -36,7 +36,7 @@ import com.rectime.mobile.feature.notifications.NotificationsScreen
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import com.rectime.mobile.ui.component.PressSurface
-import com.rectime.mobile.ui.component.RootScreenHeader
+import com.rectime.mobile.ui.component.RootHeader
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
@@ -191,7 +191,7 @@ private fun CalendarScreenUI(
             Spacer(modifier = Modifier.height(AppTheme.layout.rootBottomNavigationInset))
         }
 
-        RootScreenHeader(
+        RootHeader(
             title = "カレンダー",
             profile = MockUser.me,
             onOpenMenu = onOpenMenu,

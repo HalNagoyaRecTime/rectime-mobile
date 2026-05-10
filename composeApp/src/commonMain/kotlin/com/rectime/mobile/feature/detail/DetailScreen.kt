@@ -14,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.ui.component.PushScreenHeader
+import com.rectime.mobile.ui.component.PushAppBar
 import com.rectime.mobile.ui.theme.AppTheme
 
 data class DetailScreen(val id: String) : Screen {
@@ -38,7 +38,7 @@ data class DetailScreen(val id: String) : Screen {
                 )
             }
 
-            PushScreenHeader(
+            PushAppBar(
                 title = "詳細",
                 onBack = { navigationController.requestPop() },
                 modifier = Modifier
