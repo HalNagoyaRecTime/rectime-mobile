@@ -18,8 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.rectime.mobile.feature.calendar.CalendarScreen
-import com.rectime.mobile.feature.home.HomeScreen
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
@@ -38,7 +36,6 @@ fun RootLayer(
     state: NavigationState,
     navigationController: NavigationController,
     revealWidthPx: Float,
-    containerWidthPx: Float,
 ) {
     val rootScreen = state.rootScreen ?: return
     val deviceCornerRadius = rememberDeviceCornerRadius()
@@ -99,14 +96,6 @@ fun RootLayer(
             ScreenLifecycleWrapper(rootScreen) {
                 rootScreen.Content(navigationController)
             }
-
-            // PushLayer はここに入れ子（BottomNav より背面）
-            // RootLayer のスライドと同期して一緒に動く
-            PushLayer(
-                state = state,
-                navigationController = navigationController,
-                containerWidthPx = containerWidthPx,
-            )
 
             BottomNavigationBar(
                 currentScreen = rootScreen,

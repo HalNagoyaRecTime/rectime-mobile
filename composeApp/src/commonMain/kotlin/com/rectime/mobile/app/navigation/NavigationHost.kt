@@ -140,7 +140,7 @@ fun NavigationHost(
         SideMenu(
             revealWidthDp = revealWidthDp,
             onPushFromMenu = { screen ->
-                navigationController.push(screen)
+                navigationController.push(screen, PushTransitionSource.SideMenu)
             },
             onPresentThemeSheet = { sheet ->
                 navigationController.presentSheet(sheet)
@@ -149,15 +149,22 @@ fun NavigationHost(
             modifier = Modifier.background(AppTheme.colors.navigationBackground),
         )
 
-        // Layer 1: Root (Home / Calendar) — PushLayer を内部に含む
+        // Layer 1: Root (Home / Calendar)
         RootLayer(
             state = state,
             navigationController = navigationController,
             revealWidthPx = revealWidthPx,
-            containerWidthPx = containerWidthPx,
         )
 
-        // Layer 2: Sheet (Modals)
+        // Layer 2: Push Layer (above Root+BottomNav, all sources)
+        PushLayer(
+            state = state,
+            navigationController = navigationController,
+            containerWidthPx = containerWidthPx,
+            revealWidthPx = revealWidthPx,
+        )
+
+        // Layer 3: Sheet (Modals)
         SheetLayer(
             state = state,
             navigationController = navigationController,

@@ -27,15 +27,24 @@ fun PushLayer(
     state: NavigationState,
     navigationController: NavigationController,
     containerWidthPx: Float,
+    revealWidthPx: Float,
+    filter: (PushEntry) -> Boolean = { true },
 ) {
-    val topEntry = state.pushStack.lastOrNull() ?: return
-    val topKey = topEntry.key
+    val entries = state.pushStack.filter(filter)
+    if (entries.isEmpty()) return
+
+    val topEntry = state.pushStack.lastOrNull()
+    val topKey = topEntry?.key
 
     var handledDismissRequestId by remember { mutableLongStateOf(state.pushDismissRequestId) }
 
     LaunchedEffect(state.pushDismissRequestId, topKey, containerWidthPx) {
         if (state.pushDismissRequestId == handledDismissRequestId) return@LaunchedEffect
         handledDismissRequestId = state.pushDismissRequestId
+        val topEntryNonNull = topEntry ?: return@LaunchedEffect
+
+        // Only handle dismiss if the top screen matches the filter of this layer
+        if (!filter(topEntryNonNull)) return@LaunchedEffect
 
         try {
             navigationController.setTransitioning(true)
@@ -46,7 +55,7 @@ fun PushLayer(
             ) {
                 navigationController.setBackDragOffset(value)
             }
-            navigationController.completePop(topKey)
+            navigationController.completePop(topEntryNonNull.key)
         } finally {
             navigationController.setTransitioning(false)
         }
@@ -54,7 +63,11 @@ fun PushLayer(
 
     LaunchedEffect(state.pushTransition.mode, state.pushTransition.routeKey) {
         if (state.pushTransition.mode != PushTransitionMode.Enter) return@LaunchedEffect
-        if (state.pushTransition.routeKey != topKey) return@LaunchedEffect
+        val transitionKey = state.pushTransition.routeKey ?: return@LaunchedEffect
+        
+        // Check if the entering screen belongs to this layer
+        val entry = state.pushStack.find { it.key == transitionKey } ?: return@LaunchedEffect
+        if (!filter(entry)) return@LaunchedEffect
 
         try {
             navigationController.setTransitioning(true)
@@ -65,41 +78,46 @@ fun PushLayer(
             ) {
                 navigationController.setPushEnterProgress(value)
             }
-            navigationController.finishPushEnter(topKey)
+            navigationController.finishPushEnter(transitionKey)
         } finally {
             navigationController.setTransitioning(false)
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        state.pushStack.forEachIndexed { index, entry ->
-            val isTop = index == state.pushStack.lastIndex
-            val stackDepth = state.pushStack.lastIndex - index
+        entries.forEach { entry ->
+            val indexInFullStack = state.pushStack.indexOf(entry)
+            val isTop = indexInFullStack == state.pushStack.lastIndex
+            val stackDepth = state.pushStack.lastIndex - indexInFullStack
             val depthOffsetPx = (stackDepth * AppTheme.spacing.gutter.value * LocalDensity.current.density)
 
             val isMenuEnter = state.pushTransition.mode == PushTransitionMode.Enter &&
                 state.pushTransition.routeKey == entry.key
+            
+            val initialOffsetPx = if (entry.source == PushTransitionSource.SideMenu) revealWidthPx else containerWidthPx
+            
             val enterOffsetPx = if (isMenuEnter) {
-                (1f - state.pushTransition.progress.coerceIn(0f, 1f)) * containerWidthPx
+                (1f - state.pushTransition.progress.coerceIn(0f, 1f)) * initialOffsetPx
             } else {
                 0f
             }
             val gestureOffsetPx = if (isTop) state.backDragOffsetPx else 0f
             val totalOffsetPx = max(0f, enterOffsetPx + gestureOffsetPx - depthOffsetPx)
 
+            val finalOffsetX = totalOffsetPx
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(totalOffsetPx.roundToInt(), 0) }
+                    .offset { IntOffset(finalOffsetX.roundToInt(), 0) }
                     .background(
                         color = AppTheme.colors.surfacePrimary,
                         shape = RoundedCornerShape(
-                            topStart = if (isMenuEnter) AppTheme.radius.sheet else 0.dp,
-                            bottomStart = if (isMenuEnter) AppTheme.radius.sheet else 0.dp,
+                            topStart = if (isMenuEnter || entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
+                            bottomStart = if (isMenuEnter || entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
                         ),
                     ),
             ) {
-                // Render Screen Object with lifecycle
                 ScreenLifecycleWrapper(entry.screen) {
                     entry.screen.Content(navigationController)
                 }
