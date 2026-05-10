@@ -32,7 +32,7 @@ fun RootHeader(
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppBarButton(
+        AppIconButton(
             onClick = onOpenMenu,
             content = {
                 UserAvatar(
@@ -52,7 +52,7 @@ fun RootHeader(
                 .padding(start = 12.dp),
         )
         if (trailing != null || onTrailingClick != null) {
-            AppBarButton(
+            AppIconButton(
                 onClick = onTrailingClick,
                 content = trailing,
             )

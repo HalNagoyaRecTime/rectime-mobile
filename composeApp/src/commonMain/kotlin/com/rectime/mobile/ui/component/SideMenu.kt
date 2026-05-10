@@ -121,9 +121,9 @@ fun SideMenu(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AppBtn(
+            AppIconButton(
                 onClick = { onPresentThemeSheet(ThemeSheet(themeStateHolder)) },
-                size = AppBtnSize.Md,
+                color = AppTheme.colors.surfacePrimary,
             ) {
                 Icon(
                     imageVector = SolidGroup.Palette,

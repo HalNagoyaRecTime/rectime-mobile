@@ -93,8 +93,8 @@ fun AppTheme(
         )
     }
     val buttonStylePolicy = rememberPlatformBtnStylePolicy()
-    val appBtnTokens = remember(buttonStylePolicy.defaultVisualStyle) {
-        AppBtnTokens(defaultVisualStyle = buttonStylePolicy.defaultVisualStyle)
+    val buttonTokens = remember(buttonStylePolicy.defaultVisualStyle) {
+        ButtonTokens(defaultVisualStyle = buttonStylePolicy.defaultVisualStyle)
     }
     val windowInfo = LocalWindowInfo.current
     val density = LocalDensity.current
@@ -107,7 +107,7 @@ fun AppTheme(
         LocalAppSpacing provides AppSpacing(),
         LocalAppRadius provides AppRadius(),
         LocalAppLayout provides AppLayout(screenHorizontalPadding = screenHorizontalPadding),
-        LocalAppBtnTokens provides appBtnTokens,
+        LocalButtonTokens provides buttonTokens,
     ) {
         MaterialTheme(
             colorScheme = material,
@@ -137,8 +137,8 @@ object AppTheme {
         @ReadOnlyComposable
         get() = LocalAppLayout.current
 
-    val buttons: AppBtnTokens
+    val buttons: ButtonTokens
         @Composable
         @ReadOnlyComposable
-        get() = LocalAppBtnTokens.current
+        get() = LocalButtonTokens.current
 }
