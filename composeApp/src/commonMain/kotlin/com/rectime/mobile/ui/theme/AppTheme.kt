@@ -12,6 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import com.rectime.mobile.ui.token.rememberPlatformBtnStylePolicy
 
 enum class ThemeMode {
@@ -94,12 +96,17 @@ fun AppTheme(
     val appBtnTokens = remember(buttonStylePolicy.defaultVisualStyle) {
         AppBtnTokens(defaultVisualStyle = buttonStylePolicy.defaultVisualStyle)
     }
+    val windowInfo = LocalWindowInfo.current
+    val density = LocalDensity.current
+    val screenHorizontalPadding = remember(windowInfo.containerSize.width) {
+        screenHorizontalPaddingFor(with(density) { windowInfo.containerSize.width.toDp() })
+    }
 
     CompositionLocalProvider(
         LocalAppColors provides colors,
         LocalAppSpacing provides AppSpacing(),
         LocalAppRadius provides AppRadius(),
-        LocalAppLayout provides AppLayout(),
+        LocalAppLayout provides AppLayout(screenHorizontalPadding = screenHorizontalPadding),
         LocalAppBtnTokens provides appBtnTokens,
     ) {
         MaterialTheme(

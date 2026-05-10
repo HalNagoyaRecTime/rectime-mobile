@@ -78,14 +78,15 @@ private fun CalendarScreenUI(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = 16.dp),
+            .statusBarsPadding(),
     ) {
         RootScreenHeader(
             title = "Calendar",
             profile = MockUser.me,
             onOpenMenu = onOpenMenu,
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier
+                .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
+                .padding(top = 12.dp),
             trailing = {
                 HeaderActionButton(
                     icon = SolidGroup.Bell,

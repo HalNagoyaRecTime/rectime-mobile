@@ -17,6 +17,7 @@ import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.HeaderActionButton
 import com.rectime.mobile.ui.component.RootScreenHeader
+import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
@@ -42,7 +43,7 @@ private fun HomeScreenUI(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = AppTheme.layout.screenHorizontalPadding),
     ) {
         RootScreenHeader(
             title = "Home",
