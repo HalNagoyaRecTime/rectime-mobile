@@ -33,12 +33,14 @@ fun RootScreenScaffold(
     content: LazyListScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
+    val spacing = AppTheme.layout.headerSpacing
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 12.dp + AppTheme.layout.headerAction + 12.dp,
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
+                bottom = AppTheme.layout.rootBottomNavigationInset,
                 start = if (horizontalPadding) hPad else 0.dp,
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
@@ -51,7 +53,7 @@ fun RootScreenScaffold(
             modifier = Modifier
                 .statusBarsPadding()
                 .padding(horizontal = hPad)
-                .padding(top = 12.dp),
+                .padding(top = spacing),
             onTrailingClick = onTrailingClick,
             trailing = trailing,
         )
@@ -69,12 +71,13 @@ fun PushScreenScaffold(
     content: LazyListScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
+    val spacing = AppTheme.layout.headerSpacing
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction,
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction + spacing,
                 start = if (horizontalPadding) hPad else 0.dp,
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
@@ -102,13 +105,14 @@ fun SheetScaffold(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
+    val spacing = AppTheme.layout.headerSpacing
 
     Box(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(top = AppTheme.layout.headerAction, bottom = 24.dp)
+                .padding(top = AppTheme.layout.headerAction + spacing, bottom = 24.dp)
                 .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
             content = content,
         )

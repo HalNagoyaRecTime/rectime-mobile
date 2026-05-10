@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.dp
 data class AppLayout(
     val screenHorizontalPadding: Dp = screenHorizontalPaddingFor(0.dp),
     val headerAction: Dp = 44.dp,
+    val headerSpacing: Dp = 12.dp,
     val bottomTabMinHeight: Dp = 54.dp,
     val rootBottomNavigationInset: Dp = 112.dp,
     val bottomInsetMin: Dp = 14.dp,
