@@ -5,6 +5,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -28,7 +29,6 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntOffset
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
-import com.rectime.mobile.ui.token.rememberDeviceCornerRadius
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -39,7 +39,6 @@ fun SheetLayer(
     containerHeightPx: Float,
 ) {
     val sheetEntry = state.sheet ?: return
-    val deviceCornerRadius = rememberDeviceCornerRadius()
     var offsetPx by remember(sheetEntry.key) { mutableFloatStateOf(containerHeightPx * 0.35f) }
     var handledDismissRequestId by remember { mutableLongStateOf(state.sheetDismissRequestId) }
     val coroutineScope = rememberCoroutineScope()
@@ -107,13 +106,8 @@ fun SheetLayer(
                     else Modifier.wrapContentHeight()
                 )
                 .offset { IntOffset(0, offsetPx.roundToInt()) }
-                .background(
-                    color = AppTheme.colors.sheetBackground,
-                    shape = RoundedCornerShape(
-                        topStart = deviceCornerRadius,
-                        topEnd = deviceCornerRadius,
-                    ),
-                )
+                .clip(RoundedCornerShape(topStart = AppTheme.radius.sheet, topEnd = AppTheme.radius.sheet))
+                .background(color = AppTheme.colors.sheetBackground)
                 .pointerInput(containerHeightPx) {
                     var sheetVelocityTracker = VelocityTracker()
                     detectVerticalDragGestures(
