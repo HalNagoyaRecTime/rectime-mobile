@@ -14,7 +14,7 @@ object MockUser {
         id = "me",
         name = "HAL 太郎",
         initials = "RT",
-        imageUrl = "https://i.pravatar.cc/150?u=rt",
+        imageUrl = "https://cataas.com/cat",
         department = "IA12B",
         studentId = "12345"
     )
