@@ -75,6 +75,7 @@ private fun CalendarScreenUI(
         title = "カレンダー",
         profile = MockUser.me,
         onOpenMenu = onOpenMenu,
+        horizontalPadding = false,
         onTrailingClick = onOpenNotifications,
         trailing = {
             Icon(
@@ -86,13 +87,14 @@ private fun CalendarScreenUI(
         },
     ) {
         item {
+            val hPad = AppTheme.layout.screenHorizontalPadding
             Text(
                 text = "4月28日・火曜日",
                 color = AppTheme.colors.textSecondary,
-                modifier = Modifier.padding(top = 12.dp, bottom = 10.dp),
+                modifier = Modifier.padding(start = hPad, top = 12.dp, bottom = 10.dp),
             )
 
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxWidth().padding(start = hPad)) {
                 Column(modifier = Modifier.width(56.dp)) {
                     for (hour in hourStart until hourEnd) {
                         Text(
@@ -107,7 +109,7 @@ private fun CalendarScreenUI(
                     modifier = Modifier
                         .weight(1f)
                         .height(hourHeight * (hourEnd - hourStart))
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(topStart = 14.dp))
                         .background(AppTheme.colors.surfaceMuted),
                 ) {
                     val borderSubtle = AppTheme.colors.borderSubtle
