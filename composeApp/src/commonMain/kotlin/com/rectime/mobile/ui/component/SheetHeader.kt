@@ -18,18 +18,14 @@ fun SheetHeader(
     ScreenHeader(
         title = title,
         modifier = modifier,
+        onTrailingClick = onClose,
         trailing = {
-            AppBtn(
-                onClick = onClose,
-                size = AppBtnSize.Sm,
-            ) {
-                Icon(
-                    imageVector = SolidGroup.Xmark,
-                    contentDescription = "閉じる",
-                    tint = AppTheme.colors.textPrimary,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
+            Icon(
+                imageVector = SolidGroup.Xmark,
+                contentDescription = "閉じる",
+                tint = AppTheme.colors.textPrimary,
+                modifier = Modifier.size(20.dp),
+            )
         },
     )
 }

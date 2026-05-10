@@ -17,7 +17,8 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.notifications.NotificationsScreen
-import com.rectime.mobile.ui.component.HeaderActionButton
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import com.rectime.mobile.ui.component.RootScreenHeader
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
@@ -67,11 +68,13 @@ private fun HomeScreenUI(
                 .statusBarsPadding()
                 .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
                 .padding(top = 12.dp),
+            onTrailingClick = onOpenNotifications,
             trailing = {
-                HeaderActionButton(
-                    icon = SolidGroup.Bell,
+                Icon(
+                    imageVector = SolidGroup.Bell,
                     contentDescription = "通知",
-                    onClick = onOpenNotifications,
+                    tint = AppTheme.colors.textPrimary,
+                    modifier = Modifier.size(20.dp),
                 )
             },
         )

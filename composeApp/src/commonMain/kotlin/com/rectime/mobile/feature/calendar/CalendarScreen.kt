@@ -33,7 +33,8 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
-import com.rectime.mobile.ui.component.HeaderActionButton
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenHeader
 import com.rectime.mobile.ui.theme.AppTheme
@@ -198,11 +199,13 @@ private fun CalendarScreenUI(
                 .statusBarsPadding()
                 .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
                 .padding(top = 12.dp),
+            onTrailingClick = onOpenNotifications,
             trailing = {
-                HeaderActionButton(
-                    icon = SolidGroup.Bell,
+                Icon(
+                    imageVector = SolidGroup.Bell,
                     contentDescription = "通知",
-                    onClick = onOpenNotifications,
+                    tint = AppTheme.colors.textPrimary,
+                    modifier = Modifier.size(20.dp),
                 )
             },
         )
