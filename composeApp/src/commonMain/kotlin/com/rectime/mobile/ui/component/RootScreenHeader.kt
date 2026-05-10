@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -16,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.core.model.UserProfile
 import com.rectime.mobile.ui.theme.AppTheme
@@ -51,6 +53,7 @@ fun RootScreenHeader(
 ) {
     ScreenHeader(
         title = title,
+        centerTitle = false,
         modifier = modifier,
         leading = {
             PressSurface(
@@ -81,7 +84,7 @@ fun ScreenHeader(
         modifier = modifier
             .fillMaxWidth()
             .height(AppTheme.layout.headerAction),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(modifier = Modifier.size(AppTheme.layout.headerAction), contentAlignment = Alignment.Center) {
@@ -91,7 +94,10 @@ fun ScreenHeader(
             text = title,
             color = AppTheme.colors.textPrimary,
             fontWeight = FontWeight.SemiBold,
-            modifier = if (centerTitle) Modifier else Modifier.weight(1f),
+            textAlign = if (centerTitle) TextAlign.Center else TextAlign.Start,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 20.dp)
         )
         Box(modifier = Modifier.size(AppTheme.layout.headerAction), contentAlignment = Alignment.Center) {
             trailing?.invoke()
