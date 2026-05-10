@@ -113,8 +113,8 @@ fun PushLayer(
                     .background(
                         color = AppTheme.colors.surfacePrimary,
                         shape = RoundedCornerShape(
-                            topStart = if (isMenuEnter || entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
-                            bottomStart = if (isMenuEnter || entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
+                            topStart = if (entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
+                            bottomStart = if (entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
                         ),
                     ),
             ) {
