@@ -151,6 +151,5 @@ private fun MenuItem(
         icon = icon,
         title = title,
         onClick = onClick,
-        size = AppBtnSize.Md,
     )
 }

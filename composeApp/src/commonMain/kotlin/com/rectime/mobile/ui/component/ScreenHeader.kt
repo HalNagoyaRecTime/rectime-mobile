@@ -25,15 +25,16 @@ fun HeaderActionButton(
     icon: ImageVector,
     contentDescription: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    PressSurface(
+    AppBtn(
         onClick = onClick,
-        color = AppTheme.colors.surfaceMuted,
-        contentPadding = PaddingValues(10.dp),
+        size = AppBtnSize.Sm,
+        modifier = modifier,
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
+            contentDescription = contentDescription,
             tint = AppTheme.colors.textPrimary,
             modifier = Modifier.size(18.dp),
         )
