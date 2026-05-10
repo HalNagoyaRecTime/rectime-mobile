@@ -77,7 +77,7 @@ fun PushScreenScaffold(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction + spacing,
+                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
                 start = if (horizontalPadding) hPad else 0.dp,
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
@@ -88,7 +88,8 @@ fun PushScreenScaffold(
             onBack = onBack,
             modifier = Modifier
                 .statusBarsPadding()
-                .padding(horizontal = hPad),
+                .padding(horizontal = hPad)
+                .padding(top = spacing),
             onTrailingClick = onTrailingClick,
             trailing = trailing,
         )
@@ -112,7 +113,7 @@ fun SheetScaffold(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(top = AppTheme.layout.headerAction + spacing, bottom = 24.dp)
+                .padding(top = spacing + AppTheme.layout.headerAction + spacing, bottom = 24.dp)
                 .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
             content = content,
         )
@@ -121,7 +122,8 @@ fun SheetScaffold(
             onClose = onClose,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = hPad),
+                .padding(horizontal = hPad)
+                .padding(top = spacing),
         )
     }
 }
