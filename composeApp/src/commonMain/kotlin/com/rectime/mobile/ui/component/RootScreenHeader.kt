@@ -73,6 +73,7 @@ fun RootScreenHeader(
 fun ScreenHeader(
     title: String,
     modifier: Modifier = Modifier,
+    centerTitle: Boolean = true,
     leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
@@ -90,6 +91,7 @@ fun ScreenHeader(
             text = title,
             color = AppTheme.colors.textPrimary,
             fontWeight = FontWeight.SemiBold,
+            modifier = if (centerTitle) Modifier else Modifier.weight(1f),
         )
         Box(modifier = Modifier.size(AppTheme.layout.headerAction), contentAlignment = Alignment.Center) {
             trailing?.invoke()

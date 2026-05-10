@@ -13,6 +13,7 @@ fun PushScreenHeader(
     ScreenHeader(
         title = title,
         modifier = modifier,
+        centerTitle = false,
         leading = { BackBtn(onClick = onBack) },
         trailing = trailing,
     )
