@@ -61,10 +61,13 @@ fun AppIconButton(
                     clip = true
                     shape = CircleShape
                 }
-                .background(color)
+                .background(
+                    if (visualStyle == ButtonVisualStyle.LiquidGlass) Color.Transparent else color
+                )
         ) {
-            // TODO: LiquidGlass — UIKitInteropView で UIGlassEffect を埋め込む（iOS 26+）
-            // if (visualStyle == ButtonVisualStyle.LiquidGlass) { ... }
+            if (visualStyle == ButtonVisualStyle.LiquidGlass) {
+                GlassBackground(modifier = Modifier.matchParentSize())
+            }
         }
         content?.invoke()
     }

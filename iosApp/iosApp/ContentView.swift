@@ -11,6 +11,12 @@ struct ComposeView: UIViewControllerRepresentable {
 }
 
 struct ContentView: View {
+    init() {
+        // GlassButtonFactory は GlassViewControllerFactory protocol に準拠
+        // Kotlin object の Obj-C シングルトンは .shared でアクセス
+        GlassViewControllerRegistry.shared.factory = GlassButtonFactory()
+    }
+
     var body: some View {
         ComposeView()
             .ignoresSafeArea()
