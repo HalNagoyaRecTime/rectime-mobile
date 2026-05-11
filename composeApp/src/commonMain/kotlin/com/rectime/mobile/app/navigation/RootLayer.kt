@@ -47,6 +47,13 @@ fun RootLayer(
             menuAnimatable.snapTo(state.menuProgress)
         }
     }
+    // push アニメーション完了時に menuAnimatable をスナップ
+    // （スプリングの遅延で残った非ゼロ値が RootLayer をずらすフリッカーを防ぐ）
+    LaunchedEffect(state.pushTransition.mode) {
+        if (state.pushTransition.mode == PushTransitionMode.Idle) {
+            menuAnimatable.snapTo(state.menuProgress)
+        }
+    }
     LaunchedEffect(
         state.activeGesture,
         if (state.activeGesture == ActiveGesture.Menu) null else state.menuProgress,
@@ -77,8 +84,7 @@ fun RootLayer(
     }
     val safeProgress = renderedMenuProgress.coerceIn(0f, 1f)
     val offsetX = (safeProgress * revealWidthPx).roundToInt()
-    val cornerDp = if (safeProgress > 0f) deviceCornerRadius else 0.dp
-    val layerShape = RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp)
+    val layerShape = RoundedCornerShape(topStart = deviceCornerRadius, bottomStart = deviceCornerRadius)
     // ----------------------------
 
     // 【3. 土台となる「動く箱」の描画】
