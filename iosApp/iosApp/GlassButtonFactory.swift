@@ -87,9 +87,9 @@ struct GlassButtonView: View {
                         .font(.system(size: 16, weight: .medium))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .buttonStyle(.glass(.clear))
                 .tint(.primary)
                 .frame(width: viewModel.buttonSide, height: viewModel.buttonSide)
-                .glassEffect(.regular.interactive(), in: Circle())
                 .contentShape(Circle())
             }
         }
