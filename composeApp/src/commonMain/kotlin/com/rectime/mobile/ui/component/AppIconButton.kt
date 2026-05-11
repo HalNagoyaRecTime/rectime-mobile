@@ -14,7 +14,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import com.rectime.mobile.ui.theme.AppTheme
@@ -64,20 +63,8 @@ fun AppIconButton(
                 }
                 .background(color)
         ) {
-            if (visualStyle == ButtonVisualStyle.LiquidGlass) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.18f),
-                                    Color.White.copy(alpha = 0.04f)
-                                )
-                            )
-                        )
-                )
-            }
+            // TODO: LiquidGlass — UIKitInteropView で UIGlassEffect を埋め込む（iOS 26+）
+            // if (visualStyle == ButtonVisualStyle.LiquidGlass) { ... }
         }
         content?.invoke()
     }
