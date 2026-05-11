@@ -25,8 +25,10 @@ import ComposeApp
 class GlassButtonViewController: UIViewController {
     let viewModel = GlassButtonViewModel()
     private let sfSymbol: String
-    // bleed must match glassBleed in AppIconButton.kt
-    private let bleed: CGFloat = 40
+    // UIKit view (= Compose ノードサイズ) の内側に余白を確保し glass を円形に見せる
+    // clipsToBounds = false でアニメーションは UIKit view 外にはみ出せる
+    private let bleedRatio: CGFloat = 0.1
+    private let minimumButtonSide: CGFloat = 24
 
     init(sfSymbol: String) {
         self.sfSymbol = sfSymbol
@@ -39,12 +41,17 @@ class GlassButtonViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.isOpaque = false
         view.backgroundColor = .clear
+        // アニメーションが UIKit view 外にはみ出せるようにする（z-order スライスはフレームで決まるので影響なし）
+        view.clipsToBounds = false
 
         let hosting = UIHostingController(
             rootView: GlassButtonView(sfSymbol: sfSymbol, viewModel: viewModel)
         )
+        hosting.view.isOpaque = false
         hosting.view.backgroundColor = .clear
+        hosting.view.clipsToBounds = false
         hosting.view.translatesAutoresizingMaskIntoConstraints = false
 
         addChild(hosting)
@@ -61,9 +68,9 @@ class GlassButtonViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         let viewSize = min(view.bounds.width, view.bounds.height)
+        let bleed = min(viewSize * bleedRatio, (viewSize - minimumButtonSide) / 2)
         let side = viewSize - bleed * 2
-        // Fallback: if bleed exceeds the view (Box constraint not bypassed), fill the view
-        viewModel.buttonSide = side > 0 ? side : viewSize
+        viewModel.buttonSide = max(minimumButtonSide, side)
     }
 }
 
@@ -93,7 +100,8 @@ struct GlassButtonView: View {
                 .contentShape(Circle())
             }
         }
+        // UIHostingController のデフォルト背景を透明にする
+        .background(.clear)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .ignoresSafeArea()
     }
 }

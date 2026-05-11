@@ -24,6 +24,7 @@ fun RootHeader(
     modifier: Modifier = Modifier,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    trailingSfSymbol: String? = null,
 ) {
     Row(
         modifier = modifier
@@ -55,6 +56,7 @@ fun RootHeader(
             AppIconButton(
                 onClick = onTrailingClick,
                 content = trailing,
+                sfSymbol = trailingSfSymbol,
             )
         }
     }

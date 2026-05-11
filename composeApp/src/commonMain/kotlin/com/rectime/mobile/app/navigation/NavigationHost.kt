@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -18,6 +19,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import com.rectime.mobile.ui.component.SideMenu
+import com.rectime.mobile.ui.component.LocalNativeGlassEnabled
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.rectime.mobile.ui.token.GestureTokens
@@ -138,37 +140,48 @@ fun NavigationHost(
         }
 
         // Background Side Menu
-        SideMenu(
-            revealWidthDp = revealWidthDp,
-            onPushFromMenu = { screen ->
-                navigationController.push(screen, PushTransitionSource.SideMenu)
-            },
-            onPresentThemeSheet = { sheet ->
-                navigationController.presentSheet(sheet)
-            },
-            themeStateHolder = themeStateHolder,
-        )
+        val hasForegroundLayer = state.pushStack.isNotEmpty() || state.sheet != null
+        CompositionLocalProvider(LocalNativeGlassEnabled provides !hasForegroundLayer) {
+            SideMenu(
+                revealWidthDp = revealWidthDp,
+                onPushFromMenu = { screen ->
+                    navigationController.push(screen, PushTransitionSource.SideMenu)
+                },
+                onPresentThemeSheet = { sheet ->
+                    navigationController.presentSheet(sheet)
+                },
+                themeStateHolder = themeStateHolder,
+            )
+        }
 
         // Layer 1: Root (Home / Calendar)
-        RootLayer(
-            state = state,
-            navigationController = navigationController,
-            revealWidthPx = revealWidthPx,
-        )
+        // [z-order テスト] true 固定: Push が glass を z-order で覆えるか検証
+        CompositionLocalProvider(LocalNativeGlassEnabled provides true) {
+            RootLayer(
+                state = state,
+                navigationController = navigationController,
+                revealWidthPx = revealWidthPx,
+            )
+        }
 
         // Layer 2: Push Layer (above Root+BottomNav, all sources)
-        PushLayer(
-            state = state,
-            navigationController = navigationController,
-            containerWidthPx = containerWidthPx,
-            revealWidthPx = revealWidthPx,
-        )
+        // Sheet が上にいる間は Push の glass を無効化し UIKit z-order の衝突を防ぐ
+        CompositionLocalProvider(LocalNativeGlassEnabled provides (state.sheet == null)) {
+            PushLayer(
+                state = state,
+                navigationController = navigationController,
+                containerWidthPx = containerWidthPx,
+                revealWidthPx = revealWidthPx,
+            )
+        }
 
         // Layer 3: Sheet (Modals)
-        SheetLayer(
-            state = state,
-            navigationController = navigationController,
-            containerHeightPx = containerHeightPx,
-        )
+        CompositionLocalProvider(LocalNativeGlassEnabled provides true) {
+            SheetLayer(
+                state = state,
+                navigationController = navigationController,
+                containerHeightPx = containerHeightPx,
+            )
+        }
     }
 }

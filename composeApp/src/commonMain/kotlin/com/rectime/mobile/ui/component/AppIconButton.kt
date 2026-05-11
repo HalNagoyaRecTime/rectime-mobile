@@ -8,7 +8,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
@@ -32,22 +31,17 @@ fun AppIconButton(
     sfSymbol: String? = null,
     content: @Composable (() -> Unit)? = null
 ) {
-    val isGlass = visualStyle == ButtonVisualStyle.LiquidGlass && isLiquidGlassAvailable
+    val isNativeGlassEnabled = LocalNativeGlassEnabled.current
+    val isGlass = visualStyle == ButtonVisualStyle.LiquidGlass && isLiquidGlassAvailable && isNativeGlassEnabled
 
     if (isGlass && sfSymbol != null) {
         // iOS 26: 完全ネイティブ UIKit ボタン (glass + icon + touch 全て UIKit)
-        // overlay を 8dp 大きくしてアニメーションのはみ出し分（bleed）を確保する
-        val glassBleed = 40.dp
-        Box(
+        // UIKit view を Compose ノードと同サイズにし CMP の z-order スライスが正確に機能するようにする
+        GlassNativeButton(
+            sfSymbol = sfSymbol,
+            onClick = onClick,
             modifier = modifier.size(AppTheme.layout.headerAction),
-            contentAlignment = Alignment.Center,
-        ) {
-            GlassNativeButton(
-                sfSymbol = sfSymbol,
-                onClick = onClick,
-                modifier = Modifier.requiredSize(AppTheme.layout.headerAction + glassBleed * 2),
-            )
-        }
+        )
     } else {
         // 非 iOS 26: Compose 実装
         val interactionSource = remember { MutableInteractionSource() }

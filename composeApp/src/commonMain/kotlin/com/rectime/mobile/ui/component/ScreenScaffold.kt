@@ -30,6 +30,7 @@ fun RootScreenScaffold(
     horizontalPadding: Boolean = true,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    trailingSfSymbol: String? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
@@ -56,6 +57,7 @@ fun RootScreenScaffold(
                 .padding(top = spacing),
             onTrailingClick = onTrailingClick,
             trailing = trailing,
+            trailingSfSymbol = trailingSfSymbol,
         )
     }
 }

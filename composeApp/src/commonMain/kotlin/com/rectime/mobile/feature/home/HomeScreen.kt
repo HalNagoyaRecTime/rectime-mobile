@@ -24,6 +24,7 @@ object HomeScreen : Screen {
             profile = MockUser.me,
             onOpenMenu = { navigationController.openMenu() },
             onTrailingClick = { navigationController.push(NotificationsScreen) },
+            trailingSfSymbol = "bell",
             trailing = {
                 Icon(
                     imageVector = SolidGroup.Bell,

@@ -77,6 +77,7 @@ private fun CalendarScreenUI(
         onOpenMenu = onOpenMenu,
         horizontalPadding = false,
         onTrailingClick = onOpenNotifications,
+        trailingSfSymbol = "bell",
         trailing = {
             Icon(
                 imageVector = SolidGroup.Bell,

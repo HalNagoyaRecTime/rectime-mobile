@@ -129,6 +129,7 @@ fun SideMenu(
                 AppIconButton(
                     onClick = { onPresentThemeSheet(ThemeSheet(themeStateHolder)) },
                     color = AppTheme.colors.surfacePrimary,
+                    sfSymbol = "paintpalette",
                 ) {
                     Icon(
                         imageVector = SolidGroup.Palette,
