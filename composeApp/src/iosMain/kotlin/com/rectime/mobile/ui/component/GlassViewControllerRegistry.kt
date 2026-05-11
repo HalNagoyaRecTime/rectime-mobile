@@ -6,8 +6,10 @@ import platform.UIKit.UIViewController
 // Swift の GlassButtonFactory がこの protocol に準拠する
 interface GlassViewControllerFactory {
     fun makeViewController(): UIViewController
+    fun updateViewController(vc: UIViewController, isPressed: Boolean)
 }
 
 object GlassViewControllerRegistry {
     var factory: GlassViewControllerFactory? = null
+    var isLiquidGlassAvailable: Boolean = false
 }

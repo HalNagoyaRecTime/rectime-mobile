@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
+actual val isLiquidGlassAvailable: Boolean = false
+
 @Composable
-actual fun GlassBackground(modifier: Modifier) {
+actual fun GlassBackground(modifier: Modifier, isPressed: Boolean) {
     Box(modifier = modifier)
 }

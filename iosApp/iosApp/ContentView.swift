@@ -12,9 +12,10 @@ struct ComposeView: UIViewControllerRepresentable {
 
 struct ContentView: View {
     init() {
-        // GlassButtonFactory は GlassViewControllerFactory protocol に準拠
-        // Kotlin object の Obj-C シングルトンは .shared でアクセス
         GlassViewControllerRegistry.shared.factory = GlassButtonFactory()
+        if #available(iOS 26, *) {
+            GlassViewControllerRegistry.shared.isLiquidGlassAvailable = true
+        }
     }
 
     var body: some View {
