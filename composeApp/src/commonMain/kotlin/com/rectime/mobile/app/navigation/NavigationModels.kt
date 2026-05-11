@@ -40,6 +40,7 @@ data class NavigationState(
     val pushStack: List<PushEntry> = emptyList(),
     val sheet: SheetEntry? = null,
     val menuProgress: Float = 0f,
+    val menuSettleVelocity: Float = 0f,
     val activeGesture: ActiveGesture = ActiveGesture.None,
     val pushTransition: PushTransitionState = PushTransitionState(),
     val pushDismissRequestId: Long = 0,

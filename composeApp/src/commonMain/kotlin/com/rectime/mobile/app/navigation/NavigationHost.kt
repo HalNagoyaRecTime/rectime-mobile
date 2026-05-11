@@ -83,9 +83,10 @@ fun NavigationHost(
                         when (gesture) {
                             ActiveGesture.Menu -> {
                                 val progress = navigationController.state.menuProgress
+                                val velProgress = if (revealWidthPx > 0f) velocity / revealWidthPx else 0f
                                 when {
-                                    velocity > GestureTokens.menuFlingVelocityX -> navigationController.openMenu()
-                                    velocity < -GestureTokens.menuFlingVelocityX -> navigationController.closeMenu()
+                                    velocity > GestureTokens.menuFlingVelocityX -> navigationController.openMenu(velProgress)
+                                    velocity < -GestureTokens.menuFlingVelocityX -> navigationController.closeMenu(velProgress)
                                     progress > GestureTokens.menuSettleProgress -> navigationController.openMenu()
                                     else -> navigationController.closeMenu()
                                 }
@@ -146,7 +147,6 @@ fun NavigationHost(
                 navigationController.presentSheet(sheet)
             },
             themeStateHolder = themeStateHolder,
-            modifier = Modifier.background(AppTheme.colors.navigationBackground),
         )
 
         // Layer 1: Root (Home / Calendar)

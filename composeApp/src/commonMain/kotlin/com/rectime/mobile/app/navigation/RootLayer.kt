@@ -67,6 +67,7 @@ fun RootLayer(
                         dampingRatio = 0.86f,
                         stiffness = GestureTokens.menuOpenCloseStiffness,
                     ),
+                    initialVelocity = state.menuSettleVelocity,
                 )
             } finally {
                 navigationController.setTransitioning(false)

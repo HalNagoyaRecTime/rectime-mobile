@@ -14,11 +14,13 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
+import com.rectime.mobile.ui.token.rememberDeviceCornerRadius
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -35,6 +37,7 @@ fun PushLayer(
 
     val topEntry = state.pushStack.lastOrNull()
     val topKey = topEntry?.key
+    val deviceCornerRadius = rememberDeviceCornerRadius()
 
     var handledDismissRequestId by remember { mutableLongStateOf(state.pushDismissRequestId) }
 
@@ -64,7 +67,7 @@ fun PushLayer(
     LaunchedEffect(state.pushTransition.mode, state.pushTransition.routeKey) {
         if (state.pushTransition.mode != PushTransitionMode.Enter) return@LaunchedEffect
         val transitionKey = state.pushTransition.routeKey ?: return@LaunchedEffect
-        
+
         // Check if the entering screen belongs to this layer
         val entry = state.pushStack.find { it.key == transitionKey } ?: return@LaunchedEffect
         if (!filter(entry)) return@LaunchedEffect
@@ -93,9 +96,9 @@ fun PushLayer(
 
             val isMenuEnter = state.pushTransition.mode == PushTransitionMode.Enter &&
                 state.pushTransition.routeKey == entry.key
-            
+
             val initialOffsetPx = if (entry.source == PushTransitionSource.SideMenu) revealWidthPx else containerWidthPx
-            
+
             val enterOffsetPx = if (isMenuEnter) {
                 (1f - state.pushTransition.progress.coerceIn(0f, 1f)) * initialOffsetPx
             } else {
@@ -104,19 +107,18 @@ fun PushLayer(
             val gestureOffsetPx = if (isTop) state.backDragOffsetPx else 0f
             val totalOffsetPx = max(0f, enterOffsetPx + gestureOffsetPx - depthOffsetPx)
 
-            val finalOffsetX = totalOffsetPx
+            val cornerDp = if (entry.source == PushTransitionSource.SideMenu) deviceCornerRadius else 0.dp
+            val cornerShape = RoundedCornerShape(topStart = cornerDp, bottomStart = cornerDp)
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(finalOffsetX.roundToInt(), 0) }
-                    .background(
-                        color = AppTheme.colors.surfacePrimary,
-                        shape = RoundedCornerShape(
-                            topStart = if (entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
-                            bottomStart = if (entry.source == PushTransitionSource.SideMenu) AppTheme.radius.sheet else 0.dp,
-                        ),
-                    ),
+                    .offset { IntOffset(totalOffsetPx.roundToInt(), 0) }
+                    .graphicsLayer {
+                        shape = cornerShape
+                        clip = cornerDp > 0.dp
+                    }
+                    .background(color = AppTheme.colors.surfacePrimary),
             ) {
                 ScreenLifecycleWrapper(entry.screen) {
                     entry.screen.Content(navigationController)

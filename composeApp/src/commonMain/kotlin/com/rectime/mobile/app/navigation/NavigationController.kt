@@ -96,12 +96,12 @@ class NavigationController(
         state = state.copy(menuProgress = progress.coerceIn(0f, 1f))
     }
 
-    fun openMenu() {
-        state = state.copy(menuProgress = 1f, activeGesture = ActiveGesture.None)
+    fun openMenu(velocityProgress: Float = 0f) {
+        state = state.copy(menuProgress = 1f, menuSettleVelocity = velocityProgress, activeGesture = ActiveGesture.None)
     }
 
-    fun closeMenu() {
-        state = state.copy(menuProgress = 0f, activeGesture = ActiveGesture.None)
+    fun closeMenu(velocityProgress: Float = 0f) {
+        state = state.copy(menuProgress = 0f, menuSettleVelocity = velocityProgress, activeGesture = ActiveGesture.None)
     }
 
     fun setPushEnterProgress(progress: Float) {
@@ -117,7 +117,8 @@ class NavigationController(
         if (state.pushTransition.routeKey == key) {
             state = state.copy(
                 pushTransition = PushTransitionState(mode = PushTransitionMode.Idle),
-                menuProgress = 0f
+                menuProgress = 0f,
+                menuSettleVelocity = 0f,
             )
         }
     }
