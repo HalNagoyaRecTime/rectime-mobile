@@ -24,7 +24,7 @@ actual fun GlassNativeButton(
             factory = { factory.makeButtonViewController(sfSymbol) },
             modifier = modifier,
             update = { vc -> factory.updateButtonOnClick(vc, onClick) },
-            properties = UIKitInteropProperties(),
+            properties = UIKitInteropProperties(placedAsOverlay = true),
         )
     } else {
         Box(modifier = modifier)

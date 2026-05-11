@@ -25,6 +25,8 @@ import ComposeApp
 class GlassButtonViewController: UIViewController {
     let viewModel = GlassButtonViewModel()
     private let sfSymbol: String
+    // bleed must match glassBleed in AppIconButton.kt
+    private let bleed: CGFloat = 40
 
     init(sfSymbol: String) {
         self.sfSymbol = sfSymbol
@@ -43,12 +45,25 @@ class GlassButtonViewController: UIViewController {
             rootView: GlassButtonView(sfSymbol: sfSymbol, viewModel: viewModel)
         )
         hosting.view.backgroundColor = .clear
+        hosting.view.translatesAutoresizingMaskIntoConstraints = false
 
         addChild(hosting)
-        hosting.view.frame = view.bounds
-        hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(hosting.view)
+        NSLayoutConstraint.activate([
+            hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            hosting.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hosting.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
         hosting.didMove(toParent: self)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        let viewSize = min(view.bounds.width, view.bounds.height)
+        let side = viewSize - bleed * 2
+        // Fallback: if bleed exceeds the view (Box constraint not bypassed), fill the view
+        viewModel.buttonSide = side > 0 ? side : viewSize
     }
 }
 
@@ -56,6 +71,7 @@ class GlassButtonViewController: UIViewController {
 @Observable
 class GlassButtonViewModel {
     var onClick: (() -> Void)? = nil
+    var buttonSide: CGFloat = 0
 }
 
 @available(iOS 26, *)
@@ -64,28 +80,19 @@ struct GlassButtonView: View {
     let viewModel: GlassButtonViewModel
 
     var body: some View {
-        Button { viewModel.onClick?() } label: {
-            Image(systemName: sfSymbol)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .buttonStyle(LiquidGlassButtonStyle())
-    }
-}
-
-@available(iOS 26, *)
-struct LiquidGlassButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background {
-                Circle()
-                    .glassEffect(.regular.interactive())
+        ZStack {
+            if viewModel.buttonSide > 0 {
+                Button { viewModel.onClick?() } label: {
+                    Image(systemName: sfSymbol)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .frame(width: viewModel.buttonSide, height: viewModel.buttonSide)
+                .glassEffect(.regular.interactive(), in: Circle())
+                .contentShape(Circle())
             }
-            .scaleEffect(configuration.isPressed ? 1.1 : 1.0)
-            .animation(
-                .spring(response: 0.25, dampingFraction: 0.85),
-                value: configuration.isPressed
-            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

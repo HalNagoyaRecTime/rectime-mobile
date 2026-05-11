@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ButtonVisualStyle
 
@@ -34,6 +36,8 @@ fun AppIconButton(
 
     if (isGlass && sfSymbol != null) {
         // iOS 26: 完全ネイティブ UIKit ボタン (glass + icon + touch 全て UIKit)
+        // overlay を 8dp 大きくしてアニメーションのはみ出し分（bleed）を確保する
+        val glassBleed = 40.dp
         Box(
             modifier = modifier.size(AppTheme.layout.headerAction),
             contentAlignment = Alignment.Center,
@@ -41,7 +45,7 @@ fun AppIconButton(
             GlassNativeButton(
                 sfSymbol = sfSymbol,
                 onClick = onClick,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.requiredSize(AppTheme.layout.headerAction + glassBleed * 2),
             )
         }
     } else {
