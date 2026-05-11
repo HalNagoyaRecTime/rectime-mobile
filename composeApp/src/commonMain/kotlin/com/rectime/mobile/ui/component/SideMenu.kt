@@ -1,12 +1,13 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -60,89 +63,92 @@ fun SideMenu(
         ),
     )
 
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(revealWidthDp)
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 20.dp),
-    ) {
-        // Profile Section
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val user = MockUser.me
-            UserAvatar(
-                profile = user,
-                modifier = Modifier.size(48.dp)
-            )
-
-            Column {
-                Text(text = user.name, color = AppTheme.colors.textPrimary)
-                Row {
-                    Text(text = user.department ?: "", color = AppTheme.colors.textSecondary)
-                    Text(text = " / ", color = AppTheme.colors.textSecondary)
-                    Text(text = "99", color = AppTheme.colors.textSecondary)
-                    Text(text = " / ", color = AppTheme.colors.textSecondary)
-                    Text(text = user.studentId ?: "", color = AppTheme.colors.textSecondary)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Navigation Items
+    Box(modifier = modifier.fillMaxSize().background(AppTheme.colors.navigationBackground)) {
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .fillMaxHeight()
+                .width(revealWidthDp)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .padding(top = AppTheme.layout.headerSpacing, bottom = 20.dp),
         ) {
-            mainItems.forEach { item ->
-                MenuItem(
-                    icon = item.icon,
-                    title = item.title,
-                    onClick = {
-                        when (val action = item.action) {
-                            is SideMenuAction.Push -> onPushFromMenu(action.screen)
-                            is SideMenuAction.Custom -> action.onClick()
-                        }
-                    },
-                )
-            }
-        }
-
-        // Footer Section
-        Row (
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppIconButton(
-                onClick = { onPresentThemeSheet(ThemeSheet(themeStateHolder)) },
-                color = AppTheme.colors.surfacePrimary,
+            // Profile Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = SolidGroup.Palette,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = AppTheme.colors.textSecondary,
+                val user = MockUser.me
+                UserAvatar(
+                    profile = user,
+                    modifier = Modifier.size(48.dp)
                 )
+
+                Column {
+                    Text(text = user.name, color = AppTheme.colors.textPrimary)
+                    Row {
+                        Text(text = user.department ?: "", color = AppTheme.colors.textSecondary)
+                        Text(text = " / ", color = AppTheme.colors.textSecondary)
+                        Text(text = "99", color = AppTheme.colors.textSecondary)
+                        Text(text = " / ", color = AppTheme.colors.textSecondary)
+                        Text(text = user.studentId ?: "", color = AppTheme.colors.textSecondary)
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "rectime",
-                color = AppTheme.colors.textMuted,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-            )
+            // Navigation Items
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                mainItems.forEach { item ->
+                    MenuItem(
+                        icon = item.icon,
+                        title = item.title,
+                        onClick = {
+                            when (val action = item.action) {
+                                is SideMenuAction.Push -> onPushFromMenu(action.screen)
+                                is SideMenuAction.Custom -> action.onClick()
+                            }
+                        },
+                    )
+                }
+            }
+
+            // Footer Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppIconButton(
+                    onClick = { onPresentThemeSheet(ThemeSheet(themeStateHolder)) },
+                    color = AppTheme.colors.surfacePrimary,
+                ) {
+                    Icon(
+                        imageVector = SolidGroup.Palette,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = AppTheme.colors.textSecondary,
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Text(
+                    text = "rectime",
+                    color = AppTheme.colors.textMuted,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                )
+            }
         }
-    }
+    } // Box
 }
 
 @Composable
