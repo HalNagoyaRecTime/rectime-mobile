@@ -85,14 +85,15 @@ struct GlassButtonView: View {
                 Button { viewModel.onClick?() } label: {
                     Image(systemName: sfSymbol)
                         .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .tint(.primary)
                 .frame(width: viewModel.buttonSide, height: viewModel.buttonSide)
                 .glassEffect(.regular.interactive(), in: Circle())
                 .contentShape(Circle())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea()
     }
 }
