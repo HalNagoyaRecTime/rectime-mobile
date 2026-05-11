@@ -27,68 +27,71 @@ fun AppIconButton(
     modifier: Modifier = Modifier,
     color: Color = AppTheme.colors.navigationBackground.copy(alpha = 0.5f),
     visualStyle: ButtonVisualStyle = AppTheme.buttons.defaultVisualStyle,
+    sfSymbol: String? = null,
     content: @Composable (() -> Unit)? = null
 ) {
     val isGlass = visualStyle == ButtonVisualStyle.LiquidGlass && isLiquidGlassAvailable
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
 
-    // iOS 26 glass: 拡大 (critically damped で undershoot なし)、それ以外: 縮小
-    val scale by animateFloatAsState(
-        targetValue = when {
-            isPressed && isGlass -> 1.1f
-            isPressed -> 0.88f
-            else -> 1.0f
-        },
-        animationSpec = if (isGlass)
-            spring(stiffness = 600f, dampingRatio = 1.0f)
-        else
-            spring(stiffness = 500f, dampingRatio = 0.8f)
-    )
-
-    Box(
-        modifier = modifier
-            .size(AppTheme.layout.headerAction)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .then(
-                if (onClick != null) {
-                    // detectTapGestures で isPressed を指がどこにあっても維持する
-                    Modifier.pointerInput(onClick, interactionSource) {
-                        detectTapGestures(
-                            onPress = { position ->
-                                val press = PressInteraction.Press(position)
-                                interactionSource.emit(press)
-                                if (tryAwaitRelease()) {
-                                    interactionSource.emit(PressInteraction.Release(press))
-                                    onClick()
-                                } else {
-                                    interactionSource.emit(PressInteraction.Cancel(press))
-                                }
-                            }
-                        )
-                    }
-                } else {
-                    Modifier
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
+    if (isGlass && sfSymbol != null) {
+        // iOS 26: 完全ネイティブ UIKit ボタン (glass + icon + touch 全て UIKit)
         Box(
-            modifier = Modifier
-                .matchParentSize()
-                .graphicsLayer {
-                    clip = true
-                    shape = CircleShape
-                }
-                .background(if (isGlass) Color.Transparent else color)
+            modifier = modifier.size(AppTheme.layout.headerAction),
+            contentAlignment = Alignment.Center,
         ) {
-            if (isGlass) {
-                GlassBackground(modifier = Modifier.matchParentSize(), isPressed = isPressed)
-            }
+            GlassNativeButton(
+                sfSymbol = sfSymbol,
+                onClick = onClick,
+                modifier = Modifier.matchParentSize(),
+            )
         }
-        content?.invoke()
+    } else {
+        // 非 iOS 26: Compose 実装
+        val interactionSource = remember { MutableInteractionSource() }
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val scale by animateFloatAsState(
+            targetValue = if (isPressed) 0.88f else 1.0f,
+            animationSpec = spring(stiffness = 500f, dampingRatio = 0.8f),
+        )
+
+        Box(
+            modifier = modifier
+                .size(AppTheme.layout.headerAction)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .then(
+                    if (onClick != null) {
+                        Modifier.pointerInput(onClick, interactionSource) {
+                            detectTapGestures(
+                                onPress = { position ->
+                                    val press = PressInteraction.Press(position)
+                                    interactionSource.emit(press)
+                                    if (tryAwaitRelease()) {
+                                        interactionSource.emit(PressInteraction.Release(press))
+                                        onClick()
+                                    } else {
+                                        interactionSource.emit(PressInteraction.Cancel(press))
+                                    }
+                                }
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        clip = true
+                        shape = CircleShape
+                    }
+                    .background(color)
+            )
+            content?.invoke()
+        }
     }
 }

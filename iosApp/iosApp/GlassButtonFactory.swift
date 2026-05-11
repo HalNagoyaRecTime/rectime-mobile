@@ -4,54 +4,88 @@ import ComposeApp
 
 @objc class GlassButtonFactory: NSObject, GlassViewControllerFactory {
 
-    func makeViewController() -> UIViewController {
+    func makeButtonViewController(sfSymbol: String) -> UIViewController {
         if #available(iOS 26, *) {
-            let viewModel = GlassViewModel()
-            return GlassHostingController(viewModel: viewModel)
+            return GlassButtonViewController(sfSymbol: sfSymbol)
         } else {
-            let vc = UIViewController()
-            vc.view.backgroundColor = .clear
-            return vc
+            return UIViewController()
         }
     }
 
-    func updateViewController(vc: UIViewController, isPressed: Bool) {
+    func updateButtonOnClick(vc: UIViewController, onClick: (() -> Void)?) {
         if #available(iOS 26, *) {
-            (vc as? GlassHostingController)?.viewModel.isPressed = isPressed
+            (vc as? GlassButtonViewController)?.viewModel.onClick = onClick
         }
     }
 }
 
-@available(iOS 26, *)
-@Observable
-class GlassViewModel {
-    var isPressed: Bool = false
-}
+// MARK: - iOS 26
 
 @available(iOS 26, *)
-class GlassHostingController: UIHostingController<GlassCircleView> {
-    let viewModel: GlassViewModel
+class GlassButtonViewController: UIViewController {
+    let viewModel = GlassButtonViewModel()
+    private let sfSymbol: String
 
-    init(viewModel: GlassViewModel) {
-        self.viewModel = viewModel
-        super.init(rootView: GlassCircleView(viewModel: viewModel))
-        view.backgroundColor = .clear
-        view.isUserInteractionEnabled = false
+    init(sfSymbol: String) {
+        self.sfSymbol = sfSymbol
+        super.init(nibName: nil, bundle: nil)
     }
 
     @MainActor required dynamic init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+
+        let hosting = UIHostingController(
+            rootView: GlassButtonView(sfSymbol: sfSymbol, viewModel: viewModel)
+        )
+        hosting.view.backgroundColor = .clear
+
+        addChild(hosting)
+        hosting.view.frame = view.bounds
+        hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(hosting.view)
+        hosting.didMove(toParent: self)
+    }
 }
 
 @available(iOS 26, *)
-struct GlassCircleView: View {
-    let viewModel: GlassViewModel
+@Observable
+class GlassButtonViewModel {
+    var onClick: (() -> Void)? = nil
+}
+
+@available(iOS 26, *)
+struct GlassButtonView: View {
+    let sfSymbol: String
+    let viewModel: GlassButtonViewModel
 
     var body: some View {
-        Circle()
-            .glassEffect(.regular.interactive())
-            .brightness(viewModel.isPressed ? 0.12 : 0)
-            .animation(.spring(response: 0.2, dampingFraction: 0.8), value: viewModel.isPressed)
+        Button { viewModel.onClick?() } label: {
+            Image(systemName: sfSymbol)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .buttonStyle(LiquidGlassButtonStyle())
+    }
+}
+
+@available(iOS 26, *)
+struct LiquidGlassButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background {
+                Circle()
+                    .glassEffect(.regular.interactive())
+            }
+            .scaleEffect(configuration.isPressed ? 1.1 : 1.0)
+            .animation(
+                .spring(response: 0.25, dampingFraction: 0.85),
+                value: configuration.isPressed
+            )
     }
 }

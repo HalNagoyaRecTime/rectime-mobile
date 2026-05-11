@@ -6,4 +6,8 @@ import androidx.compose.ui.Modifier
 expect val isLiquidGlassAvailable: Boolean
 
 @Composable
-expect fun GlassBackground(modifier: Modifier = Modifier, isPressed: Boolean = false)
+expect fun GlassNativeButton(
+    sfSymbol: String,
+    onClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+)

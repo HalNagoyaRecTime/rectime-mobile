@@ -7,6 +7,10 @@ import androidx.compose.ui.Modifier
 actual val isLiquidGlassAvailable: Boolean = false
 
 @Composable
-actual fun GlassBackground(modifier: Modifier, isPressed: Boolean) {
+actual fun GlassNativeButton(
+    sfSymbol: String,
+    onClick: (() -> Unit)?,
+    modifier: Modifier,
+) {
     Box(modifier = modifier)
 }

@@ -25,8 +25,10 @@ fun AppBar(
     modifier: Modifier = Modifier,
     onLeadingClick: (() -> Unit)? = null,
     leading: @Composable (() -> Unit)? = null,
+    leadingSfSymbol: String? = null,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    trailingSfSymbol: String? = null,
 ) {
     Box(
         modifier = modifier
@@ -49,6 +51,7 @@ fun AppBar(
             AppIconButton(
                 onClick = onLeadingClick,
                 content = leading,
+                sfSymbol = leadingSfSymbol,
                 modifier = Modifier.align(Alignment.CenterStart),
             )
         }
@@ -56,6 +59,7 @@ fun AppBar(
             AppIconButton(
                 onClick = onTrailingClick,
                 content = trailing,
+                sfSymbol = trailingSfSymbol,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
@@ -69,6 +73,7 @@ fun PushAppBar(
     modifier: Modifier = Modifier,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    trailingSfSymbol: String? = null,
 ) {
     AppBar(
         title = title,
@@ -82,8 +87,10 @@ fun PushAppBar(
                 modifier = Modifier.size(18.dp),
             )
         },
+        leadingSfSymbol = "chevron.left",
         onTrailingClick = onTrailingClick,
         trailing = trailing,
+        trailingSfSymbol = trailingSfSymbol,
     )
 }
 
@@ -105,5 +112,6 @@ fun SheetAppBar(
                 modifier = Modifier.size(18.dp),
             )
         },
+        trailingSfSymbol = "xmark",
     )
 }
