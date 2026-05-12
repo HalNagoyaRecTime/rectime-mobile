@@ -14,18 +14,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastCoerceAtMost
+import androidx.compose.ui.util.lerp
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ButtonVisualStyle
 import com.kashif_e.backdrop.drawBackdrop
 import com.kashif_e.backdrop.effects.blur
-import com.kashif_e.backdrop.effects.colorControls
+import com.kashif_e.backdrop.effects.lens
 import com.kashif_e.backdrop.effects.vibrancy
+import com.kashif_e.backdrop.highlight.Highlight
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.tanh
 
 @Composable
 fun AppIconButton(
@@ -81,21 +90,47 @@ fun AppIconButton(
         }
 
         if (isKmpGlass) {
+            val animationScope = rememberCoroutineScope()
+            val highlight = remember(animationScope) { InteractiveHighlight(animationScope) }
+
             Box(
                 modifier = modifier
                     .size(AppTheme.layout.headerAction)
-                    .graphicsLayer { scaleX = scale; scaleY = scale }
                     .drawBackdrop(
                         backdrop = backdrop,
                         shape = { CircleShape },
                         effects = {
-                            blur(8.dp.toPx())
-                            colorControls(brightness = 0.02f, contrast = 1.05f, saturation = 1.1f)
+                            vibrancy()
+                            blur(2.dp.toPx())
+                            lens(12.dp.toPx(), 24.dp.toPx())
+                        },
+                        highlight = { Highlight.Ambient },
+                        layerBlock = {
+                            val progress = highlight.pressProgress
+                            // タップで約20%拡大
+                            val baseScale = lerp(1f, 1.2f, progress)
+                            // 最大移動量をボタン径の30%に制限
+                            val maxOffset = size.minDimension * 0.3f
+                            val offset = highlight.offset
+                            // initialDerivative を小さくして序盤の抵抗を強める
+                            translationX = maxOffset * tanh(0.02f * offset.x / maxOffset)
+                            translationY = maxOffset * tanh(0.02f * offset.y / maxOffset)
+                            // 引っ張った方向にだけ膨らむ
+                            val maxDragScale = 4f.dp.toPx() / size.height
+                            val angle = atan2(offset.y, offset.x)
+                            scaleX = baseScale +
+                                maxDragScale * abs(cos(angle) * offset.x / size.maxDimension) *
+                                (size.width / size.height).fastCoerceAtMost(1f)
+                            scaleY = baseScale +
+                                maxDragScale * abs(sin(angle) * offset.y / size.maxDimension) *
+                                (size.height / size.width).fastCoerceAtMost(1f)
                         },
                         onDrawSurface = {
-                            drawCircle(color = Color.White.copy(alpha = 0.1f))
+                            drawCircle(color = Color.White.copy(alpha = 0.05f))
                         }
                     )
+                    .then(highlight.modifier)
+                    .then(highlight.gestureModifier)
                     .then(tapModifier),
                 contentAlignment = Alignment.Center,
             ) {
