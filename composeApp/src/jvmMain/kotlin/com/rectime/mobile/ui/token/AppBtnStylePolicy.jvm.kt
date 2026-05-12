@@ -7,6 +7,6 @@ import com.rectime.mobile.ui.theme.ButtonVisualStyle
 @Composable
 actual fun rememberPlatformBtnStylePolicy(): ButtonStylePolicy {
     return remember {
-        ButtonStylePolicy(defaultVisualStyle = ButtonVisualStyle.SimpleBlur)
+        ButtonStylePolicy(defaultVisualStyle = ButtonVisualStyle.KMPGlass)
     }
 }

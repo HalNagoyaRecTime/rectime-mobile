@@ -59,6 +59,7 @@ kotlin {
             implementation(libs.compose.icon.collections.fontawesome)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
+            implementation(libs.kmp.liquid.glass)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

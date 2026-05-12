@@ -18,6 +18,7 @@ kotlinx-coroutines = "1.10.2"
 material3 = "1.10.0-alpha05"
 coil = "3.4.0"
 ktor = "3.4.3"
+kmpLiquidGlass = "0.0.1-alpha02"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -44,6 +45,7 @@ coil-network-ktor = { module = "io.coil-kt.coil3:coil-network-ktor3", version.re
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
+kmp-liquid-glass = { module = "io.github.kashif-mehmood-km:backdrop", version.ref = "kmpLiquidGlass" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

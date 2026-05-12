@@ -16,10 +16,13 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.core.model.UserProfile
 import com.rectime.mobile.ui.theme.AppTheme
+import com.kashif_e.backdrop.backdrops.layerBackdrop
+import com.kashif_e.backdrop.backdrops.rememberLayerBackdrop
 
 @Composable
 fun RootScreenScaffold(
@@ -34,29 +37,33 @@ fun RootScreenScaffold(
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
+    val bgColor = AppTheme.colors.surfacePrimary
+    val backdrop = rememberLayerBackdrop { drawRect(bgColor); drawContent() }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
-                bottom = AppTheme.layout.rootBottomNavigationInset,
-                start = if (horizontalPadding) hPad else 0.dp,
-                end = if (horizontalPadding) hPad else 0.dp,
-            ),
-            content = content,
-        )
-        RootHeader(
-            title = title,
-            profile = profile,
-            onOpenMenu = onOpenMenu,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(horizontal = hPad)
-                .padding(top = spacing),
-            onTrailingClick = onTrailingClick,
-            trailing = trailing,
-        )
+    CompositionLocalProvider(LocalScreenBackdrop provides backdrop) {
+        Box(modifier = modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().layerBackdrop(backdrop),
+                contentPadding = PaddingValues(
+                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
+                    bottom = AppTheme.layout.rootBottomNavigationInset,
+                    start = if (horizontalPadding) hPad else 0.dp,
+                    end = if (horizontalPadding) hPad else 0.dp,
+                ),
+                content = content,
+            )
+            RootHeader(
+                title = title,
+                profile = profile,
+                onOpenMenu = onOpenMenu,
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(horizontal = hPad)
+                    .padding(top = spacing),
+                onTrailingClick = onTrailingClick,
+                trailing = trailing,
+            )
+        }
     }
 }
 
@@ -72,27 +79,31 @@ fun PushScreenScaffold(
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
+    val bgColor = AppTheme.colors.surfacePrimary
+    val backdrop = rememberLayerBackdrop { drawRect(bgColor); drawContent() }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
-                start = if (horizontalPadding) hPad else 0.dp,
-                end = if (horizontalPadding) hPad else 0.dp,
-            ),
-            content = content,
-        )
-        PushAppBar(
-            title = title,
-            onBack = onBack,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(horizontal = hPad)
-                .padding(top = spacing),
-            onTrailingClick = onTrailingClick,
-            trailing = trailing,
-        )
+    CompositionLocalProvider(LocalScreenBackdrop provides backdrop) {
+        Box(modifier = modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().layerBackdrop(backdrop),
+                contentPadding = PaddingValues(
+                    top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
+                    start = if (horizontalPadding) hPad else 0.dp,
+                    end = if (horizontalPadding) hPad else 0.dp,
+                ),
+                content = content,
+            )
+            PushAppBar(
+                title = title,
+                onBack = onBack,
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(horizontal = hPad)
+                    .padding(top = spacing),
+                onTrailingClick = onTrailingClick,
+                trailing = trailing,
+            )
+        }
     }
 }
 
@@ -107,23 +118,28 @@ fun SheetScaffold(
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
+    val bgColor = AppTheme.colors.surfacePrimary
+    val backdrop = rememberLayerBackdrop { drawRect(bgColor); drawContent() }
 
-    Box(modifier = modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(top = spacing + AppTheme.layout.headerAction + spacing, bottom = 24.dp)
-                .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
-            content = content,
-        )
-        SheetAppBar(
-            title = title,
-            onClose = onClose,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = hPad)
-                .padding(top = spacing),
-        )
+    CompositionLocalProvider(LocalScreenBackdrop provides backdrop) {
+        Box(modifier = modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .layerBackdrop(backdrop)
+                    .padding(top = spacing + AppTheme.layout.headerAction + spacing, bottom = 24.dp)
+                    .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
+                content = content,
+            )
+            SheetAppBar(
+                title = title,
+                onClose = onClose,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = hPad)
+                    .padding(top = spacing),
+            )
+        }
     }
 }

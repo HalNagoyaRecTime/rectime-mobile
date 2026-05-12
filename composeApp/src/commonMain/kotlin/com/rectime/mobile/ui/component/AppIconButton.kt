@@ -22,6 +22,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ButtonVisualStyle
+import com.kashif_e.backdrop.drawBackdrop
+import com.kashif_e.backdrop.effects.blur
+import com.kashif_e.backdrop.effects.colorControls
+import com.kashif_e.backdrop.effects.vibrancy
 
 @Composable
 fun AppIconButton(
@@ -35,8 +39,6 @@ fun AppIconButton(
     val isGlass = visualStyle == ButtonVisualStyle.LiquidGlass && isLiquidGlassAvailable
 
     if (isGlass && sfSymbol != null) {
-        // iOS 26: 完全ネイティブ UIKit ボタン (glass + icon + touch 全て UIKit)
-        // overlay を 8dp 大きくしてアニメーションのはみ出し分（bleed）を確保する
         val glassBleed = 40.dp
         Box(
             modifier = modifier.size(AppTheme.layout.headerAction),
@@ -49,7 +51,9 @@ fun AppIconButton(
             )
         }
     } else {
-        // 非 iOS 26: Compose 実装
+        val backdrop = LocalScreenBackdrop.current
+        val isKmpGlass = visualStyle == ButtonVisualStyle.KMPGlass && backdrop != null
+
         val interactionSource = remember { MutableInteractionSource() }
         val isPressed by interactionSource.collectIsPressedAsState()
         val scale by animateFloatAsState(
@@ -57,45 +61,65 @@ fun AppIconButton(
             animationSpec = spring(stiffness = 500f, dampingRatio = 0.8f),
         )
 
-        Box(
-            modifier = modifier
-                .size(AppTheme.layout.headerAction)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .then(
-                    if (onClick != null) {
-                        Modifier.pointerInput(onClick, interactionSource) {
-                            detectTapGestures(
-                                onPress = { position ->
-                                    val press = PressInteraction.Press(position)
-                                    interactionSource.emit(press)
-                                    if (tryAwaitRelease()) {
-                                        interactionSource.emit(PressInteraction.Release(press))
-                                        onClick()
-                                    } else {
-                                        interactionSource.emit(PressInteraction.Cancel(press))
-                                    }
-                                }
-                            )
+        val tapModifier = if (onClick != null) {
+            Modifier.pointerInput(onClick, interactionSource) {
+                detectTapGestures(
+                    onPress = { position ->
+                        val press = PressInteraction.Press(position)
+                        interactionSource.emit(press)
+                        if (tryAwaitRelease()) {
+                            interactionSource.emit(PressInteraction.Release(press))
+                            onClick()
+                        } else {
+                            interactionSource.emit(PressInteraction.Cancel(press))
                         }
-                    } else {
-                        Modifier
                     }
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
+                )
+            }
+        } else {
+            Modifier
+        }
+
+        if (isKmpGlass) {
             Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer {
-                        clip = true
-                        shape = CircleShape
-                    }
-                    .background(color)
-            )
-            content?.invoke()
+                modifier = modifier
+                    .size(AppTheme.layout.headerAction)
+                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { CircleShape },
+                        effects = {
+                            blur(8.dp.toPx())
+                            colorControls(brightness = 0.02f, contrast = 1.05f, saturation = 1.1f)
+                        },
+                        onDrawSurface = {
+                            drawCircle(color = Color.White.copy(alpha = 0.1f))
+                        }
+                    )
+                    .then(tapModifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                content?.invoke()
+            }
+        } else {
+            Box(
+                modifier = modifier
+                    .size(AppTheme.layout.headerAction)
+                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .then(tapModifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            clip = true
+                            shape = CircleShape
+                        }
+                        .background(color)
+                )
+                content?.invoke()
+            }
         }
     }
 }
