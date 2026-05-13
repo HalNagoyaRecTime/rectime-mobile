@@ -1,48 +1,102 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Desktop (JVM).
+# rectime-mobile
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-    folder is the appropriate location.
+Android・iOS・Desktop（JVM）を対象とした Kotlin Multiplatform プロジェクト。
 
-* [/iosApp](./iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+## 技術スタック
 
-### Build and Run Android Application
+| レイヤー | ライブラリ / バージョン |
+|---|---|
+| 言語 | Kotlin 2.3.20 |
+| UI | Compose Multiplatform 1.10.3 |
+| マテリアル | Material3 1.10.0-alpha05 |
+| ライフサイクル | AndroidX Lifecycle 2.10.0 |
+| ホットリロード | Compose Hot Reload 1.0.0 |
+| Android Gradle Plugin | 8.13.2 |
 
-To build and run the development version of the Android app, use the run configuration from the run widget
-in your IDE’s toolbar or build it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:assembleDebug
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:assembleDebug
-  ```
+## 必要環境
 
-### Build and Run Desktop (JVM) Application
+| ツール | 要件 |
+|---|---|
+| JDK | 21（Temurin 最新安定版、確認済み `jdk-21.0.10+7`） |
+| Android SDK | compileSdk 36 / minSdk 26 |
+| Xcode | iOS ビルド時のみ（macOS 必須） |
+| IDE | IntelliJ IDEA / Android Studio（KMP プラグイン推奨） |
 
-To build and run the development version of the desktop app, use the run configuration from the run widget
-in your IDE’s toolbar or run it directly from the terminal:
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:run
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:run
-  ```
+## セットアップ
 
-### Build and Run iOS Application
+```shell
+git clone https://github.com/yukiidayo/rectime-mobile.git
+cd rectime-mobile
+```
 
-To build and run the development version of the iOS app, use the run configuration from the run widget
-in your IDE’s toolbar or open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+依存関係は初回ビルド時に Gradle が自動取得します。
+
+詳細なセットアップ手順は [`setup/README.md`](setup/README.md) を参照。
+
+## ディレクトリ構成
+
+```
+rectime-mobile/
+├── composeApp/
+│   └── src/
+│       ├── commonMain/       # 全プラットフォーム共通コード
+│       ├── androidMain/      # Android 固有コード
+│       ├── iosMain/          # iOS 固有コード
+│       └── jvmMain/          # Desktop 固有コード
+└── iosApp/                   # iOS エントリポイント（SwiftUI）
+```
+
+## 起動方法
+
+### Android
+
+```shell
+# macOS / Linux
+./gradlew :composeApp:assembleDebug
+
+# Windows
+.\gradlew.bat :composeApp:assembleDebug
+```
+
+IDE のツールバーから Run Configuration `composeApp [mobile]` を使うことも可能。
+
+### Desktop（JVM）
+
+```shell
+# macOS / Linux
+./gradlew :composeApp:run
+
+# Windows
+.\gradlew.bat :composeApp:run
+```
+
+ホットリロードを使う場合（明示的リロード）:
+
+```shell
+# アプリ起動
+.\gradlew.bat :composeApp:hotRunJvm
+
+# ソース変更後にリロード
+.\gradlew.bat :composeApp:hotReloadJvmMain
+
+# 自動リロード
+.\gradlew.bat :composeApp:hotRunJvm --auto
+```
+
+### iOS
+
+`iosApp/` を Xcode で開いて実行、または IDE のツールバーから Run Configuration `composeApp [mobile]` を使う（macOS 必須）。
+
+## テスト
+
+```shell
+# ユニットテスト
+.\gradlew.bat :composeApp:testDebugUnitTest
+
+# Android インストルメンテッドテスト
+.\gradlew.bat :composeApp:connectedDebugAndroidTest
+```
 
 ---
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+[Kotlin Multiplatform について詳しく](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)
