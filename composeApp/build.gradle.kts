@@ -1,6 +1,6 @@
+import java.util.Properties
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import java.util.Properties
 
 val localProperties = Properties().apply {
     val f = rootProject.file("local.properties")
@@ -83,6 +83,9 @@ android {
     namespace = "com.rectime.mobile"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
         applicationId = "com.rectime.mobile"
         minSdk = libs.versions.android.minSdk.get().toInt()
@@ -93,9 +96,6 @@ android {
             ?: findProperty("API_BASE_URL") as String?
             ?: "http://10.0.2.2:8787"
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
-    }
-    buildFeatures {
-        buildConfig = true
     }
     packaging {
         resources {
