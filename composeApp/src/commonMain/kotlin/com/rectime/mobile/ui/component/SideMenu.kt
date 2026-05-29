@@ -27,7 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.core.model.MockUser
+import com.rectime.mobile.feature.auth.AuthSession
+import com.rectime.mobile.feature.auth.toUserProfile
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.theme.AppTheme
@@ -35,6 +36,7 @@ import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Palette
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.RightFromBracket
 
 private sealed class SideMenuAction {
     data class Push(val screen: Screen) : SideMenuAction()
@@ -44,7 +46,7 @@ private sealed class SideMenuAction {
 private data class SideMenuItemConfig(
     val title: String,
     val icon: ImageVector,
-    val action: SideMenuAction
+    val action: SideMenuAction,
 )
 
 @Composable
@@ -53,17 +55,28 @@ fun SideMenu(
     onPushFromMenu: (Screen) -> Unit,
     onPresentThemeSheet: (Screen) -> Unit,
     themeStateHolder: ThemeStateHolder,
+    session: AuthSession,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val mainItems = listOf(
         SideMenuItemConfig(
             title = "設定",
             icon = SolidGroup.Gear,
-            action = SideMenuAction.Push(SettingsScreen)
+            action = SideMenuAction.Push(SettingsScreen),
+        ),
+        SideMenuItemConfig(
+            title = "ログアウト",
+            icon = SolidGroup.RightFromBracket,
+            action = SideMenuAction.Custom(onLogout),
         ),
     )
 
-    Box(modifier = modifier.fillMaxSize().background(AppTheme.colors.navigationBackground)) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AppTheme.colors.navigationBackground)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxHeight()
@@ -73,33 +86,25 @@ fun SideMenu(
                 .padding(horizontal = 16.dp)
                 .padding(top = AppTheme.layout.headerSpacing, bottom = 20.dp),
         ) {
-            // Profile Section
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                val user = MockUser.me
+                val user = session.user.toUserProfile()
                 UserAvatar(
                     profile = user,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(48.dp),
                 )
 
                 Column {
                     Text(text = user.name, color = AppTheme.colors.textPrimary)
-                    Row {
-                        Text(text = user.department ?: "", color = AppTheme.colors.textSecondary)
-                        Text(text = " / ", color = AppTheme.colors.textSecondary)
-                        Text(text = "99", color = AppTheme.colors.textSecondary)
-                        Text(text = " / ", color = AppTheme.colors.textSecondary)
-                        Text(text = user.studentId ?: "", color = AppTheme.colors.textSecondary)
-                    }
+                    Text(text = session.user.email, color = AppTheme.colors.textSecondary)
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Navigation Items
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -120,7 +125,6 @@ fun SideMenu(
                 }
             }
 
-            // Footer Section
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -148,7 +152,7 @@ fun SideMenu(
                 )
             }
         }
-    } // Box
+    }
 }
 
 @Composable

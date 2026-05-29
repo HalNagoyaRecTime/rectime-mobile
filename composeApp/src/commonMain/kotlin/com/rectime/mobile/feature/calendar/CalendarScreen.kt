@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
+import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
@@ -70,10 +71,11 @@ private fun CalendarScreenUI(
     val hourEnd = 22
     val hourHeight = 72.dp
     val nowMinute = 13 * 60 + 20
+    val profile = LocalUserProfile.current ?: MockUser.me
 
     RootScreenScaffold(
         title = "カレンダー",
-        profile = MockUser.me,
+        profile = profile,
         onOpenMenu = onOpenMenu,
         horizontalPadding = false,
         onTrailingClick = onOpenNotifications,

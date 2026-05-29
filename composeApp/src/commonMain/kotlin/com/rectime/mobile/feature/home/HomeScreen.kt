@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
+import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -37,10 +38,11 @@ object HomeScreen : Screen {
             }
         )
         val uiState by vm.uiState.collectAsStateWithLifecycle()
+        val profile = LocalUserProfile.current ?: MockUser.me
 
         RootScreenScaffold(
             title = "ホーム",
-            profile = MockUser.me,
+            profile = profile,
             onOpenMenu = { navigationController.openMenu() },
             onTrailingClick = { navigationController.push(NotificationsScreen) },
             trailing = {
