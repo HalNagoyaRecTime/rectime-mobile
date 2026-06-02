@@ -90,4 +90,7 @@ fun App() {
 }
 
 private fun isApiImageRequest(url: String): Boolean =
-    url.startsWith(apiBaseUrl) || url.contains(apiBaseUrl.removePrefix("http://").removePrefix("https://"))
+    url == normalizedApiBaseUrl || url.startsWith("$normalizedApiBaseUrl/")
+
+private val normalizedApiBaseUrl: String =
+    apiBaseUrl.trimEnd('/')

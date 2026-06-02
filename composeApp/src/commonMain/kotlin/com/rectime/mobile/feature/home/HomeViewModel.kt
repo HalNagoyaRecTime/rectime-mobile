@@ -6,6 +6,7 @@ import com.rectime.mobile.core.config.apiBaseUrl
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,13 +24,16 @@ class HomeViewModel : ViewModel() {
     private fun fetchResponse() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
+            val client = HttpClient()
             try {
-                val client = HttpClient()
                 val text = client.get(apiBaseUrl).bodyAsText()
-                client.close()
                 _uiState.update { it.copy(isLoading = false, response = text) }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoading = false, response = "エラー: ${e.message}") }
+            } finally {
+                client.close()
             }
         }
     }

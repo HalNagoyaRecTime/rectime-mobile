@@ -76,4 +76,7 @@ fun UserAvatar(
 }
 
 private fun isApiImageUrl(url: String): Boolean =
-    url.startsWith(apiBaseUrl) || url.contains(apiBaseUrl.removePrefix("http://").removePrefix("https://"))
+    url == normalizedApiBaseUrl || url.startsWith("$normalizedApiBaseUrl/")
+
+private val normalizedApiBaseUrl: String =
+    apiBaseUrl.trimEnd('/')

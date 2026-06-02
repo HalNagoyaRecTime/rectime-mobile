@@ -121,6 +121,10 @@ class AuthApi(
             throw IllegalStateException(readErrorMessage(body) ?: "ログアウトに失敗しました")
         }
     }
+
+    fun close() {
+        client.close()
+    }
 }
 
 private fun readJsonString(json: String, key: String): String? {
