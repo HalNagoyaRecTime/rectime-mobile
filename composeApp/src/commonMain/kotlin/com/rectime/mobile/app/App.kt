@@ -14,8 +14,6 @@ import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 
-//コミットテスト
-
 @Composable
 @Preview
 fun App() {
