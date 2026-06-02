@@ -22,4 +22,4 @@ node_modules/
 memo.md
 AGENTS.md
 CLAUDE.md
-
+*.log

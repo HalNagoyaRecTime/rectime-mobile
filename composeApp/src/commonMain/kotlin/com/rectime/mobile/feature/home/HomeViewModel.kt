@@ -1,25 +1,40 @@
 package com.rectime.mobile.feature.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.config.apiBaseUrl
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class HomeViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        loadHomeData()
+        fetchResponse()
     }
 
-    private fun loadHomeData() {
-        // 将来的にリポジトリからの取得に差し替える準備工事
-        _uiState.value = HomeUiState(
-            timelineItems = listOf(
-                TimelineEntry("09:30 開会式", "アリーナ中央 / 司会進行あり", isActive = true),
-                TimelineEntry("10:30 予選第2組", "センターコート / 進行中", isActive = false),
-            )
-        )
+    private fun fetchResponse() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val client = HttpClient()
+            try {
+                val text = client.get(apiBaseUrl).bodyAsText()
+                _uiState.update { it.copy(isLoading = false, response = text) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, response = "エラー: ${e.message}") }
+            } finally {
+                client.close()
+            }
+        }
     }
 }

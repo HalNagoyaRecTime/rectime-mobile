@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -17,6 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
+import com.rectime.mobile.feature.auth.AuthSession
+import com.rectime.mobile.feature.auth.LocalUserProfile
+import com.rectime.mobile.feature.auth.toUserProfile
 import com.rectime.mobile.ui.component.SideMenu
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
@@ -27,16 +31,20 @@ import kotlinx.coroutines.launch
 fun NavigationHost(
     navigationController: NavigationController,
     themeStateHolder: ThemeStateHolder,
+    session: AuthSession,
+    onLogout: () -> Unit,
 ) {
     val state = navigationController.state
     val coroutineScope = rememberCoroutineScope()
+    val userProfile = session.user.toUserProfile()
 
     // BoxWithConstraints 内で計算したサイズをジェスチャーハンドラーと共有する
     var revealWidthPx by remember { mutableFloatStateOf(0f) }
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
 
-    BoxWithConstraints(
+    CompositionLocalProvider(LocalUserProfile provides userProfile) {
+        BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.colors.surfacePrimary)
@@ -75,6 +83,7 @@ fun NavigationHost(
                                 val next = navigationController.state.backDragOffsetPx + dragAmount
                                 navigationController.setBackDragOffset(next)
                             }
+                            else -> Unit
                         }
                     },
                     onDragEnd = {
@@ -147,6 +156,8 @@ fun NavigationHost(
                 navigationController.presentSheet(sheet)
             },
             themeStateHolder = themeStateHolder,
+            session = session,
+            onLogout = onLogout,
         )
 
         // Layer 1: Root (Home / Calendar)
@@ -170,5 +181,6 @@ fun NavigationHost(
             navigationController = navigationController,
             containerHeightPx = containerHeightPx,
         )
+        }
     }
 }
