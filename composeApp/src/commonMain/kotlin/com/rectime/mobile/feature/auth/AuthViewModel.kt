@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,12 +52,14 @@ class AuthViewModel(
                 val session = stored.copy(user = user)
                 sessionStore.save(session)
                 _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 try {
                     val refreshed = api.refresh(stored)
                     sessionStore.save(refreshed)
                     _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
-                } catch (_: Throwable) {
+                } catch (refreshError: Throwable) {
+                    if (refreshError is CancellationException) throw refreshError
                     sessionStore.clear()
                     _uiState.update { AuthUiState(error = "Session expired. Please login again.") }
                 }
@@ -105,6 +108,7 @@ class AuthViewModel(
                     )
                 }
             } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -147,6 +151,7 @@ class AuthViewModel(
                     )
                 }
             } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -165,13 +170,19 @@ class AuthViewModel(
                 if (session != null && !devAuthBypassEnabled) {
                     api.logout(session)
                 }
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
                 // Prefer local sign-out even if server logout fails.
             } finally {
                 sessionStore.clear()
                 _uiState.update { AuthUiState(message = "Logged out") }
             }
         }
+    }
+
+    override fun onCleared() {
+        api.close()
+        super.onCleared()
     }
 }
 
