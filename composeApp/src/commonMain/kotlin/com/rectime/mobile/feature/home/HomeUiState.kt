@@ -6,7 +6,13 @@ data class TimelineEntry(
     val isActive: Boolean
 )
 
+data class RankingItem(
+    val className: String,
+    val point: Int
+)
+
 data class HomeUiState(
     val timelineItems: List<TimelineEntry> = emptyList(),
+    val rankingItems: List<RankingItem> = emptyList(),
     val isLoading: Boolean = false
 )
