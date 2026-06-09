@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "946149362229",
+    "project_id": "rectime-3c0ba",
+    "storage_bucket": "rectime-3c0ba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:946149362229:android:0972adf7e0d122d38d7f7c",
+        "android_client_info": {
+          "package_name": "com.rectime.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbY2HR26F8daRTnIgMyguR5jYXU6bH_jA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
