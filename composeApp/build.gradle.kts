@@ -48,6 +48,7 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.analytics)
+            implementation(libs.firebase.messaging)
             implementation(libs.ktor.client.okhttp)
         }
         commonMain.dependencies {
