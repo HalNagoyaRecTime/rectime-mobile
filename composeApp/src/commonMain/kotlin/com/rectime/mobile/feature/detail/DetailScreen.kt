@@ -23,42 +23,37 @@ data class DetailScreen(val id: String) : Screen {
     override fun Content(navigationController: NavigationController) {
 
         //競技のダミーデータ
-        val kyougiName = "紙飛行機飛ばし"
-        val kyougiDescription =
+        val competitionName = "紙飛行機飛ばし"
+        val competitionDescription =
             "各自で作成した紙飛行機を当日持参し、決められた位置から一斉に飛ばします。"+
             "紙飛行機が停止した地点までの距離を計測し、最も遠くまで飛ばした参加者が優勝となります。"
 
         PushScreenScaffold(
             title = "競技詳細",
             onBack = { navigationController.requestPop() },
+            bottomContent = {
+                Button(
+                    onClick = {
+                        //画面遷移先を後程追加
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ){
+                    Text("呼び出し情報")
+                }
+            },
         ) {
             item {
                 Text(
-                    text = kyougiName,
+                    text = competitionName,
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
                 Text(
-                    text = kyougiDescription,
+                    text = competitionDescription,
                     color = AppTheme.colors.textSecondary,
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
-            }
-            //ボタンを画面下部に配置するために説明文とボタンの間に大きめの余白を入れる
-            //画面下に固定したい場合はPushScreenScaffoldを修正する必要あり
-            item {
-                Spacer(modifier = Modifier.height(500.dp))
-            }
-            item {
-                Button(
-                    onClick = {
-                        //画面遷移先を後程追加
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                ){
-                    Text("呼び出し情報")
-                }
             }
         }
     }
