@@ -14,8 +14,8 @@ class MainActivity : ComponentActivity() {
 
         installSplashScreen()
 
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
 
         setContent {
             App()
