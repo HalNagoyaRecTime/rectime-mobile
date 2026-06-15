@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.google.firebase.messaging.FirebaseMessaging
 import com.rectime.mobile.app.App
+import com.rectime.mobile.notification.FcmTokenRegistrar
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,7 +41,9 @@ class MainActivity : ComponentActivity() {
                 return@addOnCompleteListener
             }
 
-            Log.d(TAG, "FCM registration token: ${task.result}")
+            val token = task.result
+            Log.d(TAG, "FCM registration token: $token")
+            FcmTokenRegistrar.register(token)
         }
     }
 

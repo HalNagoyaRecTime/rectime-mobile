@@ -18,6 +18,7 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM registration token refreshed: $token")
+        FcmTokenRegistrar.register(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
