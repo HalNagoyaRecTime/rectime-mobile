@@ -16,6 +16,6 @@ object MockUser {
         initials = "RT",
         imageUrl = "https://cataas.com/cat",
         department = "IA12B",
-        studentId = "12345"
+        studentId = "24A001"
     )
 }
