@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.rectime.mobile.MainActivity
@@ -52,7 +53,7 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val notification = android.app.Notification.Builder(this, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(body)

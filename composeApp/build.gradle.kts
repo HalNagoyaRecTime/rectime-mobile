@@ -46,9 +46,11 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.core.ktx)
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.analytics)
             implementation(libs.firebase.messaging)
+            implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.okhttp)
         }
         commonMain.dependencies {
@@ -85,6 +87,14 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"https://rectime-api.rectime-project.workers.dev\"",
+        )
+    }
+    buildFeatures {
+        buildConfig = true
     }
     packaging {
         resources {

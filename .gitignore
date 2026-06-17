@@ -6,6 +6,7 @@ xcuserdata
 !src/**/build/
 local.properties
 .idea
+.idea/misc.xml
 .claude
 .DS_Store
 captures
@@ -23,3 +24,4 @@ memo.md
 AGENTS.md
 CLAUDE.md
 
+google-services.json

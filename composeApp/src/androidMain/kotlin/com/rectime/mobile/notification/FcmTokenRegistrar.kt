@@ -1,13 +1,23 @@
 package com.rectime.mobile.notification
 
 import android.util.Log
+import com.rectime.mobile.BuildConfig
 import com.rectime.mobile.core.model.MockUser
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.concurrent.Executors
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 object FcmTokenRegistrar {
-    private val executor = Executors.newSingleThreadExecutor()
+    private val client = HttpClient(OkHttp)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun register(token: String) {
         val studentNumber = MockUser.me.studentId
@@ -16,7 +26,7 @@ object FcmTokenRegistrar {
             return
         }
 
-        executor.execute {
+        scope.launch {
             runCatching {
                 postToken(studentNumber = studentNumber, token = token)
             }.onSuccess { responseCode ->
@@ -27,7 +37,7 @@ object FcmTokenRegistrar {
         }
     }
 
-    private fun postToken(studentNumber: String, token: String): Int {
+    private suspend fun postToken(studentNumber: String, token: String): Int {
         val body = """
             {
               "studentNumber": "${studentNumber.escapeJson()}",
@@ -36,35 +46,18 @@ object FcmTokenRegistrar {
             }
         """.trimIndent()
 
-        val connection = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-            doOutput = true
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Accept", "application/json")
+        val response = client.post(ENDPOINT) {
+            contentType(ContentType.Application.Json)
+            setBody(body)
         }
+        val responseCode = response.status.value
+        val responseText = response.bodyAsText()
 
-        return try {
-            connection.outputStream.use { output ->
-                output.write(body.toByteArray(Charsets.UTF_8))
-            }
-
-            val responseCode = connection.responseCode
-            val responseText = if (responseCode in 200..299) {
-                connection.inputStream.bufferedReader().use { it.readText() }
-            } else {
-                connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            }
-
-            Log.d(TAG, "FCM token registration response: HTTP $responseCode $responseText")
-            check(responseCode in 200..299) {
-                "Unexpected FCM token registration response: HTTP $responseCode"
-            }
-            responseCode
-        } finally {
-            connection.disconnect()
+        Log.d(TAG, "FCM token registration response: HTTP $responseCode $responseText")
+        check(responseCode in 200..299) {
+            "Unexpected FCM token registration response: HTTP $responseCode"
         }
+        return responseCode
     }
 
     private fun String.escapeJson(): String = buildString {
@@ -83,6 +76,5 @@ object FcmTokenRegistrar {
     }
 
     private const val TAG = "RectimeFCM"
-    private const val ENDPOINT = "https://rectime-api.rectime-project.workers.dev/api/v1/firebase-tokens"
-    private const val TIMEOUT_MS = 10_000
+    private val ENDPOINT = "${BuildConfig.API_BASE_URL}/api/v1/firebase-tokens"
 }
