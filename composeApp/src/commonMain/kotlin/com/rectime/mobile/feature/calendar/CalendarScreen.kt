@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,12 +25,11 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.detail.DetailScreen
+import com.rectime.mobile.feature.notifications.NotificationBellBadge
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
 private data class TimelineEvent(
     val title: String,
@@ -78,10 +76,7 @@ private fun CalendarScreenUI(
         horizontalPadding = false,
         onTrailingClick = onOpenNotifications,
         trailing = {
-            Icon(
-                imageVector = SolidGroup.Bell,
-                contentDescription = "通知",
-                tint = AppTheme.colors.textPrimary,
+            NotificationBellBadge(
                 modifier = Modifier.size(20.dp),
             )
         },
