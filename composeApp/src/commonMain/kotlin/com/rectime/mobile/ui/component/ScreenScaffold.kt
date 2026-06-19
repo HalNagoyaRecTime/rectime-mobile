@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.core.model.UserProfile
@@ -68,6 +69,7 @@ fun PushScreenScaffold(
     horizontalPadding: Boolean = true,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    bottomContent: @Composable (() -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
@@ -93,6 +95,13 @@ fun PushScreenScaffold(
             onTrailingClick = onTrailingClick,
             trailing = trailing,
         )
+        bottomContent?.let {
+            Box(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 32.dp, vertical = 48.dp,),
+            ) {
+                it()
+            }
+        }
     }
 }
 
