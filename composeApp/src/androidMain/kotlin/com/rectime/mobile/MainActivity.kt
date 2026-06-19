@@ -13,12 +13,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.google.firebase.messaging.FirebaseMessaging
 import com.rectime.mobile.app.App
 import com.rectime.mobile.notification.FcmTokenRegistrar
+import com.rectime.mobile.notification.RectimeNotificationChannel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        RectimeNotificationChannel.create(this)
         requestNotificationPermission()
         logFcmToken()
 
