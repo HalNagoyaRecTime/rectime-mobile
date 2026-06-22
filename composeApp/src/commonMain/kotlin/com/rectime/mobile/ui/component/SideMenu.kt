@@ -66,7 +66,7 @@ fun SideMenu(
         ))
         if (isDebugBuild) {
             add(SideMenuItemConfig(
-                title = "接続テスト",
+                title = "デバッグメニュー",
                 icon = SolidGroup.PlugCircleBolt,
                 action = SideMenuAction.Push(DebugScreen)
             ))

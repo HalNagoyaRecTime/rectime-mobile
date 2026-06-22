@@ -54,7 +54,7 @@ object DebugScreen : Screen {
         var result by remember { mutableStateOf<TestResult>(TestResult.Idle) }
 
         PushScreenScaffold(
-            title = "デバッグ - 接続テスト",
+            title = "デバッグメニュー",
             onBack = { navigationController.requestPop() },
         ) {
             item {
