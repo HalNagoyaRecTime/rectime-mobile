@@ -1,5 +1,11 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
+}
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -60,6 +66,7 @@ kotlin {
             implementation(libs.compose.icon.collections.fontawesome)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
+            implementation(libs.ktor.client.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -82,6 +89,13 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
+            ?: findProperty("API_BASE_URL") as String?
+            ?: "http://10.0.2.2:8787"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+    }
+    buildFeatures {
+        buildConfig = true
     }
     packaging {
         resources {
