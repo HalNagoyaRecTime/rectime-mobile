@@ -18,7 +18,21 @@ actual class AuthSessionStore {
         preferences.remove(KEY)
     }
 
+    actual suspend fun loadPendingAuth(): PendingAuth? {
+        val value = preferences.get(PENDING_KEY, null) ?: return null
+        return decodePendingAuth(value)
+    }
+
+    actual suspend fun savePendingAuth(pending: PendingAuth) {
+        preferences.put(PENDING_KEY, encodePendingAuth(pending))
+    }
+
+    actual suspend fun clearPendingAuth() {
+        preferences.remove(PENDING_KEY)
+    }
+
     private companion object {
         const val KEY = "session"
+        const val PENDING_KEY = "pending_auth"
     }
 }

@@ -5,6 +5,5 @@ import platform.UIKit.UIApplication
 
 actual fun openExternalUrl(url: String): Boolean {
     val nsUrl = NSURL.URLWithString(url) ?: return false
-    UIApplication.sharedApplication.openURL(nsUrl)
-    return true
+    return UIApplication.sharedApplication.openURL(nsUrl)
 }

@@ -12,6 +12,21 @@ fun encodeAuthSession(session: AuthSession): String =
         session.user.avatarUpdatedAt ?: "",
     ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
 
+fun encodePendingAuth(pending: PendingAuth): String =
+    listOf(pending.state, pending.codeVerifier)
+        .joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
+
+fun decodePendingAuth(value: String): PendingAuth? {
+    val parts = value.split(".")
+    if (parts.size != 2) return null
+    return runCatching {
+        PendingAuth(
+            state = parts[0].decodeBase64UrlToString(),
+            codeVerifier = parts[1].decodeBase64UrlToString(),
+        )
+    }.getOrNull()
+}
+
 fun decodeAuthSession(value: String): AuthSession? {
     val parts = value.split(".")
     if (parts.size != 6 && parts.size != 8) return null
@@ -41,7 +56,7 @@ fun decodeAuthSession(value: String): AuthSession? {
     }.getOrNull()
 }
 
-private fun String.decodeBase64UrlToString(): String {
+internal fun String.decodeBase64UrlToString(): String {
     val normalized = replace('-', '+').replace('_', '/')
     val padded = normalized + "=".repeat((4 - normalized.length % 4) % 4)
     val bytes = decodeBase64(padded)

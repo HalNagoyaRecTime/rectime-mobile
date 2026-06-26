@@ -39,7 +39,7 @@ fun App() {
                         HttpClient {
                             defaultRequest {
                                 val token = SessionTokenHolder.accessToken
-                                if (token != null && isApiImageRequest(url.buildString())) {
+                                if (token != null && isApiUrl(url.buildString())) {
                                     header("X-Client-Type", "mobile")
                                     header(HttpHeaders.Authorization, "Bearer $token")
                                 }
@@ -89,8 +89,8 @@ fun App() {
     }
 }
 
-private fun isApiImageRequest(url: String): Boolean =
+internal fun isApiUrl(url: String): Boolean =
     url == normalizedApiBaseUrl || url.startsWith("$normalizedApiBaseUrl/")
 
-private val normalizedApiBaseUrl: String =
+internal val normalizedApiBaseUrl: String =
     apiBaseUrl.trimEnd('/')
