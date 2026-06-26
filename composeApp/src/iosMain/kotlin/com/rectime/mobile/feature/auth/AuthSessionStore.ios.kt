@@ -18,7 +18,21 @@ actual class AuthSessionStore {
         defaults.removeObjectForKey(KEY)
     }
 
+    actual suspend fun loadPendingAuth(): PendingAuth? {
+        val value = defaults.stringForKey(PENDING_KEY) ?: return null
+        return decodePendingAuth(value)
+    }
+
+    actual suspend fun savePendingAuth(pending: PendingAuth) {
+        defaults.setObject(encodePendingAuth(pending), PENDING_KEY)
+    }
+
+    actual suspend fun clearPendingAuth() {
+        defaults.removeObjectForKey(PENDING_KEY)
+    }
+
     private companion object {
         const val KEY = "rectime_auth_session"
+        const val PENDING_KEY = "rectime_auth_pending"
     }
 }

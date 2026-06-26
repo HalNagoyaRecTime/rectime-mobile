@@ -18,8 +18,8 @@ import coil3.compose.LocalPlatformContext
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
+import com.rectime.mobile.app.isApiUrl
 import com.rectime.mobile.core.model.UserProfile
-import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -43,7 +43,7 @@ fun UserAvatar(
 ) {
     val context = LocalPlatformContext.current
     val token = SessionTokenHolder.accessToken
-    val imageModel = if (!imageUrl.isNullOrBlank() && token != null && isApiImageUrl(imageUrl)) {
+    val imageModel = if (!imageUrl.isNullOrBlank() && token != null && isApiUrl(imageUrl)) {
         ImageRequest.Builder(context)
             .data(imageUrl)
             .httpHeaders(
@@ -75,8 +75,3 @@ fun UserAvatar(
     }
 }
 
-private fun isApiImageUrl(url: String): Boolean =
-    url == normalizedApiBaseUrl || url.startsWith("$normalizedApiBaseUrl/")
-
-private val normalizedApiBaseUrl: String =
-    apiBaseUrl.trimEnd('/')

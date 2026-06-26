@@ -154,13 +154,22 @@ private fun readObjectBody(json: String, key: String): String? {
     var depth = 0
     var index = keyMatch.range.last
     val start = index + 1
+    var inString = false
     while (index < json.length) {
-        when (json[index]) {
-            '{' -> depth += 1
-            '}' -> {
-                depth -= 1
-                if (depth == 0) {
-                    return json.substring(start, index)
+        val char = json[index]
+        if (inString) {
+            if (char == '\\') {
+                index += 2
+                continue
+            }
+            if (char == '"') inString = false
+        } else {
+            when (char) {
+                '"' -> inString = true
+                '{' -> depth += 1
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0) return json.substring(start, index)
                 }
             }
         }

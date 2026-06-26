@@ -41,9 +41,15 @@ class AuthViewModel(
             }
 
             _uiState.update { it.copy(isLoading = true, message = "Restoring session...") }
+
+            // Restore pending auth so cold-start deep links (process killed mid-flow) still work.
+            val storedPending = sessionStore.loadPendingAuth()
+
             val stored = sessionStore.load()
             if (stored == null) {
-                _uiState.update { it.copy(isLoading = false, message = "") }
+                _uiState.update {
+                    it.copy(isLoading = false, message = "", pendingAuth = storedPending)
+                }
                 return@launch
             }
 
@@ -51,16 +57,19 @@ class AuthViewModel(
                 val user = api.currentUser(stored.accessToken)
                 val session = stored.copy(user = user)
                 sessionStore.save(session)
+                sessionStore.clearPendingAuth()
                 _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 try {
                     val refreshed = api.refresh(stored)
                     sessionStore.save(refreshed)
+                    sessionStore.clearPendingAuth()
                     _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
                     sessionStore.clear()
+                    sessionStore.clearPendingAuth()
                     _uiState.update { AuthUiState(error = "Session expired. Please login again.") }
                 }
             }
@@ -100,10 +109,12 @@ class AuthViewModel(
                     }
                     return@launch
                 }
+                val pending = PendingAuth(state = state, codeVerifier = codeVerifier)
+                sessionStore.savePendingAuth(pending)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        pendingAuth = PendingAuth(state = state, codeVerifier = codeVerifier),
+                        pendingAuth = pending,
                         message = "Continue login in your browser",
                     )
                 }
@@ -142,6 +153,7 @@ class AuthViewModel(
             try {
                 val session = api.exchangeCode(code, state, pending.codeVerifier)
                 sessionStore.save(session)
+                sessionStore.clearPendingAuth()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -175,6 +187,7 @@ class AuthViewModel(
                 // Prefer local sign-out even if server logout fails.
             } finally {
                 sessionStore.clear()
+                sessionStore.clearPendingAuth()
                 _uiState.update { AuthUiState(message = "Logged out") }
             }
         }

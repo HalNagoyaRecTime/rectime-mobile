@@ -36,4 +36,31 @@ actual class AuthSessionStore {
             .remove("session")
             .apply()
     }
+
+    actual suspend fun loadPendingAuth(): PendingAuth? {
+        val context = authPlatformContext ?: return null
+        val value = context
+            .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
+            .getString("pending_auth", null)
+            ?: return null
+        return decodePendingAuth(value)
+    }
+
+    actual suspend fun savePendingAuth(pending: PendingAuth) {
+        val context = authPlatformContext ?: return
+        context
+            .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
+            .edit()
+            .putString("pending_auth", encodePendingAuth(pending))
+            .apply()
+    }
+
+    actual suspend fun clearPendingAuth() {
+        val context = authPlatformContext ?: return
+        context
+            .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
+            .edit()
+            .remove("pending_auth")
+            .apply()
+    }
 }
