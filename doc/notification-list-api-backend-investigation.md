@@ -116,7 +116,89 @@ PATCH /api/v1/notifications/:id/read
 - 本番 D1 へのマイグレーション適用（`wrangler d1 migrations apply rectime-api --remote`）
 - 本番 Cloudflare Workers への `wrangler deploy`
 
-## 6. 今後の進め方の論点
+## 6. ローカル環境での動作検証（2026-06-26）
+
+本番デプロイは行わず、自分の PC 上だけで一覧取得・既読化 API の動作を検証した。
+
+### 6.1 検証方針
+
+`rectime-api` の `npm run dev`（`wrangler dev --env development`）は、本番の D1 (`rectime-api`) とは別の `rectime-api-dev` という D1 データベースを使う設定になっている。さらに `--local` フラグを付けることで、リモートの Cloudflare 環境に一切接続せず、PC 上のファイルベース SQLite のみで完結させた。本番データ・本番 API には何の影響も与えない。
+
+### 6.2 実施手順
+
+1. `feature/notification-list-api` worktree (`C:\Users\kuram\AppData\Local\Temp\rectime-api-work`) でローカル D1 にマイグレーションを適用。
+
+   ```shell
+   npm run "db:migrate --local"
+   # wrangler d1 migrations apply rectime-api-dev --local --env development
+   ```
+
+   `0001` 〜 `0008_extend_notifications_for_list_api.sql` まで全て適用成功。
+
+2. テスト用データを SQL ファイル (`seed-test-data.sql`) で投入。
+
+   ```sql
+   INSERT INTO users (student_number, is_active) VALUES ('24A001', 1)
+   ON CONFLICT(student_number) DO UPDATE SET is_active = 1;
+
+   INSERT INTO notifications (user_id, type, title, body, severity, send_status, sent_at, updated_at)
+   SELECT id, 'event_reminder', '呼び出し通知', '英語スピーチコンテストの開始10分前です。講堂に集合してください。', 'info', 'sent', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+   FROM users WHERE student_number = '24A001';
+   ```
+
+   `24A001` はモバイルアプリの `MockUser.me.studentId` の固定値と一致させた。
+
+3. ローカル Worker を起動。
+
+   ```shell
+   npx wrangler dev --env development --local --port 8787
+   ```
+
+4. モバイルアプリ側を一時的にローカル Worker 向けに変更してビルド。
+   - [build.gradle.kts](composeApp/build.gradle.kts) の `API_BASE_URL` を `http://10.0.2.2:8787`（Android エミュレーターからホスト PC を指すループバックアドレス）に変更
+   - [AndroidManifest.xml](composeApp/src/androidMain/AndroidManifest.xml) に `android:usesCleartextTraffic="true"` を追加（Android 9 以降は HTTP 平文通信がデフォルトで禁止されているため、ローカル HTTP 接続を一時許可）
+5. Android エミュレーター (`Pixel_7_API_36`) を起動し、ビルドした debug APK をインストールして起動。
+6. 通知ベルをタップして通知一覧画面を開き、ローカル Worker から取得した通知が一覧に表示されることを確認。
+
+### 6.3 発生した問題と対応
+
+#### a. `CLEARTEXT communication ... not permitted`
+
+Android のデフォルトのネットワークセキュリティポリシーにより `http://10.0.2.2:8787` への接続がブロックされた。`AndroidManifest.xml` に `usesCleartextTraffic="true"` を追加して解消（後述の通りテスト後に削除済み）。
+
+#### b. 通知タイトルが文字化けする
+
+一覧画面に表示された通知のタイトル・本文が文字化けして表示された（例: `�e�X�g�ʒm`）。
+
+調査の結果、**ポート 8787 を 2 つの `wrangler dev` プロセスが同時に LISTEN していた**ことが原因と判明した。
+
+- `C:\Users\kuram\AppData\Local\Temp\rectime-api-work`（今回実装した worktree、新4層構造）の `wrangler dev`
+- `c:\Users\kuram\rec\rectime-api`（`notification` ブランチ、旧3層構造）側で別途起動されていた `wrangler dev`
+
+`netstat -ano` で `127.0.0.1:8787` に対して 2 つの異なる PID が `LISTENING` 状態であることを確認し、`wmic process` でそれぞれのプロセスの実行パスを確認して特定した。リクエストの宛先プロセスが不定になり、片方のプロセス（おそらく以前文字コードが壊れた状態で投入されたテストデータを保持していた側）の応答が返ってきていたために文字化けして見えていた。
+
+対応として、`rectime-api` 本体側の `wrangler dev` プロセスツリーを終了し、worktree 側のみ残してから再起動した。`notifications` テーブルを一度 `DELETE` してテストデータを再投入し、API レスポンスが正しい UTF-8（「呼び出し通知」「英語スピーチコンテストの開始10分前です。講堂に集合してください。」）で返ることを確認した。
+
+### 6.4 検証結果
+
+- ローカル D1 + ローカル Worker 経由で `GET /api/v1/notifications` が `200` を返し、投入したテスト通知が一覧（未読 1 件）として正しく表示されることを確認した。
+- この検証により、**一覧取得・既読化 API を実装・デプロイすれば、モバイルアプリの通知一覧画面が問題なく動作する**ことが裏付けられた。
+- 本物の FCM 経由でのプッシュ送信（Firebase サービスアカウント鍵を用いた実送信）は今回は実施していない。`.dev.vars` に `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` が未設定のため。
+
+### 6.5 テスト後の復元
+
+検証後、テストのために変更した箇所を全て元に戻した。
+
+| 対象 | 内容 |
+| --- | --- |
+| [build.gradle.kts](composeApp/build.gradle.kts) | `API_BASE_URL` を本番 URL (`https://rectime-api.rectime-project.workers.dev`) に戻した |
+| [AndroidManifest.xml](composeApp/src/androidMain/AndroidManifest.xml) | `usesCleartextTraffic="true"` を削除 |
+| ローカル `wrangler dev`（workerd プロセス） | 停止 |
+| Android エミュレーター | 停止 |
+
+`git status` / `git diff` で `rectime-mobile` 側に差分が残っていないことを確認済み。`rectime-api` 側の `feature/notification-list-api`（ローカル D1 マイグレーション適用済み、未 commit のコード変更）はそのまま `C:\Users\kuram\AppData\Local\Temp\rectime-api-work` に残置している。
+
+## 7. 今後の進め方の論点
 
 - `rectime-api` は 2026-06-24 時点でも他のコントリビューター（`fix/28-protect-notification-api` ブランチの作者）が活発に開発を続けている。今回の実装をそのまま push すると作業が重複・競合する可能性があるため、push 前にチームへの確認が必要。
 - 本番デプロイ・本番 D1 マイグレーション適用は不可逆性のある操作のため、実行前に明示的な承認を得る。
