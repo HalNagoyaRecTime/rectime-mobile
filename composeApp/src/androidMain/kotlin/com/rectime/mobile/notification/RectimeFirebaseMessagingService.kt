@@ -14,8 +14,17 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.rectime.mobile.MainActivity
 import com.rectime.mobile.R
+import com.rectime.mobile.feature.notifications.NotificationUnreadStore
+import com.rectime.mobile.feature.notifications.NotificationsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class RectimeFirebaseMessagingService : FirebaseMessagingService() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val notificationsRepository = NotificationsRepository()
+
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM registration token refreshed: $token")
@@ -30,6 +39,19 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
         val body = message.notification?.body ?: message.data["body"] ?: DEFAULT_BODY
 
         showNotification(title, body)
+        refreshUnreadCount()
+    }
+
+    private fun refreshUnreadCount() {
+        scope.launch {
+            runCatching {
+                notificationsRepository.getUnreadCount()
+            }.onSuccess { count ->
+                NotificationUnreadStore.setCount(count)
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to refresh unread count after push", error)
+            }
+        }
     }
 
     private fun showNotification(title: String, body: String) {

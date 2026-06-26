@@ -188,7 +188,15 @@ Android コンパイルは以下のコマンドで確認しようとした。
 ## 8. 残課題
 
 - Android SDK 設定後に Android ターゲットでのコンパイル確認を行う
-- 実 API の認証方式に合わせて `NotificationsRepository` に認証ヘッダーを追加する
 - API レスポンス形式が確定したら、JSON 変換を正式スキーマに合わせて調整する
 - 通知タップ時の詳細画面遷移、または `linkUrl` ルーティングを実装する
 - アプリ復帰時の未読件数再同期を追加する
+- `NotificationsRepository` が `MockUser.me.studentId` への直接依存で `student_number` を渡している（9章参照）。本来の認証方式（トークン等）が確定したらこれに置き換える
+
+## 9. 既知の不具合と暫定対応（2026-06）
+
+プッシュ通知は端末に届くが、アプリ内の通知一覧に反映されない不具合があった。原因は `NotificationsRepository` の各 API 呼び出しにユーザーを識別する情報が一切付与されておらず、バックエンドがユーザーを解決できなかったため。詳細は `doc/notification-list-not-visible-fix-plan.md` を参照。
+
+暫定対応として、`NotificationsRepository` の `getNotifications` / `getUnreadCount` / `markRead` / `markAllRead` すべてに `student_number` クエリパラメータを付与し、`MockUser.me.studentId` から値を取得するようにした。
+
+この対応は `MockUser` に依存した暫定実装であり、認証方式が確定した時点で置き換える前提とする（`doc/notification-list-not-visible-fix-plan.md` の「3.2 本対応」参照）。
