@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
+import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
@@ -88,10 +89,12 @@ private fun CalendarScreenUI(
         }
     }
 
+    val profile = LocalUserProfile.current ?: MockUser.me
+
     Box(modifier = Modifier.fillMaxSize()) {
         RootScreenScaffold(
             title = "カレンダー",
-            profile = MockUser.me,
+            profile = profile,
             onOpenMenu = onOpenMenu,
             horizontalPadding = false,
             onTrailingClick = onOpenNotifications,
