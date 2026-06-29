@@ -31,14 +31,19 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.List
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.getValue
 
 object RankingScreen : Screen {
     override val key: String = "ranking"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        val viewModel = RankingViewModel()
-        val uiState = viewModel.uiState.value
+        val viewModel: RankingViewModel = viewModel {
+        RankingViewModel()
+        }
+        val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
         Column(
             modifier = Modifier

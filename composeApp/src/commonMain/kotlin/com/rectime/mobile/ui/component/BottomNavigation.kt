@@ -35,6 +35,7 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CalendarDays
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.House
 import com.rectime.mobile.feature.ranking.RankingScreen
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Trophy
 
 private data class NavigationItemConfig(
     val screen: Screen,
@@ -51,7 +52,7 @@ fun BottomNavigationBar(
     val items = listOf(
     NavigationItemConfig(HomeScreen, "ホーム", SolidGroup.House),
     NavigationItemConfig(CalendarScreen, "カレンダー", SolidGroup.CalendarDays),
-    NavigationItemConfig(RankingScreen, "ランキング", SolidGroup.House),
+    NavigationItemConfig(RankingScreen, "ランキング", SolidGroup.Trophy),
 )
 
     Column(
