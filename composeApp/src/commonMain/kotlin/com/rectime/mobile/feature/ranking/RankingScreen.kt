@@ -2,7 +2,7 @@ package com.rectime.mobile.feature.ranking
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,21 +19,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.List
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.getValue
 
 object RankingScreen : Screen {
     override val key: String = "ranking"
@@ -41,7 +40,7 @@ object RankingScreen : Screen {
     @Composable
     override fun Content(navigationController: NavigationController) {
         val viewModel: RankingViewModel = viewModel {
-        RankingViewModel()
+            RankingViewModel()
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -61,15 +60,17 @@ object RankingScreen : Screen {
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
+                    color = AppTheme.colors.textPrimary,
                 )
 
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .size(28.dp)
+                        .clickable { /* TODO: 表示切替機能を実装予定 */ }
                         .border(
                             width = 1.dp,
-                            color = Color.LightGray,
+                            color = AppTheme.colors.borderStrong,
                             shape = RoundedCornerShape(4.dp),
                         ),
                     contentAlignment = Alignment.Center,
@@ -78,7 +79,7 @@ object RankingScreen : Screen {
                         imageVector = SolidGroup.List,
                         contentDescription = "表示切り替え",
                         modifier = Modifier.size(14.dp),
-                        tint = Color.Black,
+                        tint = AppTheme.colors.textPrimary,
                     )
                 }
             }
@@ -104,7 +105,7 @@ private fun RankingRow(item: RankingItem) {
                 shape = RoundedCornerShape(12.dp),
             )
             .background(
-                color = Color.White,
+                color = AppTheme.colors.navigationSurface,
                 shape = RoundedCornerShape(12.dp),
             )
             .padding(horizontal = 16.dp, vertical = 18.dp)
@@ -113,16 +114,23 @@ private fun RankingRow(item: RankingItem) {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("${item.rank}位")
+            Text(
+                text = "${item.rank}位",
+                color = AppTheme.colors.textPrimary,
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
             Text(
                 text = item.className,
                 modifier = Modifier.weight(1f),
+                color = AppTheme.colors.textPrimary,
             )
 
-            Text("${item.point}pt")
+            Text(
+                text = "${item.point}pt",
+                color = AppTheme.colors.textPrimary,
+            )
         }
     }
 }
