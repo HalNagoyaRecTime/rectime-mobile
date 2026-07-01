@@ -9,7 +9,7 @@ private var externalUrlContext: Context? = null
 private const val TAG = "AuthExternalUrl"
 
 fun setExternalUrlContext(context: Context) {
-    externalUrlContext = context
+    externalUrlContext = context.applicationContext
 }
 
 actual fun openExternalUrl(url: String): Boolean {
