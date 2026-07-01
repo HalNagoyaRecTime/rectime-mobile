@@ -1,25 +1,40 @@
 package com.rectime.mobile.feature.home
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.createAppHttpClient
+import io.ktor.client.request.get
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class HomeViewModel : ViewModel() {
+    private val httpClient = createAppHttpClient()
+
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        loadHomeData()
+        checkHealth()
     }
 
-    private fun loadHomeData() {
-        // 将来的にリポジトリからの取得に差し替える準備工事
-        _uiState.value = HomeUiState(
-            timelineItems = listOf(
-                TimelineEntry("09:30 開会式", "アリーナ中央 / 司会進行あり", isActive = true),
-                TimelineEntry("10:30 予選第2組", "センターコート / 進行中", isActive = false),
-            )
-        )
+    fun checkHealth() {
+        viewModelScope.launch {
+            _uiState.value = HomeUiState(isLoading = true)
+            try {
+                val response = httpClient.get("$apiBaseUrl/health")
+                _uiState.value = HomeUiState(isHealthy = response.status.isSuccess())
+            } catch (e: Exception) {
+                _uiState.value = HomeUiState(error = e.message ?: "接続に失敗しました")
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        httpClient.close()
     }
 }

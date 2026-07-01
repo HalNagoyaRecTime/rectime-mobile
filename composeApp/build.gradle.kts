@@ -1,5 +1,11 @@
+import java.util.Properties
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+val localProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) load(f.inputStream())
+}
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -48,6 +54,7 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.core.ktx)
+            implementation(libs.androidx.core.splashscreen)
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.analytics)
             implementation(libs.firebase.messaging)
@@ -84,20 +91,19 @@ android {
     namespace = "com.rectime.mobile"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
         applicationId = "com.rectime.mobile"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-        buildConfigField(
-            "String",
-            "API_BASE_URL",
-            "\"https://rectime-api.rectime-project.workers.dev\"",
-        )
-    }
-    buildFeatures {
-        buildConfig = true
+        val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
+            ?: findProperty("API_BASE_URL") as String?
+            ?: "http://10.0.2.2:8787"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
     packaging {
         resources {

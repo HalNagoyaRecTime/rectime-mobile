@@ -27,7 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.model.MockUser
+import com.rectime.mobile.feature.debug.DebugScreen
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.theme.AppTheme
@@ -35,6 +37,7 @@ import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Palette
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.PlugCircleBolt
 
 private sealed class SideMenuAction {
     data class Push(val screen: Screen) : SideMenuAction()
@@ -55,13 +58,20 @@ fun SideMenu(
     themeStateHolder: ThemeStateHolder,
     modifier: Modifier = Modifier,
 ) {
-    val mainItems = listOf(
-        SideMenuItemConfig(
+    val mainItems = buildList {
+        add(SideMenuItemConfig(
             title = "設定",
             icon = SolidGroup.Gear,
             action = SideMenuAction.Push(SettingsScreen)
-        ),
-    )
+        ))
+        if (isDebugBuild) {
+            add(SideMenuItemConfig(
+                title = "デバッグメニュー",
+                icon = SolidGroup.PlugCircleBolt,
+                action = SideMenuAction.Push(DebugScreen)
+            ))
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize().background(AppTheme.colors.navigationBackground)) {
         Column(
