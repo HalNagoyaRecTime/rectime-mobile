@@ -9,11 +9,13 @@ import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
+import kotlinx.serialization.json.Json
 
 class NotificationsRepository(
     private val client: HttpClient = HttpClient(),
 ) {
     private val apiV1Base = "${ApiConfig.apiBaseUrl.trimEnd('/')}/api/v1"
+    private val json = Json { ignoreUnknownKeys = true }
 
     // TODO: MockUser を撤廃し、認証済みユーザーのトークンからユーザーを解決する仕組みに置き換える
     private val studentNumber: String?
@@ -32,7 +34,13 @@ class NotificationsRepository(
         }
         response.ensureSuccess()
 
-        return NotificationJson.parseNotifications(response.bodyAsText())
+        val body = response.bodyAsText().trim()
+        val notifications = if (body.startsWith("[")) {
+            json.decodeFromString<List<NotificationDto>>(body)
+        } else {
+            json.decodeFromString<NotificationsResponseDto>(body).notifications.orEmpty()
+        }
+        return notifications.mapNotNull { it.toAppNotification() }
     }
 
     suspend fun getUnreadCount(): Int {
@@ -41,7 +49,7 @@ class NotificationsRepository(
         }
         response.ensureSuccess()
 
-        return NotificationJson.parseUnreadCount(response.bodyAsText())
+        return json.decodeFromString<UnreadCountResponseDto>(response.bodyAsText()).toUnreadCount()
     }
 
     suspend fun markRead(notificationId: String): AppNotificationReadResult {
@@ -50,7 +58,8 @@ class NotificationsRepository(
         }
         response.ensureSuccess()
 
-        return NotificationJson.parseReadResult(response.bodyAsText(), notificationId)
+        return json.decodeFromString<ReadResultResponseDto>(response.bodyAsText())
+            .toAppNotificationReadResult(notificationId)
     }
 
     suspend fun markAllRead(): MarkAllReadResult {
@@ -59,7 +68,7 @@ class NotificationsRepository(
         }
         response.ensureSuccess()
 
-        return NotificationJson.parseMarkAllReadResult(response.bodyAsText())
+        return json.decodeFromString<MarkAllReadResponseDto>(response.bodyAsText()).toMarkAllReadResult()
     }
 
     private suspend fun HttpResponse.ensureSuccess() {

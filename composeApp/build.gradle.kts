@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
     alias(libs.plugins.googleServices)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -66,6 +67,7 @@ kotlin {
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
             implementation(libs.ktor.client.core)
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

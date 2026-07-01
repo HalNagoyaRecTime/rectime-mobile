@@ -20,6 +20,7 @@ coil = "3.4.0"
 firebaseBom = "34.14.0"
 googleServices = "4.4.4"
 ktor = "3.4.3"
+kotlinx-serialization = "1.8.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -50,6 +51,7 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
@@ -59,3 +61,4 @@ composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMul
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 googleServices = { id = "com.google.gms.google-services", version.ref = "googleServices" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -19,11 +19,18 @@ import com.rectime.mobile.feature.notifications.NotificationsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 
 class RectimeFirebaseMessagingService : FirebaseMessagingService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val notificationsRepository = NotificationsRepository()
+
+    override fun onDestroy() {
+        super.onDestroy()
+        scope.cancel()
+    }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
@@ -83,7 +90,7 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
             .build()
 
-        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
+        notificationManager.notify(Random.nextInt(), notification)
     }
 
     private fun createNotificationChannel(notificationManager: NotificationManager) {
