@@ -1,0 +1,73 @@
+name: Bug Report
+description: バグの報告
+title: "[Bug] "
+labels: ["bug"]
+
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 優先度
+      default: 3
+      options:
+        - 高
+        - 中
+        - 低
+        - 未定
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 発生しているバグの内容を簡潔に記載してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: どのような操作をするとこのバグが起きるか、順番に書いてください
+      value: |
+        1.
+        2.
+        3.
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する挙動
+      description: 本来どうあるべきかを記載してください
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の挙動
+      description: 実際に起きている挙動を記載してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境
+      description: OS・ブラウザ・バージョンなど、判明している範囲で記載してください
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考URL
+      description: 参考になる資料やリンクがあれば記載してください（任意）
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 完了条件
+      value: |
+        - [ ] バグが修正されている
+        - [ ] テストが通過している
+        - [ ] レビューが完了している
+    validations:
+      required: true
