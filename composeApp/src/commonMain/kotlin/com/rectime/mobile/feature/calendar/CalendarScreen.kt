@@ -171,22 +171,24 @@ private fun CalendarScreenUI(
                         Text(text = "+2", color = AppTheme.colors.textSecondary)
                     }
 
-                    val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
-                    val accentStrong = AppTheme.colors.surfaceAccentStrong
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .align(Alignment.TopStart)
-                            .offset(y = nowOffset),
-                    ) {
-                        drawLine(
-                            color = accentStrong,
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, 0f),
-                            strokeWidth = 4f,
-                            cap = StrokeCap.Round,
-                        )
+                    if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
+                        val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
+                        val accentStrong = AppTheme.colors.surfaceAccentStrong
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .align(Alignment.TopStart)
+                                .offset(y = nowOffset),
+                        ) {
+                            drawLine(
+                                color = accentStrong,
+                                start = Offset(0f, 0f),
+                                end = Offset(size.width, 0f),
+                                strokeWidth = 4f,
+                                cap = StrokeCap.Round,
+                            )
+                        }
                     }
                 }
             }
