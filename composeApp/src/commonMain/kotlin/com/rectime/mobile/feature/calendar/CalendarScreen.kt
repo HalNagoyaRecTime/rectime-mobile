@@ -16,11 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,19 +31,10 @@ import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
-import kotlinx.coroutines.delay
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
-
-@OptIn(ExperimentalTime::class)
-private fun currentMinuteOfDay(): Int {
-    val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-    return now.hour * 60 + now.minute
-}
 
 private data class TimelineEvent(
     val title: String,
@@ -63,7 +50,11 @@ object CalendarScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
+        val viewModel = viewModel { CalendarViewModel() }
+        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+
         CalendarScreenUI(
+            nowMinute = nowMinute,
             onOpenMenu = { navigationController.openMenu() },
             onOpenNotifications = { navigationController.push(NotificationsScreen) },
             onOpenEventDetail = { navigationController.push(DetailScreen("calendar-event")) },
@@ -71,9 +62,9 @@ object CalendarScreen : Screen {
     }
 }
 
-@OptIn(ExperimentalTime::class)
 @Composable
 private fun CalendarScreenUI(
+    nowMinute: Int,
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenEventDetail: () -> Unit,
@@ -86,16 +77,6 @@ private fun CalendarScreenUI(
     val hourStart = 8
     val hourEnd = 22
     val hourHeight = 72.dp
-    var nowMinute by remember { mutableStateOf(currentMinuteOfDay()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            val second = Clock.System.now()
-                .toLocalDateTime(TimeZone.currentSystemDefault())
-                .second
-            delay((60 - second) * 1000L)
-            nowMinute = currentMinuteOfDay()
-        }
-    }
 
     RootScreenScaffold(
         title = "カレンダー",
