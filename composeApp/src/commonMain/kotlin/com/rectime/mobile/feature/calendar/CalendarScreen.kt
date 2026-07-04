@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,6 +31,8 @@ import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
@@ -47,7 +50,11 @@ object CalendarScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
+        val viewModel = viewModel { CalendarViewModel() }
+        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+
         CalendarScreenUI(
+            nowMinute = nowMinute,
             onOpenMenu = { navigationController.openMenu() },
             onOpenNotifications = { navigationController.push(NotificationsScreen) },
             onOpenEventDetail = { navigationController.push(DetailScreen("calendar-event")) },
@@ -57,6 +64,7 @@ object CalendarScreen : Screen {
 
 @Composable
 private fun CalendarScreenUI(
+    nowMinute: Int,
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenEventDetail: () -> Unit,
@@ -69,7 +77,6 @@ private fun CalendarScreenUI(
     val hourStart = 8
     val hourEnd = 22
     val hourHeight = 72.dp
-    val nowMinute = 13 * 60 + 20
 
     RootScreenScaffold(
         title = "カレンダー",
@@ -164,22 +171,24 @@ private fun CalendarScreenUI(
                         Text(text = "+2", color = AppTheme.colors.textSecondary)
                     }
 
-                    val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
-                    val accentStrong = AppTheme.colors.surfaceAccentStrong
-                    Canvas(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .align(Alignment.TopStart)
-                            .offset(y = nowOffset),
-                    ) {
-                        drawLine(
-                            color = accentStrong,
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, 0f),
-                            strokeWidth = 4f,
-                            cap = StrokeCap.Round,
-                        )
+                    if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
+                        val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
+                        val accentStrong = AppTheme.colors.surfaceAccentStrong
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .align(Alignment.TopStart)
+                                .offset(y = nowOffset),
+                        ) {
+                            drawLine(
+                                color = accentStrong,
+                                start = Offset(0f, 0f),
+                                end = Offset(size.width, 0f),
+                                strokeWidth = 4f,
+                                cap = StrokeCap.Round,
+                            )
+                        }
                     }
                 }
             }
