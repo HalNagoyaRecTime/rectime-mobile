@@ -1,14 +1,26 @@
 package com.rectime.mobile.feature.calendar
 
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.createAppHttpClient
+import com.rectime.mobile.core.network.createHttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.toLocalTime
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
@@ -28,7 +40,62 @@ class CalendarViewModel : ViewModel() {
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = currentMinuteOfDay(),
     )
+
+    private val client = createAppHttpClient()
+
+    private val _events = mutableStateOf(listOf<TimelineEvent>())
+    val events: State<List<TimelineEvent>> = _events
+
+    var isLoading by mutableStateOf(false)
+        private set
+
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    val startTimeFormat = LocalTime.Format {
+        hour()
+        minute()
+    }
+
+
+    fun fetchEvents() {
+        viewModelScope.launch {
+            try {
+                isLoading = true
+                error = null
+                val response = client.get(apiBaseUrl + "/api/v1/events")
+                val body: EventsResponse =
+                    response.body()
+                println(body)
+                val timelineEvents = body.events.map {
+                    val startTime = LocalTime.parse(it.f_time, format = startTimeFormat)
+                    TimelineEvent(
+                        title = it.f_event_name,
+                        venue = it.f_place,
+                        startMinuteOfDay = startTime.hour*60 + startTime.minute,
+                        durationMinutes = it.f_duration.toInt(),
+                        lane = 0,
+                        laneCount = 1
+                    )
+
+                }
+                _events.value = timelineEvents
+
+            } catch (e: Exception) {
+                error = e.message
+                e.printStackTrace()
+            } finally {
+                isLoading = false
+            }
+
+        }
+
+
+
+
+    }
 }
+
 
 @OptIn(ExperimentalTime::class)
 private fun currentMinuteOfDay(): Int {

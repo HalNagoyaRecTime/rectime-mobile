@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,15 +36,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
+import io.ktor.events.Events
 
-private data class TimelineEvent(
-    val title: String,
-    val venue: String,
-    val startMinuteOfDay: Int,
-    val durationMinutes: Int,
-    val lane: Int,
-    val laneCount: Int,
-)
 
 object CalendarScreen : Screen {
     override val key: String = "calendar"
@@ -52,12 +46,18 @@ object CalendarScreen : Screen {
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel { CalendarViewModel() }
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+        val events by viewModel.events
+
+        LaunchedEffect(Unit){
+            viewModel.fetchEvents()
+        }
 
         CalendarScreenUI(
             nowMinute = nowMinute,
             onOpenMenu = { navigationController.openMenu() },
             onOpenNotifications = { navigationController.push(NotificationsScreen) },
             onOpenEventDetail = { navigationController.push(DetailScreen("calendar-event")) },
+            events
         )
     }
 }
@@ -68,12 +68,8 @@ private fun CalendarScreenUI(
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenEventDetail: () -> Unit,
+    events: List<TimelineEvent>
 ) {
-    val events = listOf(
-        TimelineEvent("U18 準決勝", "Aコート", startMinuteOfDay = 10 * 60, durationMinutes = 80, lane = 0, laneCount = 2),
-        TimelineEvent("トップリーグ", "Bコート", startMinuteOfDay = 10 * 60 + 10, durationMinutes = 70, lane = 1, laneCount = 2),
-        TimelineEvent("運営MTG", "会議室", startMinuteOfDay = 13 * 60 + 30, durationMinutes = 45, lane = 0, laneCount = 1),
-    )
     val hourStart = 8
     val hourEnd = 22
     val hourHeight = 72.dp
