@@ -30,6 +30,7 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
+        notificationsRepository.close()
     }
 
     override fun onNewToken(token: String) {

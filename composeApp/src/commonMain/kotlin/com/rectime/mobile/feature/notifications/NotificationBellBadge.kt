@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -30,6 +31,10 @@ fun NotificationBellBadge(
 ) {
     val repository = remember { NotificationsRepository() }
     val unreadCount by NotificationUnreadStore.unreadCount.collectAsStateWithLifecycle()
+
+    DisposableEffect(repository) {
+        onDispose { repository.close() }
+    }
 
     LaunchedEffect(repository) {
         runCatching {

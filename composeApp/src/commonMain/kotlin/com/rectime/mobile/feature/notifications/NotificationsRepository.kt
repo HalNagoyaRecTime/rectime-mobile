@@ -35,6 +35,8 @@ class NotificationsRepository(
         response.ensureSuccess()
 
         val body = response.bodyAsText().trim()
+        // TODO: バックエンドのレスポンススキーマが { "notifications": [...] } に統一されたら
+        // この分岐をなくし、notifications が null の場合はエラーとして扱うようにする
         val notifications = if (body.startsWith("[")) {
             json.decodeFromString<List<NotificationDto>>(body)
         } else {
@@ -76,6 +78,10 @@ class NotificationsRepository(
 
         val responseText = runCatching { bodyAsText() }.getOrNull().orEmpty()
         error("HTTP ${status.value}: $responseText")
+    }
+
+    fun close() {
+        client.close()
     }
 }
 
