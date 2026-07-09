@@ -84,8 +84,19 @@ object RankingScreen : Screen {
                 }
             }
 
-            uiState.rankingItems.forEach { item ->
-                RankingRow(item = item)
+            if (uiState.rankingItems.isEmpty()) {
+                Text(
+                    text = "ランキングデータを取得できませんでした",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp),
+                    textAlign = TextAlign.Center,
+                    color = AppTheme.colors.textSecondary,
+                )
+            } else {
+                uiState.rankingItems.forEach { item ->
+                    RankingRow(item = item)
+                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
