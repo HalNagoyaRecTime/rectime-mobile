@@ -100,7 +100,7 @@ android {
         versionName = "1.0"
         val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
             ?: findProperty("API_BASE_URL") as String?
-            ?: "https://rectime-api.rectime-project.workers.dev"
+            ?: "http://10.0.2.2:8787"
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
     packaging {

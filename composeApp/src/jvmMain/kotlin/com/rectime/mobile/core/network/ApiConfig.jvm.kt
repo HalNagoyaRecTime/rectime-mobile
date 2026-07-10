@@ -1,5 +1,7 @@
 package com.rectime.mobile.core.network
 
+import com.rectime.mobile.core.config.apiBaseUrl as configuredApiBaseUrl
+
 actual object ApiConfig {
-    actual val apiBaseUrl: String = "https://rectime-api.rectime-project.workers.dev"
+    actual val apiBaseUrl: String = configuredApiBaseUrl
 }

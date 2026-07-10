@@ -10,6 +10,6 @@
 		<true/>
 	</dict>
 	<key>API_BASE_URL</key>
-	<string>http://localhost:8787</string>
+	<string>$(API_BASE_URL)</string>
 </dict>
 </plist>
