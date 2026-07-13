@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,14 +24,11 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.detail.DetailScreen
-import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
 private data class TimelineEvent(
     val title: String,
@@ -54,7 +49,6 @@ object CalendarScreen : Screen {
 
         CalendarScreenUI(
             nowMinute = nowMinute,
-            onOpenNotifications = { navigationController.push(NotificationsScreen) },
             onOpenEventDetail = { navigationController.push(DetailScreen("calendar-event")) },
         )
     }
@@ -63,7 +57,6 @@ object CalendarScreen : Screen {
 @Composable
 private fun CalendarScreenUI(
     nowMinute: Int,
-    onOpenNotifications: () -> Unit,
     onOpenEventDetail: () -> Unit,
 ) {
     val events = listOf(
@@ -78,15 +71,6 @@ private fun CalendarScreenUI(
     RootScreenScaffold(
         title = "カレンダー",
         horizontalPadding = false,
-        onTrailingClick = onOpenNotifications,
-        trailing = {
-            Icon(
-                imageVector = SolidGroup.Bell,
-                contentDescription = "通知",
-                tint = AppTheme.colors.textPrimary,
-                modifier = Modifier.size(20.dp),
-            )
-        },
     ) {
         item {
             val hPad = AppTheme.layout.screenHorizontalPadding

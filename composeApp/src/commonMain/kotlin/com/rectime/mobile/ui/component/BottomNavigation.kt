@@ -29,7 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.calendar.CalendarScreen
-import com.rectime.mobile.feature.home.HomeScreen
+import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CalendarDays
@@ -54,7 +54,7 @@ fun BottomNavigationBar(
 ) {
     val items = listOf(
     NavigationItemConfig(CalendarScreen, "カレンダー", SolidGroup.CalendarDays),
-    NavigationItemConfig(HomeScreen, "通知", SolidGroup.Bell),
+    NavigationItemConfig(NotificationsScreen, "通知", SolidGroup.Bell),
     NavigationItemConfig(SettingsScreen, "設定", SolidGroup.Gear),
     NavigationItemConfig(RankingScreen, "ランキング", SolidGroup.Trophy),
 )

@@ -7,7 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.ui.component.PushScreenScaffold
+import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
 object NotificationsScreen : Screen {
@@ -15,9 +15,8 @@ object NotificationsScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        PushScreenScaffold(
+        RootScreenScaffold(
             title = "通知",
-            onBack = { navigationController.requestPop() },
         ) {
             item {
                 Text(
