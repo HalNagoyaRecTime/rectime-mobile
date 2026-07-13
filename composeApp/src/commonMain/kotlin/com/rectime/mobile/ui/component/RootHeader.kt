@@ -1,7 +1,6 @@
 package com.rectime.mobile.ui.component
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -11,8 +10,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rectime.mobile.core.model.UserProfile
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -25,12 +25,11 @@ fun RootHeader(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .height(AppTheme.layout.headerAction),
-        horizontalArrangement = Arrangement.Start,
-        verticalAlignment = Alignment.CenterVertically,
+        contentAlignment = Alignment.Center,
     ) {
         AppIconButton(
             onClick = onOpenMenu,
@@ -40,21 +39,25 @@ fun RootHeader(
                     modifier = Modifier.fillMaxSize(),
                 )
             },
+            modifier = Modifier.align(Alignment.CenterStart),
         )
         Text(
             text = title,
             color = AppTheme.colors.textPrimary,
             fontWeight = FontWeight.SemiBold,
+            fontSize = 18.sp,
+            textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp),
+                .fillMaxWidth()
+                .padding(horizontal = AppTheme.layout.headerAction),
         )
         if (trailing != null || onTrailingClick != null) {
             AppIconButton(
                 onClick = onTrailingClick,
                 content = trailing,
+                modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
     }
