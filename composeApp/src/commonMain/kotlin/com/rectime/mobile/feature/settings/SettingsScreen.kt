@@ -7,7 +7,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.ui.component.PushScreenScaffold
+import com.rectime.mobile.core.model.MockUser
+import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
 object SettingsScreen : Screen {
@@ -15,9 +16,10 @@ object SettingsScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        PushScreenScaffold(
+        RootScreenScaffold(
             title = "設定",
-            onBack = { navigationController.requestPop() },
+            profile = MockUser.me,
+            onOpenMenu = { navigationController.openMenu() }
         ) {
             item {
                 Text(
