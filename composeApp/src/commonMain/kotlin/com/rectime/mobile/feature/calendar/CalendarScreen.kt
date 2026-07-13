@@ -25,7 +25,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
@@ -55,7 +54,6 @@ object CalendarScreen : Screen {
 
         CalendarScreenUI(
             nowMinute = nowMinute,
-            onOpenMenu = { navigationController.openMenu() },
             onOpenNotifications = { navigationController.push(NotificationsScreen) },
             onOpenEventDetail = { navigationController.push(DetailScreen("calendar-event")) },
         )
@@ -65,7 +63,6 @@ object CalendarScreen : Screen {
 @Composable
 private fun CalendarScreenUI(
     nowMinute: Int,
-    onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenEventDetail: () -> Unit,
 ) {
@@ -80,8 +77,6 @@ private fun CalendarScreenUI(
 
     RootScreenScaffold(
         title = "カレンダー",
-        profile = MockUser.me,
-        onOpenMenu = onOpenMenu,
         horizontalPadding = false,
         onTrailingClick = onOpenNotifications,
         trailing = {
