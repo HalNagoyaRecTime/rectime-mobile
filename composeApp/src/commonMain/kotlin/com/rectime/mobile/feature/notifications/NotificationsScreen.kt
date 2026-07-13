@@ -24,7 +24,7 @@ object NotificationsScreen : Screen {
     override fun Content(navigationController: NavigationController) {
         RootScreenScaffold(
             title = "通知",
-            onTrailingClick = { /* TODO: 通知一覧の再取得処理を実装予定 */ },
+            onTrailingClick = { /* TODO: 通知一覧の再取得用のコールバックを置く予定です */ },
             trailing = {
                 Icon(
                     imageVector = SolidGroup.ArrowsRotate,
