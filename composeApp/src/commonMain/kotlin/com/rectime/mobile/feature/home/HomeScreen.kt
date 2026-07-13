@@ -35,15 +35,6 @@ object HomeScreen : Screen {
             title = "ホーム",
             profile = MockUser.me,
             onOpenMenu = { navigationController.openMenu() },
-            onTrailingClick = { navigationController.push(NotificationsScreen) },
-            trailing = {
-                Icon(
-                    imageVector = SolidGroup.Bell,
-                    contentDescription = "通知",
-                    tint = AppTheme.colors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            },
         ) {
             item {
                 when {
