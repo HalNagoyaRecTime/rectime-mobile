@@ -43,7 +43,7 @@ object NotificationsScreen : Screen {
             }
             items(40) { index ->
                 PressSurface(
-                    onClick = { navigationController.push(NotificationDetailScreen(id = index.toString())) },
+                    onClick = { navigationController.push(NotificationDetailScreen(id = (index+1).toString())) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
