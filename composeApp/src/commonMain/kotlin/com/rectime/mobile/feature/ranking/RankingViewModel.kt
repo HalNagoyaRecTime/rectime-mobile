@@ -10,7 +10,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 
+@Serializable
 private data class RankingResponse(
     val className: String,
     val point: Int,
@@ -18,6 +21,10 @@ private data class RankingResponse(
 
 class RankingViewModel : ViewModel() {
     private val httpClient = createAppHttpClient()
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+    }
 
     private val _uiState = MutableStateFlow(RankingUiState())
     val uiState: StateFlow<RankingUiState> = _uiState.asStateFlow()
@@ -33,7 +40,9 @@ class RankingViewModel : ViewModel() {
                     .get("$apiBaseUrl/ranking")
                     .bodyAsText()
 
-                val response = parseRankingResponse(responseText)
+                val response = json.decodeFromString<List<RankingResponse>>(
+                    responseText,
+                )
 
                 _uiState.value = RankingUiState(
                     rankingItems = response.mapIndexed { index, item ->
@@ -42,7 +51,7 @@ class RankingViewModel : ViewModel() {
                             className = item.className,
                             point = item.point,
                         )
-                    }
+                    },
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -52,17 +61,6 @@ class RankingViewModel : ViewModel() {
                 )
             }
         }
-    }
-
-    private fun parseRankingResponse(responseText: String): List<RankingResponse> {
-        val regex = Regex("""\{"className":"([^"]+)","point":(\d+)\}""")
-
-        return regex.findAll(responseText).map { matchResult ->
-            RankingResponse(
-                className = matchResult.groupValues[1],
-                point = matchResult.groupValues[2].toInt(),
-            )
-        }.toList()
     }
 
     override fun onCleared() {
