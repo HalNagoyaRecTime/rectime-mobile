@@ -16,7 +16,6 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.detail.DetailScreen
-import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -38,15 +37,6 @@ data class ScheduleDetailScreen(val id: String) : Screen {
         PushScreenScaffold(
             title = "スケジュール詳細",
             onBack = { navigationController.requestPop() },
-            bottomNavigation = {
-                val currentRoot = navigationController.state.rootScreen
-                if (currentRoot != null) {
-                    BottomNavigationBar(
-                        currentScreen = currentRoot,
-                        onSelectRoot = { screen -> navigationController.setRootAndClearStack(screen) },
-                    )
-                }
-            },
         ) {
             item {
                 Text(

@@ -65,7 +65,6 @@ fun PushScreenScaffold(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
-    bottomNavigation: (@Composable () -> Unit)? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
@@ -76,7 +75,6 @@ fun PushScreenScaffold(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
-                bottom = if (bottomNavigation != null) AppTheme.layout.rootBottomNavigationInset else 0.dp,
                 start = if (horizontalPadding) hPad else 0.dp,
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
@@ -94,18 +92,8 @@ fun PushScreenScaffold(
         )
         bottomContent?.let {
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(
-                        horizontal = 32.dp,
-                        vertical = if (bottomNavigation != null) AppTheme.layout.rootBottomNavigationInset else 48.dp,
-                    ),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 32.dp, vertical = 48.dp,),
             ) {
-                it()
-            }
-        }
-        bottomNavigation?.let {
-            Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
                 it()
             }
         }
