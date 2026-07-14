@@ -15,7 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.detail.DetailScreen
+import com.rectime.mobile.feature.competition.CompetitionDetailScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -65,7 +65,7 @@ data class ScheduleDetailScreen(val id: String) : Screen {
             item {
                 ScheduleRelatedLink(
                     label = "競技詳細",
-                    onClick = { navigationController.push(DetailScreen(id = id)) },
+                    onClick = { navigationController.push(CompetitionDetailScreen(id = id)) },
                 )
             }
         }

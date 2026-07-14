@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.detail.DetailScreen
+import com.rectime.mobile.feature.competition.CompetitionDetailScreen
 import com.rectime.mobile.feature.schedule.ScheduleDetailScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
@@ -51,7 +51,7 @@ data class NotificationDetailScreen(val id: String) : Screen {
             item {
                 NotificationRelatedLink(
                     label = "競技詳細",
-                    onClick = { navigationController.push(DetailScreen(id = id)) },
+                    onClick = { navigationController.push(CompetitionDetailScreen(id = id)) },
                 )
             }
         }

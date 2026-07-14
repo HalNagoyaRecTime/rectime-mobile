@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.detail
+package com.rectime.mobile.feature.competition
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,8 +14,8 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
-data class DetailScreen(val id: String) : Screen {
-    override val key: String = "detail_$id"
+data class CompetitionDetailScreen(val id: String) : Screen {
+    override val key: String = "competition_detail_$id"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
