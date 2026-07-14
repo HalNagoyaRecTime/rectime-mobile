@@ -15,6 +15,7 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.detail.DetailScreen
 import com.rectime.mobile.feature.schedule.ScheduleDetailScreen
+import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -29,6 +30,15 @@ data class NotificationDetailScreen(val id: String) : Screen {
         PushScreenScaffold(
             title = "通知詳細",
             onBack = { navigationController.requestPop() },
+            bottomNavigation = {
+                val currentRoot = navigationController.state.rootScreen
+                if (currentRoot != null) {
+                    BottomNavigationBar(
+                        currentScreen = currentRoot,
+                        onSelectRoot = { screen -> navigationController.setRootAndClearStack(screen) },
+                    )
+                }
+            },
         ) {
             item {
                 Text(

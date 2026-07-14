@@ -19,6 +19,17 @@ class NavigationController(
         )
     }
 
+    fun setRootAndClearStack(screen: Screen) {
+        state = state.copy(
+            rootScreen = screen,
+            pushStack = emptyList(),
+            pushTransition = PushTransitionState(),
+            menuProgress = 0f,
+            activeGesture = ActiveGesture.None,
+            backDragOffsetPx = 0f,
+        )
+    }
+
     fun push(screen: Screen, source: PushTransitionSource = PushTransitionSource.Default) {
         if (state.pushTransition.mode == PushTransitionMode.Enter) return
         val entry = PushEntry(

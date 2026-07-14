@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -37,6 +38,15 @@ data class DetailScreen(val id: String) : Screen {
                     modifier = Modifier.fillMaxWidth()
                 ){
                     Text("呼び出し情報")
+                }
+            },
+            bottomNavigation = {
+                val currentRoot = navigationController.state.rootScreen
+                if (currentRoot != null) {
+                    BottomNavigationBar(
+                        currentScreen = currentRoot,
+                        onSelectRoot = { screen -> navigationController.setRootAndClearStack(screen) },
+                    )
                 }
             },
         ) {
