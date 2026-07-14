@@ -20,6 +20,7 @@ class NavigationController(
     }
 
     fun push(screen: Screen, source: PushTransitionSource = PushTransitionSource.Default) {
+        if (state.pushTransition.mode == PushTransitionMode.Enter) return
         val entry = PushEntry(
             key = "${screen.key}_${Clock.nextId()}",
             screen = screen,
@@ -49,6 +50,7 @@ class NavigationController(
     }
 
     fun presentSheet(screen: Screen) {
+        if (state.sheet != null) return
         val entry = SheetEntry(
             key = "${screen.key}_${Clock.nextId()}",
             screen = screen
