@@ -44,6 +44,7 @@ data class DetailScreen(val id: String) : Screen {
                 Text(
                     text = competitionName,
                     style = MaterialTheme.typography.headlineMedium,
+                    color = AppTheme.colors.textPrimary,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
