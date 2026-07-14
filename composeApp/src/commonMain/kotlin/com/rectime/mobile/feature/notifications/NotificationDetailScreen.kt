@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,16 +29,6 @@ data class NotificationDetailScreen(val id: String) : Screen {
         PushScreenScaffold(
             title = "通知詳細",
             onBack = { navigationController.requestPop() },
-            bottomContent = {
-                Button(
-                    onClick = {
-                        //既読処理を後程追加
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("既読にする")
-                }
-            },
         ) {
             item {
                 Text(

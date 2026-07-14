@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,16 +37,6 @@ data class ScheduleDetailScreen(val id: String) : Screen {
         PushScreenScaffold(
             title = "スケジュール詳細",
             onBack = { navigationController.requestPop() },
-            bottomContent = {
-                Button(
-                    onClick = {
-                        //出欠登録の処理を後程追加
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("出欠登録")
-                }
-            },
         ) {
             item {
                 Text(
