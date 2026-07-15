@@ -42,6 +42,7 @@ object RankingScreen : Screen {
         val viewModel: RankingViewModel = viewModel {
             RankingViewModel()
         }
+
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
         Column(
@@ -50,63 +51,102 @@ object RankingScreen : Screen {
                 .background(AppTheme.colors.surfacePrimary)
                 .padding(horizontal = 18.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 32.dp, bottom = 24.dp)
-            ) {
-                Text(
-                    text = "ランキング",
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    color = AppTheme.colors.textPrimary,
-                )
+            RankingHeader()
 
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(28.dp)
-                        .clickable { /* TODO: 表示切替機能を実装予定 */ }
-                        .border(
-                            width = 1.dp,
-                            color = AppTheme.colors.borderStrong,
-                            shape = RoundedCornerShape(4.dp),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = SolidGroup.List,
-                        contentDescription = "表示切り替え",
-                        modifier = Modifier.size(14.dp),
-                        tint = AppTheme.colors.textPrimary,
+            when (val state = uiState) {
+                RankingUiState.Loading -> {
+                    RankingMessage(
+                        message = "読み込み中...",
                     )
                 }
-            }
 
-            if (uiState.rankingItems.isEmpty()) {
-                Text(
-                    text = "ランキングデータを取得できませんでした",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 24.dp),
-                    textAlign = TextAlign.Center,
-                    color = AppTheme.colors.textSecondary,
-                )
-            } else {
-                uiState.rankingItems.forEach { item ->
-                    RankingRow(item = item)
+                is RankingUiState.Error -> {
+                    RankingMessage(
+                        message = state.message,
+                    )
+                }
+
+                is RankingUiState.Success -> {
+                    if (state.rankingItems.isEmpty()) {
+                        RankingMessage(
+                            message = "現在ランキングデータはありません",
+                        )
+                    } else {
+                        state.rankingItems.forEach { item ->
+                            RankingRow(item = item)
+                        }
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
+
+            Spacer(
+                modifier = Modifier.windowInsetsBottomHeight(
+                    WindowInsets.navigationBars
+                )
+            )
         }
     }
 }
 
 @Composable
-private fun RankingRow(item: RankingItem) {
+private fun RankingHeader() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 32.dp, bottom = 24.dp)
+    ) {
+        Text(
+            text = "ランキング",
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            color = AppTheme.colors.textPrimary,
+        )
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .size(28.dp)
+                .clickable {
+                    // TODO: 表示切り替え機能を実装予定
+                }
+                .border(
+                    width = 1.dp,
+                    color = AppTheme.colors.borderStrong,
+                    shape = RoundedCornerShape(4.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = SolidGroup.List,
+                contentDescription = "表示切り替え",
+                modifier = Modifier.size(14.dp),
+                tint = AppTheme.colors.textPrimary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RankingMessage(
+    message: String,
+) {
+    Text(
+        text = message,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp),
+        textAlign = TextAlign.Center,
+        color = AppTheme.colors.textSecondary,
+    )
+}
+
+@Composable
+private fun RankingRow(
+    item: RankingItem,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -119,7 +159,10 @@ private fun RankingRow(item: RankingItem) {
                 color = AppTheme.colors.navigationSurface,
                 shape = RoundedCornerShape(12.dp),
             )
-            .padding(horizontal = 16.dp, vertical = 18.dp)
+            .padding(
+                horizontal = 16.dp,
+                vertical = 18.dp,
+            )
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

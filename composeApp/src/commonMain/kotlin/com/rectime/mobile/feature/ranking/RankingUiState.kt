@@ -6,6 +6,14 @@ data class RankingItem(
     val point: Int,
 )
 
-data class RankingUiState(
-    val rankingItems: List<RankingItem> = emptyList(),
-)
+sealed interface RankingUiState {
+    data object Loading : RankingUiState
+
+    data class Success(
+        val rankingItems: List<RankingItem>,
+    ) : RankingUiState
+
+    data class Error(
+        val message: String,
+    ) : RankingUiState
+}

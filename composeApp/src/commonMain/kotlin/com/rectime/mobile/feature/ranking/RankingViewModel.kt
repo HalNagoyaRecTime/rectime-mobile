@@ -26,7 +26,9 @@ class RankingViewModel : ViewModel() {
         ignoreUnknownKeys = true
     }
 
-    private val _uiState = MutableStateFlow(RankingUiState())
+    private val _uiState =
+        MutableStateFlow<RankingUiState>(RankingUiState.Loading)
+
     val uiState: StateFlow<RankingUiState> = _uiState.asStateFlow()
 
     init {
@@ -35,29 +37,46 @@ class RankingViewModel : ViewModel() {
 
     fun fetchRanking() {
         viewModelScope.launch {
+            _uiState.value = RankingUiState.Loading
+
             try {
                 val responseText = httpClient
                     .get("$apiBaseUrl/ranking")
                     .bodyAsText()
 
-                val response = json.decodeFromString<List<RankingResponse>>(
-                    responseText,
-                )
+                val response =
+                    json.decodeFromString<List<RankingResponse>>(responseText)
 
-                _uiState.value = RankingUiState(
-                    rankingItems = response.mapIndexed { index, item ->
-                        RankingItem(
-                            rank = index + 1,
-                            className = item.className,
-                            point = item.point,
-                        )
-                    },
+                val sortedResponse = response.sortedByDescending { it.point }
+
+                var previousPoint: Int? = null
+                var previousRank = 0
+
+                val rankingItems = sortedResponse.mapIndexed { index, item ->
+                    val rank = if (item.point == previousPoint) {
+                        previousRank
+                    } else {
+                        index + 1
+                    }
+
+                    previousPoint = item.point
+                    previousRank = rank
+
+                    RankingItem(
+                        rank = rank,
+                        className = item.className,
+                        point = item.point,
+                    )
+                }
+
+                _uiState.value = RankingUiState.Success(
+                    rankingItems = rankingItems,
                 )
             } catch (e: Exception) {
                 e.printStackTrace()
 
-                _uiState.value = RankingUiState(
-                    rankingItems = emptyList(),
+                _uiState.value = RankingUiState.Error(
+                    message = "ランキングデータを取得できませんでした",
                 )
             }
         }
