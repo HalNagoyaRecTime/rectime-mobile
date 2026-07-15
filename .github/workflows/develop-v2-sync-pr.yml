@@ -1,0 +1,32 @@
+name: Create PR to develop-v2
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create or update PR into develop-v2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base develop-v2 --head develop --state open --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh pr create \
+              --base develop-v2 \
+              --head develop \
+              --title "Sync: develop -> develop-v2" \
+              --body "develop の更新を develop-v2 に反映するための自動生成PRです。"
+          else
+            echo "develop -> develop-v2 の open な PR は既に存在するためスキップします。"
+          fi
