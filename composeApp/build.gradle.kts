@@ -77,10 +77,13 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
-        jvmMain.dependencies {
-            implementation(compose.desktop.currentOs)
-            implementation(libs.kotlinx.coroutinesSwing)
-            implementation(libs.ktor.client.java)
+        jvmMain {
+            kotlin.srcDir("build/generated/jvmConfig/kotlin")
+            dependencies {
+                implementation(compose.desktop.currentOs)
+                implementation(libs.kotlinx.coroutinesSwing)
+                implementation(libs.ktor.client.java)
+            }
         }
     }
 }
@@ -122,6 +125,31 @@ android {
 dependencies {
     debugImplementation(libs.compose.uiTooling)
 }
+
+val generateJvmAppConfig = tasks.register("generateJvmAppConfig") {
+    val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
+        ?: findProperty("API_BASE_URL") as String?
+        ?: "http://localhost:8787"
+    val outputDir = layout.buildDirectory.dir("generated/jvmConfig/kotlin")
+    inputs.property("apiBaseUrl", apiBaseUrl)
+    outputs.dir(outputDir)
+    doLast {
+        val file = outputDir.get().file("com/rectime/mobile/core/config/JvmAppConfig.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            """
+            package com.rectime.mobile.core.config
+
+            internal object JvmAppConfig {
+                const val API_BASE_URL: String = "$apiBaseUrl"
+            }
+            """.trimIndent()
+        )
+    }
+}
+
+tasks.matching { it.name == "compileKotlinJvm" || it.name.startsWith("jvmSourcesJar") }
+    .configureEach { dependsOn(generateJvmAppConfig) }
 
 compose.desktop {
     application {

@@ -5,6 +5,8 @@
 xcuserdata
 !src/**/build/
 local.properties
+iosApp/Configuration/Debug.xcconfig
+iosApp/Configuration/Release.xcconfig
 .idea
 .idea/misc.xml
 .claude
