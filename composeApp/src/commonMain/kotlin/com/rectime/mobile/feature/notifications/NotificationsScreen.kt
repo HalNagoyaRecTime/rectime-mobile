@@ -262,10 +262,10 @@ private fun ReadDot(isRead: Boolean) {
 @Composable
 private fun SeverityPill(severity: NotificationSeverity) {
     val (label, color) = when (severity) {
-        NotificationSeverity.Info -> "Info" to AppTheme.colors.surfaceMuted
-        NotificationSeverity.Success -> "Success" to Color(0xFFDDF7E6)
-        NotificationSeverity.Warning -> "Warning" to Color(0xFFFFF0C2)
-        NotificationSeverity.Error -> "Error" to Color(0xFFFFD9D9)
+        NotificationSeverity.Info -> "情報" to AppTheme.colors.surfaceMuted
+        NotificationSeverity.Success -> "成功" to Color(0xFFDDF7E6)
+        NotificationSeverity.Warning -> "警告" to Color(0xFFFFF0C2) 
+        NotificationSeverity.Error -> "エラー" to Color(0xFFFFD9D9)
     }
     Text(
         text = label,

@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.model.MockUser
 import com.rectime.mobile.core.network.ApiConfig
+import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -12,7 +13,7 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 
 class NotificationsRepository(
-    private val client: HttpClient = HttpClient(),
+    private val client: HttpClient = createAppHttpClient(),
 ) {
     private val apiV1Base = "${ApiConfig.apiBaseUrl.trimEnd('/')}/api/v1"
     private val json = Json { ignoreUnknownKeys = true }
