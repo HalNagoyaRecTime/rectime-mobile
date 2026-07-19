@@ -8,6 +8,9 @@ import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.network.toModel
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,18 +34,32 @@ class DetailViewModel(
             _uiState.value = DetailUiState(isLoading = true)
 
             try {
-                val response: EventDetailResponse =
-                    httpClient.get("$apiBaseUrl/api/v1/events/$eventId").body()
+                val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId")
+
+                if (!response.status.isSuccess()) {
+                    _uiState.value = DetailUiState(
+                        isLoading = false,
+                        error = when (response.status) {
+                            HttpStatusCode.NotFound -> "競技が見つかりません"
+                            else -> "競技情報の取得に失敗しました"
+                        },
+                    )
+                    return@launch
+                }
+
+                val eventDetail: EventDetailResponse = response.body()
 
                 _uiState.value = DetailUiState(
                     isLoading = false,
-                    eventDetail = response.toModel(),
+                    eventDetail = eventDetail.toModel(),
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 e.printStackTrace()
                 _uiState.value = DetailUiState(
                     isLoading = false,
-                    error = e.toString(),
+                    error = "競技情報の取得に失敗しました",
                 )
             }
         }
