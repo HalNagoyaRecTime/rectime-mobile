@@ -24,11 +24,6 @@ data class DetailScreen(val eventId: Int) : Screen {
     @Composable
     override fun Content(navigationController: NavigationController) {
 
-        //競技のダミーデータ
-//        val competitionName = "紙飛行機飛ばし"
-//        val competitionDescription =
-//            "各自で作成した紙飛行機を当日持参し、決められた位置から一斉に飛ばします。"+
-//            "紙飛行機が停止した地点までの距離を計測し、最も遠くまで飛ばした参加者が優勝となります。"
         val viewModel = viewModel { DetailViewModel(eventId) }
         val uiState by viewModel.uiState.collectAsState()
 
@@ -57,25 +52,26 @@ data class DetailScreen(val eventId: Int) : Screen {
                     uiState.error != null -> {
                         Text(
                             text = uiState.error ?: "不明なエラー",
-                            color = AppTheme.colors.textSecondary,
+                            color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(vertical = 12.dp),
                         )
                     }
 
                     uiState.eventDetail != null -> {
-                        val event = uiState.eventDetail!!
+                        uiState.eventDetail?.let { event ->
+                            Text(
+                                text = event.eventName,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                            )
 
-                        Text(
-                            text = event.eventName,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(vertical = 12.dp),
-                        )
-                        Text(
-                            text = event.summary ?: "説明はありません",
-                            color = AppTheme.colors.textSecondary,
-                            modifier = Modifier.padding(vertical = 12.dp),
-                        )
+                            Text(
+                                text = event.summary ?: "説明はありません",
+                                color = AppTheme.colors.textSecondary,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                            )
+                        }
                     }
                 }
             }
