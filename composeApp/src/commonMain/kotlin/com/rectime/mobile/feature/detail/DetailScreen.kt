@@ -63,6 +63,7 @@ data class DetailScreen(val eventId: Int) : Screen {
                                 text = event.eventName,
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
+                                color = AppTheme.colors.textPrimary,
                                 modifier = Modifier.padding(vertical = 12.dp),
                             )
 
