@@ -6,33 +6,27 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class EventDetailResponse(
-    @SerialName("f_event_id")
+    @SerialName("event_id")
     val eventId: Int,
-    @SerialName("f_event_code")
-    val eventCode: String,
-    @SerialName("f_event_name")
+    @SerialName("event_name")
     val eventName: String,
-    @SerialName("f_time")
-    val time: String,
-    @SerialName("f_duration")
-    val duration: String,
-    @SerialName("f_place")
-    val place: String,
-    @SerialName("f_gather_time")
-    val gatherTime: String,
-    @SerialName("f_summary")
-    val summary: String?,
+    @SerialName("venue")
+    val venue: String,
+    @SerialName("start_time")
+    val startTime: String,
+    @SerialName("end_time")
+    val endTime: String,
+    @SerialName("rule_text")
+    val ruleText: String?,
 )
 
 fun EventDetailResponse.toModel(): EventDetail {
     return EventDetail(
         eventId = eventId,
-        eventCode = eventCode,
         eventName = eventName,
-        time = time,
-        duration = duration,
-        place = place,
-        gatherTime = gatherTime,
-        summary = summary,
+        venue = venue,
+        startTime = startTime,
+        endTime = endTime,
+        ruleText = ruleText,
     )
 }

@@ -67,7 +67,7 @@ data class DetailScreen(val eventId: Int) : Screen {
                             )
 
                             Text(
-                                text = event.summary ?: "説明はありません",
+                                text = event.ruleText ?: "説明はありません",
                                 color = AppTheme.colors.textSecondary,
                                 modifier = Modifier.padding(vertical = 12.dp),
                             )
