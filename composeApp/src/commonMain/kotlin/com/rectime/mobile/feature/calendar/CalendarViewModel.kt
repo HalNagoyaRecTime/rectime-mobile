@@ -8,9 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createAppHttpClient
-import com.rectime.mobile.core.network.createHttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -87,7 +87,9 @@ class CalendarViewModel : ViewModel() {
                 }
                 _events.value = timelineEvents
 
-            } catch (e: Exception) {
+            }catch (e: CancellationException){
+                throw e
+            }catch (e: Exception) {
                 error = "通信に失敗しました"
                 e.printStackTrace()
             } finally {

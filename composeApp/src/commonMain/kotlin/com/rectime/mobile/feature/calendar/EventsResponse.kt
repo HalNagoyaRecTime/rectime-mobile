@@ -1,6 +1,5 @@
 package com.rectime.mobile.feature.calendar
 
-import io.ktor.events.Events
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 

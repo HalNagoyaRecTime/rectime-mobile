@@ -84,7 +84,7 @@ private fun CalendarScreenUI(
 
     LaunchedEffect(error) {
         if (error != null) {
-            val result = snackbarHostState.showSnackbar(error)
+            snackbarHostState.showSnackbar(error)
         }
     }
 

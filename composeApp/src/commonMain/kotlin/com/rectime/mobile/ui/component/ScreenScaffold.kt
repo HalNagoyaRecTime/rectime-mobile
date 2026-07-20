@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.core.model.UserProfile
 import com.rectime.mobile.ui.theme.AppTheme
 
+private val SnackbarBottomOffset = (-60).dp //ボトムナビゲーションとの重なりを避けるためのオフセット
+
 @Composable
 fun RootScreenScaffold(
     title: String,
@@ -69,7 +71,7 @@ fun RootScreenScaffold(
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter).absoluteOffset(0.dp,(-60).dp)
+                    .align(Alignment.BottomCenter).absoluteOffset(0.dp,SnackbarBottomOffset)
                     .padding(16.dp),
             )
         }
