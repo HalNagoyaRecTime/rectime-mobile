@@ -38,6 +38,8 @@ import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
@@ -59,7 +61,7 @@ object CalendarScreen : Screen {
             nowMinute = nowMinute,
             onOpenMenu = { navigationController.openMenu() },
             onOpenNotifications = { navigationController.push(NotificationsScreen) },
-            onOpenEventDetail = { navigationController.push(DetailScreen("calendar-event")) },
+            onOpenEventDetail = { eventId -> navigationController.push(DetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
             error = viewModel.error
@@ -72,7 +74,7 @@ private fun CalendarScreenUI(
     nowMinute: Int,
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
-    onOpenEventDetail: () -> Unit,
+    onOpenEventDetail: (Int) -> Unit,
     events: List<TimelineEvent>,
     isLoading: Boolean,
     error: String?
@@ -154,37 +156,34 @@ private fun CalendarScreenUI(
                             val yOffset = hourHeight * (startMinutes / 60f)
                             val eventHeight = hourHeight * (event.durationMinutes / 60f)
 
-                            PressSurface(
-                                onClick = onOpenEventDetail,
-                                modifier = Modifier
-                                    .width(laneWidth - 8.dp)
-                                    .height(eventHeight - 6.dp)
-                                    .padding(top = 4.dp)
-                                    .align(Alignment.TopStart)
-                                    .offset(x = xOffset + 4.dp, y = yOffset + 4.dp),
-                                color = AppTheme.colors.surfaceAccent,
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
-                            ) {
-                                Column {
-                                    Text(text = event.title, color = AppTheme.colors.textPrimary)
-                                    Text(text = event.venue, color = AppTheme.colors.textSecondary)
-                                }
+                        PressSurface(
+                            onClick = { onOpenEventDetail(event.eventId) },
+                            modifier = Modifier
+                                .width(laneWidth - 8.dp)
+                                .height(eventHeight - 6.dp)
+                                .padding(top = 4.dp)
+                                .align(Alignment.TopStart)
+                                .offset(x = xOffset + 4.dp, y = yOffset + 4.dp),
+                            color = AppTheme.colors.surfaceAccent,
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
+                        ) {
+                            Column {
+                                Text(text = event.title, color = AppTheme.colors.textPrimary)
+                                Text(text = event.venue, color = AppTheme.colors.textSecondary)
                             }
                         }
+                    }
 
-                        PressSurface(
-                            onClick = onOpenEventDetail,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(8.dp),
-                            color = AppTheme.colors.surfacePrimary,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                horizontal = 10.dp,
-                                vertical = 6.dp
-                            ),
-                        ) {
-                            Text(text = "+2", color = AppTheme.colors.textSecondary)
-                        }
+                    PressSurface(
+                        onClick = {/* 後で実装 */},
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp),
+                        color = AppTheme.colors.surfacePrimary,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    ) {
+                        Text(text = "+2", color = AppTheme.colors.textSecondary)
+                    }
 
                         if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
                             val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
@@ -205,8 +204,6 @@ private fun CalendarScreenUI(
                                 )
                             }
                         }
-
-
                     }
                 }
             }

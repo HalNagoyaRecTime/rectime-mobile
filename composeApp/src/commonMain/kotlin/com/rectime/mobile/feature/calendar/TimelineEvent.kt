@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.calendar
 
 data class TimelineEvent(
+    val eventId: Int,
     val title: String,
     val venue: String,
     val startMinuteOfDay: Int,

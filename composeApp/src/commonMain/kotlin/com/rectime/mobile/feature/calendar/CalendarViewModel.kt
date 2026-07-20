@@ -76,6 +76,7 @@ class CalendarViewModel : ViewModel() {
                     val endMinuteOfDay = endTime.hour * 60 + endTime.minute
 
                     TimelineEvent(
+                        eventId = it.eventId,
                         title = it.eventName,
                         venue = it.venue,
                         startMinuteOfDay = startMinuteOfDay,

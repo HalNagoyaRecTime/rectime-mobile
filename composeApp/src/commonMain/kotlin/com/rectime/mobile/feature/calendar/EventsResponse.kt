@@ -14,7 +14,6 @@ data class EventsResponse(
 @Serializable
 data class EventResponse(
     @SerialName("event_id")    val eventId: Int,
-    @SerialName("user_id")     val userId: Int,
     @SerialName("event_name")  val eventName: String,
     @SerialName("rule_text")   val ruleText: String? = null,
     @SerialName("venue")       val venue: String,
