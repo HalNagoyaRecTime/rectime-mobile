@@ -15,8 +15,6 @@ fun createAppHttpClient(): HttpClient = createHttpClient().config {
     }
     install(ContentNegotiation) {
         json(Json {
-            prettyPrint = true
-            isLenient = true
             ignoreUnknownKeys = true
         })
     }
