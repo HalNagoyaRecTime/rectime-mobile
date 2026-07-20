@@ -6,14 +6,14 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class EventsResponse(
-    val events: List<EventEntity>,
+    val events: List<EventResponse>,
     val total: Int,
     val limit: Int,
     val offset: Int
 )
 
 @Serializable
-data class EventEntity(
+data class EventResponse(
     @SerialName("event_id")    val eventId: Int,
     @SerialName("user_id")     val userId: Int,
     @SerialName("event_name")  val eventName: String,
