@@ -16,12 +16,12 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
-import io.ktor.client.HttpClient
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
@@ -36,7 +36,7 @@ fun App() {
             .components {
                 add(
                     KtorNetworkFetcherFactory(
-                        HttpClient {
+                        createHttpClient().config {
                             defaultRequest {
                                 val token = SessionTokenHolder.accessToken
                                 if (token != null && isApiUrl(url.buildString())) {
