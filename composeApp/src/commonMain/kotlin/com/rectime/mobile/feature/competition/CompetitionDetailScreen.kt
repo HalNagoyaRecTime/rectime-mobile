@@ -3,28 +3,29 @@ package com.rectime.mobile.feature.competition
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
-data class CompetitionDetailScreen(val id: String) : Screen {
-    override val key: String = "competition_detail_$id"
+data class CompetitionDetailScreen(val eventId: Int) : Screen {
+    override val key: String = "competition_detail_$eventId"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
 
-        //競技のダミーデータ
-        val competitionName = "紙飛行機飛ばし"
-        val competitionDescription =
-            "各自で作成した紙飛行機を当日持参し、決められた位置から一斉に飛ばします。"+
-            "紙飛行機が停止した地点までの距離を計測し、最も遠くまで飛ばした参加者が優勝となります。"
+        val viewModel = viewModel(key = key) { DetailViewModel(eventId) }
+        val uiState by viewModel.uiState.collectAsState()
 
         PushScreenScaffold(
             title = "競技詳細",
@@ -41,18 +42,40 @@ data class CompetitionDetailScreen(val id: String) : Screen {
             },
         ) {
             item {
-                Text(
-                    text = competitionName,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = AppTheme.colors.textPrimary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 12.dp),
-                )
-                Text(
-                    text = competitionDescription,
-                    color = AppTheme.colors.textSecondary,
-                    modifier = Modifier.padding(vertical = 12.dp),
-                )
+                val error = uiState.error
+                val event = uiState.eventDetail
+
+                when {
+                    uiState.isLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
+                    }
+
+                    error != null -> {
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
+                    }
+
+                    event != null -> {
+                        Text(
+                            text = event.eventName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textPrimary,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
+
+                        Text(
+                            text = event.ruleText ?: "説明はありません",
+                            color = AppTheme.colors.textSecondary,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
+                    }
+                }
             }
         }
     }

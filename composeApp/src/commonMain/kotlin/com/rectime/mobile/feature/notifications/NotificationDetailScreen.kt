@@ -21,7 +21,7 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 
-data class NotificationDetailScreen(val id: String) : Screen {
+data class NotificationDetailScreen(val id: Int) : Screen {
     override val key: String = "notification_detail_$id"
 
     @Composable
@@ -45,13 +45,13 @@ data class NotificationDetailScreen(val id: String) : Screen {
             item {
                 NotificationRelatedLink(
                     label = "スケジュール詳細",
-                    onClick = { navigationController.push(ScheduleDetailScreen(id = id)) },
+                    onClick = { navigationController.push(ScheduleDetailScreen(eventId = id)) },
                 )
             }
             item {
                 NotificationRelatedLink(
                     label = "競技詳細",
-                    onClick = { navigationController.push(CompetitionDetailScreen(id = id)) },
+                    onClick = { navigationController.push(CompetitionDetailScreen(eventId = id)) },
                 )
             }
         }

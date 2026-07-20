@@ -22,8 +22,8 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 
-data class ScheduleDetailScreen(val id: String) : Screen {
-    override val key: String = "schedule_detail_$id"
+data class ScheduleDetailScreen(val eventId: Int) : Screen {
+    override val key: String = "schedule_detail_$eventId"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
@@ -65,7 +65,7 @@ data class ScheduleDetailScreen(val id: String) : Screen {
             item {
                 ScheduleRelatedLink(
                     label = "競技詳細",
-                    onClick = { navigationController.push(CompetitionDetailScreen(id = id)) },
+                    onClick = { navigationController.push(CompetitionDetailScreen(eventId = eventId)) },
                 )
             }
         }
