@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -13,16 +14,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.MockUser
@@ -31,20 +38,9 @@ import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
-private data class TimelineEvent(
-    val eventId: Int,
-    val title: String,
-    val venue: String,
-    val startMinuteOfDay: Int,
-    val durationMinutes: Int,
-    val lane: Int,
-    val laneCount: Int,
-)
 
 object CalendarScreen : Screen {
     override val key: String = "calendar"
@@ -53,12 +49,20 @@ object CalendarScreen : Screen {
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel { CalendarViewModel() }
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+        val events by viewModel.events
+
+        LaunchedEffect(Unit) {
+            viewModel.fetchEvents()
+        }
 
         CalendarScreenUI(
             nowMinute = nowMinute,
             onOpenMenu = { navigationController.openMenu() },
             onOpenNotifications = { navigationController.push(NotificationsScreen) },
             onOpenEventDetail = { eventId -> navigationController.push(DetailScreen(eventId)) },
+            events = events,
+            isLoading = viewModel.isLoading,
+            error = viewModel.error
         )
     }
 }
@@ -69,80 +73,86 @@ private fun CalendarScreenUI(
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
     onOpenEventDetail: (Int) -> Unit,
+    events: List<TimelineEvent>,
+    isLoading: Boolean,
+    error: String?
 ) {
-    val events = listOf(
-        TimelineEvent(eventId = 1, "バスケットボール大会", "体育館", startMinuteOfDay = 11 * 60, durationMinutes = 120, lane = 0, laneCount = 1),
-        TimelineEvent(eventId = 2, "文化祭準備", "第1教室", startMinuteOfDay = 14 * 60, durationMinutes = 120, lane = 0, laneCount = 1),
-        TimelineEvent(eventId = 3, "英語スピーチコンテスト", "講堂", startMinuteOfDay = 16 * 60 + 30, durationMinutes = 90, lane = 0, laneCount = 1),
-        TimelineEvent(eventId = 4, "プログラミング勉強会", "PC教室", startMinuteOfDay = 19 * 60, durationMinutes = 120, lane = 0, laneCount = 1),
-    )
     val hourStart = 8
     val hourEnd = 22
     val hourHeight = 72.dp
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    RootScreenScaffold(
-        title = "カレンダー",
-        profile = MockUser.me,
-        onOpenMenu = onOpenMenu,
-        horizontalPadding = false,
-        onTrailingClick = onOpenNotifications,
-        trailing = {
-            Icon(
-                imageVector = SolidGroup.Bell,
-                contentDescription = "通知",
-                tint = AppTheme.colors.textPrimary,
-                modifier = Modifier.size(20.dp),
-            )
-        },
-    ) {
-        item {
-            val hPad = AppTheme.layout.screenHorizontalPadding
-            Text(
-                text = "4月28日・火曜日",
-                color = AppTheme.colors.textSecondary,
-                modifier = Modifier.padding(start = hPad, top = 12.dp, bottom = 10.dp),
-            )
+    LaunchedEffect(error) {
+        if (error != null) {
+            snackbarHostState.showSnackbar(error)
+        }
+    }
 
-            Row(modifier = Modifier.fillMaxWidth().padding(start = hPad)) {
-                Column(modifier = Modifier.width(56.dp)) {
-                    for (hour in hourStart until hourEnd) {
-                        Text(
-                            text = "${hour.toString().padStart(2, '0')}:00",
-                            color = AppTheme.colors.textMuted,
-                            modifier = Modifier.height(hourHeight),
-                        )
-                    }
-                }
+    Box(modifier = Modifier.fillMaxSize()) {
+        RootScreenScaffold(
+            title = "カレンダー",
+            profile = MockUser.me,
+            onOpenMenu = onOpenMenu,
+            horizontalPadding = false,
+            onTrailingClick = onOpenNotifications,
+            trailing = {
+                Icon(
+                    imageVector = SolidGroup.Bell,
+                    contentDescription = "通知",
+                    tint = AppTheme.colors.textPrimary,
+                    modifier = Modifier.size(20.dp),
+                )
+            },
+            snackbarHostState = snackbarHostState,
+        ) {
+            item {
+                val hPad = AppTheme.layout.screenHorizontalPadding
+                Text(
+                    text = "4月28日・火曜日",
+                    color = AppTheme.colors.textSecondary,
+                    modifier = Modifier.padding(start = hPad, top = 12.dp, bottom = 10.dp),
+                )
 
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(hourHeight * (hourEnd - hourStart))
-                        .clip(RoundedCornerShape(topStart = 14.dp))
-                        .background(AppTheme.colors.surfaceMuted),
-                ) {
-                    val borderSubtle = AppTheme.colors.borderSubtle
-                    Canvas(modifier = Modifier.matchParentSize()) {
-                        val totalHours = hourEnd - hourStart
-                        val step = size.height / totalHours
-                        repeat(totalHours + 1) { index ->
-                            val y = index * step
-                            drawLine(
-                                color = borderSubtle,
-                                start = Offset(0f, y),
-                                end = Offset(size.width, y),
-                                strokeWidth = 1f,
+                Row(modifier = Modifier.fillMaxWidth().padding(start = hPad)) {
+                    Column(modifier = Modifier.width(56.dp)) {
+                        for (hour in hourStart until hourEnd) {
+                            Text(
+                                text = "${hour.toString().padStart(2, '0')}:00",
+                                color = AppTheme.colors.textMuted,
+                                modifier = Modifier.height(hourHeight),
                             )
                         }
                     }
 
-                    val containerWidth = maxWidth
-                    events.forEach { event ->
-                        val laneWidth = containerWidth / event.laneCount
-                        val xOffset = laneWidth * event.lane
-                        val startMinutes = event.startMinuteOfDay - hourStart * 60
-                        val yOffset = hourHeight * (startMinutes / 60f)
-                        val eventHeight = hourHeight * (event.durationMinutes / 60f)
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(hourHeight * (hourEnd - hourStart))
+                            .clip(RoundedCornerShape(topStart = 14.dp))
+                            .background(AppTheme.colors.surfaceMuted),
+                    ) {
+                        val borderSubtle = AppTheme.colors.borderSubtle
+                        Canvas(modifier = Modifier.matchParentSize()) {
+                            val totalHours = hourEnd - hourStart
+                            val step = size.height / totalHours
+                            repeat(totalHours + 1) { index ->
+                                val y = index * step
+                                drawLine(
+                                    color = borderSubtle,
+                                    start = Offset(0f, y),
+                                    end = Offset(size.width, y),
+                                    strokeWidth = 1f,
+                                )
+                            }
+                        }
+
+                        val containerWidth = maxWidth
+                        events.forEach { event ->
+                            val laneWidth = containerWidth / event.laneCount
+                            val xOffset = laneWidth * event.lane
+                            val startMinutes = event.startMinuteOfDay - hourStart * 60
+                            val yOffset = hourHeight * (startMinutes / 60f)
+                            val eventHeight = hourHeight * (event.durationMinutes / 60f)
 
                         PressSurface(
                             onClick = { onOpenEventDetail(event.eventId) },
@@ -173,26 +183,38 @@ private fun CalendarScreenUI(
                         Text(text = "+2", color = AppTheme.colors.textSecondary)
                     }
 
-                    if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
-                        val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
-                        val accentStrong = AppTheme.colors.surfaceAccentStrong
-                        Canvas(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(2.dp)
-                                .align(Alignment.TopStart)
-                                .offset(y = nowOffset),
-                        ) {
-                            drawLine(
-                                color = accentStrong,
-                                start = Offset(0f, 0f),
-                                end = Offset(size.width, 0f),
-                                strokeWidth = 4f,
-                                cap = StrokeCap.Round,
-                            )
+                        if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
+                            val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
+                            val accentStrong = AppTheme.colors.surfaceAccentStrong
+                            Canvas(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(2.dp)
+                                    .align(Alignment.TopStart)
+                                    .offset(y = nowOffset),
+                            ) {
+                                drawLine(
+                                    color = accentStrong,
+                                    start = Offset(0f, 0f),
+                                    end = Offset(size.width, 0f),
+                                    strokeWidth = 4f,
+                                    cap = StrokeCap.Round,
+                                )
+                            }
                         }
                     }
                 }
+            }
+        }
+        if (isLoading){
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ){
+                CircularProgressIndicator(
+                    modifier = Modifier.size(56.dp),
+                    strokeWidth = 5.dp,
+                )
             }
         }
     }

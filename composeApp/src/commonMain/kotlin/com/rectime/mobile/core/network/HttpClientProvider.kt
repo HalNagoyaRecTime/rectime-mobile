@@ -13,12 +13,9 @@ fun createAppHttpClient(): HttpClient = createHttpClient().config {
         requestTimeoutMillis = 10_000
         connectTimeoutMillis = 5_000
     }
-
     install(ContentNegotiation) {
-        json(
-            Json {
-                ignoreUnknownKeys = true
-            }
-        )
+        json(Json {
+            ignoreUnknownKeys = true
+        })
     }
 }
