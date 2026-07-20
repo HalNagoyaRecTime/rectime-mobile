@@ -56,7 +56,7 @@ class AuthApi(
             refreshTokenId = parsed.refreshTokenId
                 ?: throw IllegalStateException("refresh_token_id がありません"),
             expiresIn = parsed.expiresIn ?: 0L,
-            user = parsed.user.toAuthUser(),
+            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(),
         )
     }
 
@@ -70,7 +70,9 @@ class AuthApi(
             throw IllegalStateException(readErrorMessage(body) ?: "セッション確認に失敗しました")
         }
 
-        return decodeBody<UserEnvelope>(body)?.user.toAuthUser()
+        val user = decodeBody<UserEnvelope>(body)?.user
+            ?: throw IllegalStateException("ユーザー情報のレスポンスが不正です")
+        return user.toAuthUser()
     }
 
     suspend fun refresh(session: AuthSession): AuthSession {
@@ -123,18 +125,16 @@ private inline fun <reified T> decodeBody(body: String): T? =
 private fun readErrorMessage(body: String): String? =
     decodeBody<ApiErrorResponse>(body)?.let { it.error?.message ?: it.message }
 
-private fun AuthUserResponse?.toAuthUser(): AuthUser {
-    val response = this ?: AuthUserResponse()
+private fun AuthUserResponse.toAuthUser(): AuthUser {
     return AuthUser(
-        id = response.id,
-        email = response.email,
-        displayName = response.displayName,
-        avatarUrl = response.avatarUrl?.let {
+        id = id,
+        email = email,
+        displayName = displayName,
+        avatarUrl = avatarUrl?.let {
             val base = if (it.startsWith("http")) it else "$apiBaseUrl$it"
-            val updatedAt = response.avatarUpdatedAt
-            if (!updatedAt.isNullOrBlank()) "$base?v=$updatedAt" else base
+            if (!avatarUpdatedAt.isNullOrBlank()) "$base?v=$avatarUpdatedAt" else base
         },
-        avatarUpdatedAt = response.avatarUpdatedAt,
+        avatarUpdatedAt = avatarUpdatedAt,
     )
 }
 
