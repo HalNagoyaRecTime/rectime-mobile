@@ -38,8 +38,6 @@ import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
