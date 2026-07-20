@@ -69,12 +69,17 @@ class CalendarViewModel : ViewModel() {
                 val body: EventsResponse =
                     response.body()
                 val timelineEvents = body.events.map {
-                    val startTime = LocalTime.parse(it.f_time, format = startTimeFormat)
+                    val startTime = LocalTime.parse(it.startTime, format = startTimeFormat)
+                    val endTime = LocalTime.parse(it.endTime, format = startTimeFormat)
+
+                    val startMinuteOfDay = startTime.hour * 60 + startTime.minute
+                    val endMinuteOfDay = endTime.hour * 60 + endTime.minute
+
                     TimelineEvent(
-                        title = it.f_event_name,
-                        venue = it.f_place,
-                        startMinuteOfDay = startTime.hour*60 + startTime.minute,
-                        durationMinutes = it.f_duration.toInt(),
+                        title = it.eventName,
+                        venue = it.venue,
+                        startMinuteOfDay = startMinuteOfDay,
+                        durationMinutes = endMinuteOfDay - startMinuteOfDay,
                         lane = 0,
                         laneCount = 1
                     )
