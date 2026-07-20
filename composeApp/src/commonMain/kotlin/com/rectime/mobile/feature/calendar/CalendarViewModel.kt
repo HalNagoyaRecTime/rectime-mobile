@@ -12,8 +12,10 @@ import com.rectime.mobile.core.network.createHttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -66,7 +68,6 @@ class CalendarViewModel : ViewModel() {
                 val response = client.get(apiBaseUrl + "/api/v1/events")
                 val body: EventsResponse =
                     response.body()
-                println(body)
                 val timelineEvents = body.events.map {
                     val startTime = LocalTime.parse(it.f_time, format = startTimeFormat)
                     TimelineEvent(
@@ -82,7 +83,7 @@ class CalendarViewModel : ViewModel() {
                 _events.value = timelineEvents
 
             } catch (e: Exception) {
-                error = e.message
+                error = "通信に失敗しました"
                 e.printStackTrace()
             } finally {
                 isLoading = false
@@ -91,9 +92,13 @@ class CalendarViewModel : ViewModel() {
         }
 
 
-
-
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        client.close()
+    }
+
 }
 
 
