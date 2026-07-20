@@ -37,6 +37,7 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
 private data class TimelineEvent(
+    val eventId: Int,
     val title: String,
     val venue: String,
     val startMinuteOfDay: Int,
@@ -57,7 +58,7 @@ object CalendarScreen : Screen {
             nowMinute = nowMinute,
             onOpenMenu = { navigationController.openMenu() },
             onOpenNotifications = { navigationController.push(NotificationsScreen) },
-            onOpenEventDetail = { navigationController.push(DetailScreen("calendar-event")) },
+            onOpenEventDetail = { eventId -> navigationController.push(DetailScreen(eventId)) },
         )
     }
 }
@@ -67,12 +68,13 @@ private fun CalendarScreenUI(
     nowMinute: Int,
     onOpenMenu: () -> Unit,
     onOpenNotifications: () -> Unit,
-    onOpenEventDetail: () -> Unit,
+    onOpenEventDetail: (Int) -> Unit,
 ) {
     val events = listOf(
-        TimelineEvent("U18 準決勝", "Aコート", startMinuteOfDay = 10 * 60, durationMinutes = 80, lane = 0, laneCount = 2),
-        TimelineEvent("トップリーグ", "Bコート", startMinuteOfDay = 10 * 60 + 10, durationMinutes = 70, lane = 1, laneCount = 2),
-        TimelineEvent("運営MTG", "会議室", startMinuteOfDay = 13 * 60 + 30, durationMinutes = 45, lane = 0, laneCount = 1),
+        TimelineEvent(eventId = 1, "バスケットボール大会", "体育館", startMinuteOfDay = 11 * 60, durationMinutes = 120, lane = 0, laneCount = 1),
+        TimelineEvent(eventId = 2, "文化祭準備", "第1教室", startMinuteOfDay = 14 * 60, durationMinutes = 120, lane = 0, laneCount = 1),
+        TimelineEvent(eventId = 3, "英語スピーチコンテスト", "講堂", startMinuteOfDay = 16 * 60 + 30, durationMinutes = 90, lane = 0, laneCount = 1),
+        TimelineEvent(eventId = 4, "プログラミング勉強会", "PC教室", startMinuteOfDay = 19 * 60, durationMinutes = 120, lane = 0, laneCount = 1),
     )
     val hourStart = 8
     val hourEnd = 22
@@ -143,7 +145,7 @@ private fun CalendarScreenUI(
                         val eventHeight = hourHeight * (event.durationMinutes / 60f)
 
                         PressSurface(
-                            onClick = onOpenEventDetail,
+                            onClick = { onOpenEventDetail(event.eventId) },
                             modifier = Modifier
                                 .width(laneWidth - 8.dp)
                                 .height(eventHeight - 6.dp)
@@ -161,7 +163,7 @@ private fun CalendarScreenUI(
                     }
 
                     PressSurface(
-                        onClick = onOpenEventDetail,
+                        onClick = {/* 後で実装 */},
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(8.dp),
