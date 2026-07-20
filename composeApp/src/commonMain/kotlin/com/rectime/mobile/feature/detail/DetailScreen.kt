@@ -42,6 +42,9 @@ data class DetailScreen(val eventId: Int) : Screen {
             },
         ) {
             item {
+                val error = uiState.error
+                val event = uiState.eventDetail
+
                 when {
                     uiState.isLoading -> {
                         CircularProgressIndicator(
@@ -49,30 +52,28 @@ data class DetailScreen(val eventId: Int) : Screen {
                         )
                     }
 
-                    uiState.error != null -> {
+                    error != null -> {
                         Text(
-                            text = uiState.error ?: "不明なエラー",
+                            text = error,
                             color = MaterialTheme.colorScheme.error,
                             modifier = Modifier.padding(vertical = 12.dp),
                         )
                     }
 
-                    uiState.eventDetail != null -> {
-                        uiState.eventDetail?.let { event ->
-                            Text(
-                                text = event.eventName,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = AppTheme.colors.textPrimary,
-                                modifier = Modifier.padding(vertical = 12.dp),
-                            )
+                    event != null -> {
+                        Text(
+                            text = event.eventName,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTheme.colors.textPrimary,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
 
-                            Text(
-                                text = event.ruleText ?: "説明はありません",
-                                color = AppTheme.colors.textSecondary,
-                                modifier = Modifier.padding(vertical = 12.dp),
-                            )
-                        }
+                        Text(
+                            text = event.ruleText ?: "説明はありません",
+                            color = AppTheme.colors.textSecondary,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
                     }
                 }
             }
