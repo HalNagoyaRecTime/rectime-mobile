@@ -16,14 +16,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class DetailViewModel(
+class CompetitionDetailViewModel(
     private val eventId: Int,
 ) : ViewModel() {
 
     private val httpClient = createAppHttpClient()
 
-    private val _uiState = MutableStateFlow(DetailUiState(isLoading = true))
-    val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(CompetitionDetailUiState(isLoading = true))
+    val uiState: StateFlow<CompetitionDetailUiState> = _uiState.asStateFlow()
 
     init {
         fetchEventDetail()
@@ -31,13 +31,13 @@ class DetailViewModel(
 
     private fun fetchEventDetail() {
         viewModelScope.launch {
-            _uiState.value = DetailUiState(isLoading = true)
+            _uiState.value = CompetitionDetailUiState(isLoading = true)
 
             try {
                 val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId")
 
                 if (!response.status.isSuccess()) {
-                    _uiState.value = DetailUiState(
+                    _uiState.value = CompetitionDetailUiState(
                         isLoading = false,
                         error = when (response.status) {
                             HttpStatusCode.NotFound -> "競技が見つかりません"
@@ -49,7 +49,7 @@ class DetailViewModel(
 
                 val eventDetail: EventDetailResponse = response.body()
 
-                _uiState.value = DetailUiState(
+                _uiState.value = CompetitionDetailUiState(
                     isLoading = false,
                     eventDetail = eventDetail.toModel(),
                 )
@@ -57,7 +57,7 @@ class DetailViewModel(
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.value = DetailUiState(
+                _uiState.value = CompetitionDetailUiState(
                     isLoading = false,
                     error = "競技情報の取得に失敗しました",
                 )

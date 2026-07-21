@@ -24,7 +24,7 @@ data class CompetitionDetailScreen(val eventId: Int) : Screen {
     @Composable
     override fun Content(navigationController: NavigationController) {
 
-        val viewModel = viewModel(key = key) { DetailViewModel(eventId) }
+        val viewModel = viewModel(key = key) { CompetitionDetailViewModel(eventId) }
         val uiState by viewModel.uiState.collectAsState()
 
         PushScreenScaffold(
