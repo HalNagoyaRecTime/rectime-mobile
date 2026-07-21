@@ -33,7 +33,7 @@ data class CompetitionDetailScreen(val eventId: Int) : Screen {
             bottomContent = {
                 Button(
                     onClick = {
-                        //画面遷移先を後程追加
+                        // 画面遷移先を後程追加
                     },
                     modifier = Modifier.fillMaxWidth()
                 ){

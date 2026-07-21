@@ -28,7 +28,7 @@ data class ScheduleDetailScreen(val eventId: Int) : Screen {
     @Composable
     override fun Content(navigationController: NavigationController) {
 
-        //スケジュールのダミーデータ
+        // スケジュールのダミーデータ
         val scheduleName = "走れ！〇人〇脚！"
         val meetingTime = "08:45"
         val meetingPlace = "集合場所A"

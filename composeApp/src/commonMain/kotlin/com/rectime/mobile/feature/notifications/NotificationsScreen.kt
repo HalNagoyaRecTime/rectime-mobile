@@ -49,7 +49,7 @@ object NotificationsScreen : Screen {
                         .padding(vertical = 4.dp),
                 ) {
                     Text(
-                        text = "通知 #${index+1}",
+                        text = "通知 #${index + 1}",
                         color = AppTheme.colors.textPrimary,
                     )
                 }

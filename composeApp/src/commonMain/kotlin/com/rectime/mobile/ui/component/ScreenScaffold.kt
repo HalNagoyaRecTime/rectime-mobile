@@ -27,7 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.ui.theme.AppTheme
 
-private val SnackbarBottomOffset = (-60).dp //ボトムナビゲーションとの重なりを避けるためのオフセット
+private val SnackbarBottomOffset = (-60).dp // ボトムナビゲーションとの重なりを避けるためのオフセット
 
 @Composable
 fun RootScreenScaffold(
