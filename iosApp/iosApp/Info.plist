@@ -11,5 +11,16 @@
 	</dict>
 	<key>API_BASE_URL</key>
 	<string>http://localhost:8787</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.rectime.mobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.rectime.mobile</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
