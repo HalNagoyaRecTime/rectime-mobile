@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,14 +31,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.core.model.MockUser
-import com.rectime.mobile.feature.detail.DetailScreen
-import com.rectime.mobile.feature.notifications.NotificationsScreen
+import com.rectime.mobile.feature.schedule.ScheduleDetailScreen
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 
 
 object CalendarScreen : Screen {
@@ -57,12 +52,10 @@ object CalendarScreen : Screen {
 
         CalendarScreenUI(
             nowMinute = nowMinute,
-            onOpenMenu = { navigationController.openMenu() },
-            onOpenNotifications = { navigationController.push(NotificationsScreen) },
-            onOpenEventDetail = { eventId -> navigationController.push(DetailScreen(eventId)) },
+            onOpenEventDetail = { eventId -> navigationController.push(ScheduleDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
-            error = viewModel.error
+            error = viewModel.error,
         )
     }
 }
@@ -70,12 +63,10 @@ object CalendarScreen : Screen {
 @Composable
 private fun CalendarScreenUI(
     nowMinute: Int,
-    onOpenMenu: () -> Unit,
-    onOpenNotifications: () -> Unit,
     onOpenEventDetail: (Int) -> Unit,
     events: List<TimelineEvent>,
     isLoading: Boolean,
-    error: String?
+    error: String?,
 ) {
     val hourStart = 8
     val hourEnd = 22
@@ -91,18 +82,7 @@ private fun CalendarScreenUI(
     Box(modifier = Modifier.fillMaxSize()) {
         RootScreenScaffold(
             title = "カレンダー",
-            profile = MockUser.me,
-            onOpenMenu = onOpenMenu,
             horizontalPadding = false,
-            onTrailingClick = onOpenNotifications,
-            trailing = {
-                Icon(
-                    imageVector = SolidGroup.Bell,
-                    contentDescription = "通知",
-                    tint = AppTheme.colors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            },
             snackbarHostState = snackbarHostState,
         ) {
             item {

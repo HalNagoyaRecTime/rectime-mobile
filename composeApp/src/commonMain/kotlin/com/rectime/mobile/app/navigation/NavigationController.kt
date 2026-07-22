@@ -3,10 +3,10 @@ package com.rectime.mobile.app.navigation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.rectime.mobile.feature.home.HomeScreen
+import com.rectime.mobile.feature.calendar.CalendarScreen
 
 class NavigationController(
-    initialRoot: Screen = HomeScreen
+    initialRoot: Screen = CalendarScreen
 ) {
     var state by mutableStateOf(NavigationState(rootScreen = initialRoot))
         private set
@@ -20,6 +20,7 @@ class NavigationController(
     }
 
     fun push(screen: Screen, source: PushTransitionSource = PushTransitionSource.Default) {
+        if (state.pushTransition.mode == PushTransitionMode.Enter) return
         val entry = PushEntry(
             key = "${screen.key}_${Clock.nextId()}",
             screen = screen,
@@ -49,6 +50,7 @@ class NavigationController(
     }
 
     fun presentSheet(screen: Screen) {
+        if (state.sheet != null) return
         val entry = SheetEntry(
             key = "${screen.key}_${Clock.nextId()}",
             screen = screen
