@@ -25,16 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.rectime.mobile.core.model.UserProfile
 import com.rectime.mobile.ui.theme.AppTheme
 
-private val SnackbarBottomOffset = (-60).dp //ボトムナビゲーションとの重なりを避けるためのオフセット
+private val SnackbarBottomOffset = (-60).dp // ボトムナビゲーションとの重なりを避けるためのオフセット
 
 @Composable
 fun RootScreenScaffold(
     title: String,
-    profile: UserProfile,
-    onOpenMenu: () -> Unit,
     modifier: Modifier = Modifier,
     horizontalPadding: Boolean = true,
     onTrailingClick: (() -> Unit)? = null,
@@ -58,8 +55,6 @@ fun RootScreenScaffold(
         )
         RootHeader(
             title = title,
-            profile = profile,
-            onOpenMenu = onOpenMenu,
             modifier = Modifier
                 .statusBarsPadding()
                 .padding(horizontal = hPad)

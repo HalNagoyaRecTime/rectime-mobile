@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.detail
+package com.rectime.mobile.feature.competition
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,13 +18,13 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
-data class DetailScreen(val eventId: Int) : Screen {
-    override val key: String = "detail_$eventId"
+data class CompetitionDetailScreen(val eventId: Int) : Screen {
+    override val key: String = "competition_detail_$eventId"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
 
-        val viewModel = viewModel(key = key) { DetailViewModel(eventId) }
+        val viewModel = viewModel(key = key) { CompetitionDetailViewModel(eventId) }
         val uiState by viewModel.uiState.collectAsState()
 
         PushScreenScaffold(
@@ -33,7 +33,7 @@ data class DetailScreen(val eventId: Int) : Screen {
             bottomContent = {
                 Button(
                     onClick = {
-                        //画面遷移先を後程追加
+                        // 画面遷移先を後程追加
                     },
                     modifier = Modifier.fillMaxWidth()
                 ){
