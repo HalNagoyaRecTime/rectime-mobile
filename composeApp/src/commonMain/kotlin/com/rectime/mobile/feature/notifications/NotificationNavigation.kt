@@ -11,7 +11,8 @@ sealed interface NotificationNavigationTarget {
 
 object NotificationNavigationPayload {
     fun parse(data: Map<String, String>): NotificationNavigationTarget {
-        return when (data["notificationType"]) {
+        return when (data["type"] ?: data["notificationType"]) {
+            "event_reminder",
             "schedule_reminder",
             "schedule_update",
             -> data.positiveInt("eventId")

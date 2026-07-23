@@ -5,7 +5,19 @@ import kotlin.test.assertEquals
 
 class NotificationNavigationPayloadTest {
     @Test
-    fun scheduleReminderNavigatesToEventDetail() {
+    fun backendEventReminderNavigatesToEventDetail() {
+        val target = NotificationNavigationPayload.parse(
+            mapOf(
+                "type" to "event_reminder",
+                "eventId" to "12",
+            ),
+        )
+
+        assertEquals(NotificationNavigationTarget.EventDetail(12), target)
+    }
+
+    @Test
+    fun issueContractScheduleReminderNavigatesToEventDetail() {
         val target = NotificationNavigationPayload.parse(
             mapOf(
                 "notificationType" to "schedule_reminder",
@@ -29,10 +41,24 @@ class NotificationNavigationPayloadTest {
     }
 
     @Test
+    fun backendTypeTakesPriorityDuringContractMigration() {
+        val target = NotificationNavigationPayload.parse(
+            mapOf(
+                "type" to "event_reminder",
+                "notificationType" to "manual",
+                "eventId" to "5",
+                "notificationId" to "3",
+            ),
+        )
+
+        assertEquals(NotificationNavigationTarget.EventDetail(5), target)
+    }
+
+    @Test
     fun manualHomeNavigatesHomeEvenWithNotificationId() {
         val target = NotificationNavigationPayload.parse(
             mapOf(
-                "notificationType" to "manual",
+                "type" to "manual",
                 "navigationType" to "home",
                 "notificationId" to "3",
             ),
@@ -45,7 +71,7 @@ class NotificationNavigationPayloadTest {
     fun manualNotificationNavigatesToNotificationDetail() {
         val target = NotificationNavigationPayload.parse(
             mapOf(
-                "notificationType" to "manual",
+                "type" to "manual",
                 "notificationId" to "3",
             ),
         )
