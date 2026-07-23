@@ -19,6 +19,8 @@ object RectimeNotificationPresenter {
     ) {
         if (!hasNotificationPermission(context)) return
 
+        RectimeNotificationChannel.create(context)
+
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
