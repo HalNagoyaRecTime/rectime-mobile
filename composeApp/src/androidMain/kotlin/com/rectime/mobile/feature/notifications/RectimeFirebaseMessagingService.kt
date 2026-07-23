@@ -23,6 +23,7 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
             context = applicationContext,
             notification = notification,
             notificationId = message.messageId?.hashCode() ?: notification.hashCode(),
+            data = message.data,
         )
     }
 }

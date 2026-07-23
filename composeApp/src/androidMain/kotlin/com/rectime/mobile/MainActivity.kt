@@ -15,6 +15,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.rectime.mobile.app.App
 import com.rectime.mobile.feature.auth.AuthDeepLinkHandler
 import com.rectime.mobile.feature.auth.setAuthPlatformContext
+import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.RectimeNotificationChannel
 
 class MainActivity : ComponentActivity() {
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setAuthPlatformContext(this)
         handleAuthCallback(intent)
+        handleNotificationNavigation(intent)
         RectimeNotificationChannel.create(this)
         requestNotificationPermission()
 
@@ -42,11 +44,24 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
+        handleNotificationNavigation(intent)
     }
 
     private fun handleAuthCallback(intent: Intent?) {
         val url = intent?.data?.toString() ?: return
         AuthDeepLinkHandler.handle(url)
+    }
+
+    private fun handleNotificationNavigation(intent: Intent?) {
+        val extras = intent?.extras ?: return
+        val isNotificationIntent = extras.getBoolean(EXTRA_NOTIFICATION_INTENT) ||
+            extras.containsKey("google.message_id")
+        if (!isNotificationIntent) return
+
+        val data = NOTIFICATION_DATA_KEYS.mapNotNull { key ->
+            extras.getString(key)?.let { key to it }
+        }.toMap()
+        NotificationNavigationHandler.handle(data)
     }
 
     private fun requestNotificationPermission() {
@@ -56,6 +71,16 @@ class MainActivity : ComponentActivity() {
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
+
+private const val EXTRA_NOTIFICATION_INTENT = "rectime.notification_intent"
+private val NOTIFICATION_DATA_KEYS = listOf(
+    "notificationId",
+    "notificationSendScheduleId",
+    "notificationType",
+    "importance",
+    "navigationType",
+    "eventId",
+)
 
 @Preview
 @Composable

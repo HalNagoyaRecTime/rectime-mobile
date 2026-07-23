@@ -20,6 +20,11 @@ import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
+import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
+import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
 import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
@@ -59,6 +64,9 @@ fun App() {
     }
 
     val navigationController = remember { NavigationController() }
+    var notificationNavigationTarget by remember {
+        mutableStateOf<NotificationNavigationTarget?>(null)
+    }
     val themeStateHolder = remember { ThemeStateHolder() }
     val authViewModel: AuthViewModel = viewModel(
         factory = viewModelFactory {
@@ -71,10 +79,32 @@ fun App() {
         SessionTokenHolder.accessToken = authState.session?.accessToken
         updatePushTokenRegistration(authState.session?.accessToken)
     }
+    LaunchedEffect(Unit) {
+        NotificationNavigationHandler.targets.collect {
+            notificationNavigationTarget = it
+        }
+    }
 
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             SessionTokenHolder.accessToken = session.accessToken
+            LaunchedEffect(notificationNavigationTarget) {
+                when (val target = notificationNavigationTarget) {
+                    NotificationNavigationTarget.Home -> {
+                        navigationController.reset(CalendarScreen)
+                    }
+                    is NotificationNavigationTarget.EventDetail -> {
+                        navigationController.reset(CalendarScreen)
+                        navigationController.push(CompetitionDetailScreen(target.eventId))
+                    }
+                    is NotificationNavigationTarget.NotificationDetail -> {
+                        navigationController.reset(CalendarScreen)
+                        navigationController.push(NotificationDetailScreen(target.notificationId))
+                    }
+                    null -> Unit
+                }
+                notificationNavigationTarget = null
+            }
             Box(
                 modifier = Modifier
                     .background(AppTheme.colors.surfacePrimary)
