@@ -16,7 +16,7 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.network.createHttpClient
-import com.rectime.mobile.core.network.isApiUrl
+import com.rectime.mobile.core.network.mobileAuthHeaders
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
@@ -24,7 +24,6 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.header
-import io.ktor.http.HttpHeaders
 import okio.Path.Companion.toPath
 
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
@@ -38,10 +37,8 @@ fun App() {
                     KtorNetworkFetcherFactory(
                         createHttpClient().config {
                             defaultRequest {
-                                val token = SessionTokenHolder.accessToken
-                                if (token != null && isApiUrl(url.buildString())) {
-                                    header("X-Client-Type", "mobile")
-                                    header(HttpHeaders.Authorization, "Bearer $token")
+                                mobileAuthHeaders(url.buildString())?.forEach { (name, value) ->
+                                    header(name, value)
                                 }
                             }
                         }

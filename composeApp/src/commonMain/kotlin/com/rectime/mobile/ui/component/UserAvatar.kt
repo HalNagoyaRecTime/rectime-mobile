@@ -19,8 +19,7 @@ import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
 import com.rectime.mobile.core.model.UserProfile
-import com.rectime.mobile.core.network.isApiUrl
-import com.rectime.mobile.feature.auth.SessionTokenHolder
+import com.rectime.mobile.core.network.mobileAuthHeaders
 import com.rectime.mobile.ui.theme.AppTheme
 
 @Composable
@@ -42,14 +41,13 @@ fun UserAvatar(
     modifier: Modifier = Modifier
 ) {
     val context = LocalPlatformContext.current
-    val token = SessionTokenHolder.accessToken
-    val imageModel = if (!imageUrl.isNullOrBlank() && token != null && isApiUrl(imageUrl)) {
+    val authHeaders = imageUrl?.let { mobileAuthHeaders(it) }
+    val imageModel = if (!imageUrl.isNullOrBlank() && authHeaders != null) {
         ImageRequest.Builder(context)
             .data(imageUrl)
             .httpHeaders(
                 NetworkHeaders.Builder().apply {
-                    this["X-Client-Type"] = "mobile"
-                    this["Authorization"] = "Bearer $token"
+                    authHeaders.forEach { (name, value) -> this[name] = value }
                 }.build()
             )
             .build()

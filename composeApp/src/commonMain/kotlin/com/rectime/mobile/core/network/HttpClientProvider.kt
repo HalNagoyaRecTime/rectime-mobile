@@ -24,11 +24,7 @@ fun createAppHttpClient(): HttpClient = createHttpClient().config {
         })
     }
     defaultRequest {
-        val token = SessionTokenHolder.accessToken
-        if (token != null && isApiUrl(url.buildString())) {
-            header("X-Client-Type", "mobile")
-            header(HttpHeaders.Authorization, "Bearer $token")
-        }
+        mobileAuthHeaders(url.buildString())?.forEach { (name, value) -> header(name, value) }
     }
 }
 
@@ -37,3 +33,17 @@ internal fun isApiUrl(url: String): Boolean =
 
 internal val normalizedApiBaseUrl: String =
     apiBaseUrl.trimEnd('/')
+
+/**
+ * `url` がrectime-apiへのリクエストで、かつログイン済みの場合に付与すべき
+ * ヘッダーを返す。Ktor(HttpClientProvider/App.kt)・Coil(UserAvatar.kt)双方の
+ * 呼び出し元で同じ判定・同じヘッダー値を使うための唯一の定義箇所。
+ */
+internal fun mobileAuthHeaders(url: String): Map<String, String>? {
+    val token = SessionTokenHolder.accessToken ?: return null
+    if (!isApiUrl(url)) return null
+    return mapOf(
+        "X-Client-Type" to "mobile",
+        HttpHeaders.Authorization to "Bearer $token",
+    )
+}
