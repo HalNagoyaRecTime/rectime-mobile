@@ -15,12 +15,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
 data class CompetitionDetailScreen(val eventId: Int) : Screen {
     override val key: String = "competition_detail_$eventId"
-
 
     @Composable
     override fun Content(navigationController: NavigationController) {
@@ -83,7 +83,7 @@ data class CompetitionDetailScreen(val eventId: Int) : Screen {
                         )
 
                         Text(
-                            text = "開催時間：${event.startTime.toFormattedTime()}~${event.endTime.toFormattedTime()}",
+                            text = "開催時間：${event.startTime.toFormattedTime()}～${event.endTime.toFormattedTime()}",
                             color = AppTheme.colors.textSecondary,
                             modifier = Modifier.padding(vertical = 12.dp),
                         )
