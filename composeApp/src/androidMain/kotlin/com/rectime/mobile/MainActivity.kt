@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
             extras.containsKey("google.message_id")
         if (!isNotificationIntent) return
 
-        val data = NOTIFICATION_DATA_KEYS.mapNotNull { key ->
+        val data = extras.keySet().mapNotNull { key ->
             extras.getString(key)?.let { key to it }
         }.toMap()
         NotificationNavigationHandler.handle(data)
@@ -73,14 +73,6 @@ class MainActivity : ComponentActivity() {
 }
 
 private const val EXTRA_NOTIFICATION_INTENT = "rectime.notification_intent"
-private val NOTIFICATION_DATA_KEYS = listOf(
-    "notificationId",
-    "notificationSendScheduleId",
-    "notificationType",
-    "importance",
-    "navigationType",
-    "eventId",
-)
 
 @Preview
 @Composable

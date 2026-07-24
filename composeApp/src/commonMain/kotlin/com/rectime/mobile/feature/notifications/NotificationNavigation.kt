@@ -10,6 +10,19 @@ sealed interface NotificationNavigationTarget {
 }
 
 object NotificationNavigationPayload {
+    private val supportedKeys = setOf(
+        "type",
+        "notificationId",
+        "notificationSendScheduleId",
+        "notificationType",
+        "importance",
+        "navigationType",
+        "eventId",
+    )
+
+    fun extract(data: Map<String, String>): Map<String, String> =
+        data.filterKeys(supportedKeys::contains)
+
     fun parse(data: Map<String, String>): NotificationNavigationTarget {
         return when (data["type"] ?: data["notificationType"]) {
             "event_reminder",
@@ -36,7 +49,8 @@ object NotificationNavigationHandler {
     val targets = _targets.receiveAsFlow()
 
     fun handle(data: Map<String, String>) {
-        _targets.trySend(NotificationNavigationPayload.parse(data))
+        val payload = NotificationNavigationPayload.extract(data)
+        _targets.trySend(NotificationNavigationPayload.parse(payload))
     }
 }
 

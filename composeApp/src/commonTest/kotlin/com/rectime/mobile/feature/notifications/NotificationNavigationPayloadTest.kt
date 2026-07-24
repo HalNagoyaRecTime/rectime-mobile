@@ -5,6 +5,26 @@ import kotlin.test.assertEquals
 
 class NotificationNavigationPayloadTest {
     @Test
+    fun extractsSupportedBackendPayloadAndDropsFirebaseMetadata() {
+        val payload = NotificationNavigationPayload.extract(
+            mapOf(
+                "type" to "event_reminder",
+                "eventId" to "12",
+                "google.message_id" to "message-id",
+                "unexpected" to "value",
+            ),
+        )
+
+        assertEquals(
+            mapOf(
+                "type" to "event_reminder",
+                "eventId" to "12",
+            ),
+            payload,
+        )
+    }
+
+    @Test
     fun backendEventReminderNavigatesToEventDetail() {
         val target = NotificationNavigationPayload.parse(
             mapOf(
