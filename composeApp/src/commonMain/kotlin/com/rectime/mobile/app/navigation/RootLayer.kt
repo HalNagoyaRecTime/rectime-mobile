@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
@@ -36,6 +37,8 @@ fun RootLayer(
     state: NavigationState,
     navigationController: NavigationController,
     revealWidthPx: Float,
+    session: AuthSession,
+    onLogout: () -> Unit,
 ) {
     val rootScreen = state.rootScreen ?: return
     val deviceCornerRadius = rememberDeviceCornerRadius()
@@ -109,6 +112,8 @@ fun RootLayer(
                 onSelectRoot = { screen: Screen ->
                     navigationController.setRoot(screen)
                 },
+                session = session,
+                onLogout = onLogout,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth(),

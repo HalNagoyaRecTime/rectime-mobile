@@ -66,7 +66,7 @@ fun SideMenu(
         add(SideMenuItemConfig(
             title = "設定",
             icon = SolidGroup.Gear,
-            action = SideMenuAction.Push(SettingsScreen),
+            action = SideMenuAction.Push(SettingsScreen(session = session, onLogout = onLogout)),
         ))
         if (isDebugBuild) {
             add(SideMenuItemConfig(
