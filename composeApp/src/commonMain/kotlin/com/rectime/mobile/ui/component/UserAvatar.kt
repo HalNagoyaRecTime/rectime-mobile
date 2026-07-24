@@ -18,8 +18,8 @@ import coil3.compose.LocalPlatformContext
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
-import com.rectime.mobile.app.isApiUrl
 import com.rectime.mobile.core.model.UserProfile
+import com.rectime.mobile.core.network.isApiUrl
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.ui.theme.AppTheme
 

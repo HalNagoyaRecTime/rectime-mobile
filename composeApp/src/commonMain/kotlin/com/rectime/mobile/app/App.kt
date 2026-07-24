@@ -15,8 +15,8 @@ import coil3.disk.DiskCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
-import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createHttpClient
+import com.rectime.mobile.core.network.isApiUrl
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
@@ -88,9 +88,3 @@ fun App() {
         }
     }
 }
-
-internal fun isApiUrl(url: String): Boolean =
-    url == normalizedApiBaseUrl || url.startsWith("$normalizedApiBaseUrl/")
-
-internal val normalizedApiBaseUrl: String =
-    apiBaseUrl.trimEnd('/')
