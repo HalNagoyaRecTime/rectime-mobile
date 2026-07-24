@@ -42,7 +42,7 @@ fun decodeAuthSession(value: String): AuthSession? {
             if (s.isEmpty()) null else s
         } else null
         val role = if (parts.size == 9) {
-            Role.fromWireValue(parts[8].decodeBase64UrlToString().ifEmpty { null })
+            Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
         } else null
 
         AuthSession(

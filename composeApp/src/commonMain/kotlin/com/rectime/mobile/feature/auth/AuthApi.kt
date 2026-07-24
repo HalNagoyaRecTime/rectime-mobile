@@ -135,7 +135,7 @@ private fun AuthUserResponse.toAuthUser(): AuthUser {
             if (!avatarUpdatedAt.isNullOrBlank()) "$base?v=$avatarUpdatedAt" else base
         },
         avatarUpdatedAt = avatarUpdatedAt,
-        role = Role.fromWireValue(role),
+        role = Role.fromCategories(isStudent = isStudent, isStaff = isStaff, isTeacher = isTeacher),
     )
 }
 
@@ -176,7 +176,9 @@ private data class AuthUserResponse(
     val displayName: String = "",
     val avatarUrl: String? = null,
     val avatarUpdatedAt: String? = null,
-    val role: String? = null,
+    val isStudent: Boolean = false,
+    val isStaff: Boolean = false,
+    val isTeacher: Boolean = false,
 )
 
 @Serializable
