@@ -12,13 +12,11 @@ class IncomingPushNotificationTest {
             data = mapOf(
                 "title" to "データタイトル",
                 "body" to "データ本文",
-                "importance" to "2",
             ),
         )
 
         assertEquals("通知タイトル", notification.title)
         assertEquals("通知本文", notification.body)
-        assertEquals(2, notification.importance)
     }
 
     @Test
@@ -29,25 +27,22 @@ class IncomingPushNotificationTest {
             data = mapOf(
                 "title" to "集合のお知らせ",
                 "body" to "集合場所へ移動してください。",
-                "importance" to "2",
             ),
         )
 
         assertEquals("集合のお知らせ", notification.title)
         assertEquals("集合場所へ移動してください。", notification.body)
-        assertEquals(2, notification.importance)
     }
 
     @Test
-    fun invalidOrMissingValuesUseMvpDefaults() {
+    fun blankOrMissingValuesUseDefaults() {
         val notification = IncomingPushNotification.from(
             notificationTitle = "",
             notificationBody = " ",
-            data = mapOf("importance" to "4"),
+            data = emptyMap(),
         )
 
         assertEquals("REC TIME", notification.title)
         assertEquals("新しい通知があります。", notification.body)
-        assertEquals(2, notification.importance)
     }
 }
