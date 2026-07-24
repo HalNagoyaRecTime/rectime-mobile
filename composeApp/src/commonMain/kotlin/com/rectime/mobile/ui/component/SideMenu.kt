@@ -29,11 +29,8 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.feature.auth.AuthSession
-import com.rectime.mobile.feature.auth.Role
-import com.rectime.mobile.feature.auth.effectiveRole
 import com.rectime.mobile.feature.auth.toUserProfile
 import com.rectime.mobile.feature.debug.DebugScreen
-import com.rectime.mobile.feature.roster.RosterPlaceholderScreen
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.feature.theme.ThemeSheet
 import com.rectime.mobile.ui.theme.AppTheme
@@ -43,9 +40,6 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Palette
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.PlugCircleBolt
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.RightFromBracket
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Users
-
-private val rosterVisibleRoles = setOf(Role.ClassRepresentative, Role.Teacher)
 
 private sealed class SideMenuAction {
     data class Push(val screen: Screen) : SideMenuAction()
@@ -74,13 +68,6 @@ fun SideMenu(
             icon = SolidGroup.Gear,
             action = SideMenuAction.Push(SettingsScreen),
         ))
-        if (session.user.effectiveRole() in rosterVisibleRoles) {
-            add(SideMenuItemConfig(
-                title = "出場メンバー割り当て",
-                icon = SolidGroup.Users,
-                action = SideMenuAction.Push(RosterPlaceholderScreen),
-            ))
-        }
         if (isDebugBuild) {
             add(SideMenuItemConfig(
                 title = "デバッグメニュー",
