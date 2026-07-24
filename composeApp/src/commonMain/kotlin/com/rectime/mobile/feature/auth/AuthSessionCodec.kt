@@ -10,6 +10,7 @@ fun encodeAuthSession(session: AuthSession): String =
         session.user.displayName,
         session.user.avatarUrl ?: "",
         session.user.avatarUpdatedAt ?: "",
+        session.user.role?.name ?: "",
     ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
 
 fun encodePendingAuth(pending: PendingAuth): String =
@@ -29,16 +30,19 @@ fun decodePendingAuth(value: String): PendingAuth? {
 
 fun decodeAuthSession(value: String): AuthSession? {
     val parts = value.split(".")
-    if (parts.size != 6 && parts.size != 8) return null
+    if (parts.size != 6 && parts.size != 8 && parts.size != 9) return null
 
     return runCatching {
-        val avatarUrl = if (parts.size == 8) {
+        val avatarUrl = if (parts.size >= 8) {
             val s = parts[6].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
         } else null
-        val avatarUpdatedAt = if (parts.size == 8) {
+        val avatarUpdatedAt = if (parts.size >= 8) {
             val s = parts[7].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
+        } else null
+        val role = if (parts.size == 9) {
+            Role.fromWireValue(parts[8].decodeBase64UrlToString().ifEmpty { null })
         } else null
 
         AuthSession(
@@ -51,6 +55,7 @@ fun decodeAuthSession(value: String): AuthSession? {
                 displayName = parts[5].decodeBase64UrlToString(),
                 avatarUrl = avatarUrl,
                 avatarUpdatedAt = avatarUpdatedAt,
+                role = role,
             ),
         )
     }.getOrNull()

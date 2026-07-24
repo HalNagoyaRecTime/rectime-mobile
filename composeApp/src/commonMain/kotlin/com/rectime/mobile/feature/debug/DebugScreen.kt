@@ -30,6 +30,9 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createAppHttpClient
+import com.rectime.mobile.feature.auth.DevRoleOverride
+import com.rectime.mobile.feature.auth.Role
+import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import io.ktor.client.request.get
@@ -58,6 +61,28 @@ object DebugScreen : Screen {
             onBack = { navigationController.requestPop() },
         ) {
             item {
+                Text(
+                    text = "ロール（開発用切り替え）",
+                    color = AppTheme.colors.textSecondary,
+                    fontSize = 12.sp,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    RoleChip(
+                        label = "未設定（バックエンドの値を使用）",
+                        selected = DevRoleOverride.role == null,
+                        onClick = { DevRoleOverride.role = null },
+                    )
+                    Role.entries.forEach { role ->
+                        RoleChip(
+                            label = role.label,
+                            selected = DevRoleOverride.role == role,
+                            onClick = { DevRoleOverride.role = role },
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+
                 Text(
                     text = "API Base URL",
                     color = AppTheme.colors.textSecondary,
@@ -141,6 +166,21 @@ object DebugScreen : Screen {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RoleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    PressSurface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        color = if (selected) AppTheme.colors.surfaceAccent else AppTheme.colors.surfaceMuted,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (selected) AppTheme.colors.textPrimary else AppTheme.colors.textSecondary,
+        )
     }
 }
 

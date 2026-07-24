@@ -6,6 +6,7 @@ data class AuthUser(
     val displayName: String,
     val avatarUrl: String? = null,
     val avatarUpdatedAt: String? = null,
+    val role: Role? = null,
 )
 
 data class AuthSession(
