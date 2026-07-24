@@ -165,6 +165,8 @@ fun NavigationHost(
             state = state,
             navigationController = navigationController,
             revealWidthPx = revealWidthPx,
+            session = session,
+            onLogout = onLogout,
         )
 
         // Layer 2: Push Layer (above Root+BottomNav, all sources)
