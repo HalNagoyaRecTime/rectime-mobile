@@ -5,13 +5,23 @@ import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.request.header
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
 expect fun createHttpClient(): HttpClient
+
+// defaultRequest{} のurlは、per-callのURLがマージされる前の空のビルダーを指しており
+// 実際のリクエスト先を反映しない(常に isApiUrl=false になり、ヘッダーが一切付与されない)。
+// per-call URLが確定した後に発火するonRequestフックを使う必要がある。
+private val MobileAuthHeadersPlugin = createClientPlugin("MobileAuthHeaders") {
+    onRequest { request, _ ->
+        mobileAuthHeaders(request.url.toString())?.forEach { (name, value) ->
+            request.headers.append(name, value)
+        }
+    }
+}
 
 fun createAppHttpClient(): HttpClient = createHttpClient().config {
     install(HttpTimeout) {
@@ -23,9 +33,7 @@ fun createAppHttpClient(): HttpClient = createHttpClient().config {
             ignoreUnknownKeys = true
         })
     }
-    defaultRequest {
-        mobileAuthHeaders(url.buildString())?.forEach { (name, value) -> header(name, value) }
-    }
+    install(MobileAuthHeadersPlugin)
 }
 
 internal fun isApiUrl(url: String): Boolean =
