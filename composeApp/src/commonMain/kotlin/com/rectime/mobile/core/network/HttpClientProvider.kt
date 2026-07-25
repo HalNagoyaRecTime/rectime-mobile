@@ -15,7 +15,7 @@ expect fun createHttpClient(): HttpClient
 // defaultRequest{} のurlは、per-callのURLがマージされる前の空のビルダーを指しており
 // 実際のリクエスト先を反映しない(常に isApiUrl=false になり、ヘッダーが一切付与されない)。
 // per-call URLが確定した後に発火するonRequestフックを使う必要がある。
-private val MobileAuthHeadersPlugin = createClientPlugin("MobileAuthHeaders") {
+internal val MobileAuthHeadersPlugin = createClientPlugin("MobileAuthHeaders") {
     onRequest { request, _ ->
         mobileAuthHeaders(request.url.toString())?.forEach { (name, value) ->
             request.headers.append(name, value)
