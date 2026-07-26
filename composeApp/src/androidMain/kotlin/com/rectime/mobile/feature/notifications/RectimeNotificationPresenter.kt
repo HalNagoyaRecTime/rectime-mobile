@@ -16,6 +16,7 @@ object RectimeNotificationPresenter {
         context: Context,
         notification: IncomingPushNotification,
         notificationId: Int,
+        data: Map<String, String>,
     ) {
         if (!hasNotificationPermission(context)) return
 
@@ -23,6 +24,8 @@ object RectimeNotificationPresenter {
 
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_NOTIFICATION_INTENT, true)
+            data.forEach { (key, value) -> putExtra(key, value) }
         }
         val contentIntent = PendingIntent.getActivity(
             context,
@@ -50,3 +53,5 @@ object RectimeNotificationPresenter {
             PackageManager.PERMISSION_GRANTED
     }
 }
+
+private const val EXTRA_NOTIFICATION_INTENT = "rectime.notification_intent"
