@@ -20,6 +20,7 @@ import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
+import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import io.ktor.client.plugins.defaultRequest
@@ -68,6 +69,7 @@ fun App() {
     val authState by authViewModel.uiState.collectAsState()
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
+        updatePushTokenRegistration(authState.session?.accessToken)
     }
 
     AppTheme(themeStateHolder = themeStateHolder) {
