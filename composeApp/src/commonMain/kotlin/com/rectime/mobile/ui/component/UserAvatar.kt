@@ -14,12 +14,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.network.NetworkHeaders
-import coil3.network.httpHeaders
-import coil3.request.ImageRequest
 import com.rectime.mobile.core.model.UserProfile
-import com.rectime.mobile.core.network.mobileAuthHeaders
 import com.rectime.mobile.ui.theme.AppTheme
 
 @Composable
@@ -40,21 +35,10 @@ fun UserAvatar(
     imageUrl: String? = null,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalPlatformContext.current
-    val authHeaders = imageUrl?.let { mobileAuthHeaders(it) }
-    val imageModel = if (!imageUrl.isNullOrBlank() && authHeaders != null) {
-        ImageRequest.Builder(context)
-            .data(imageUrl)
-            .httpHeaders(
-                NetworkHeaders.Builder().apply {
-                    authHeaders.forEach { (name, value) -> this[name] = value }
-                }.build()
-            )
-            .build()
-    } else {
-        imageUrl
-    }
-
+    // 認証ヘッダーはApp.ktのKtorNetworkFetcherFactoryクライアントに
+    // installしたMobileAuthHeadersPluginが自動付与するため、ここで個別に
+    // NetworkHeadersを組み立てて付与すると二重になってしまう。imageUrlを
+    // そのままmodelとして渡すだけでよい。
     Box(
         modifier = modifier
             .clip(CircleShape)
@@ -64,7 +48,7 @@ fun UserAvatar(
         Text(text = initials, color = AppTheme.colors.textOnAccent, fontWeight = FontWeight.Bold)
         if (!imageUrl.isNullOrBlank()) {
             AsyncImage(
-                model = imageModel,
+                model = imageUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
