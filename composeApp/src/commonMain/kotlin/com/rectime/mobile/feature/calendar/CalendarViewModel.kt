@@ -94,7 +94,7 @@ class CalendarViewModel : ViewModel() {
                     )
 
                 }
-                _events.value = timelineEvents
+                _events.value = assignLanes(timelineEvents)
 
             }catch (e: CancellationException){
                 throw e

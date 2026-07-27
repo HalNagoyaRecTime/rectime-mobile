@@ -156,17 +156,6 @@ private fun CalendarScreenUI(
                         }
                     }
 
-                    PressSurface(
-                        onClick = {/* 後で実装 */},
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp),
-                        color = AppTheme.colors.surfacePrimary,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        Text(text = "+2", color = AppTheme.colors.textSecondary)
-                    }
-
                         if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
                             val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
                             val accentStrong = AppTheme.colors.surfaceAccentStrong
