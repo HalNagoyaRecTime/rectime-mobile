@@ -19,6 +19,10 @@ class NavigationController(
         )
     }
 
+    fun reset(screen: Screen) {
+        state = NavigationState(rootScreen = screen)
+    }
+
     fun push(screen: Screen, source: PushTransitionSource = PushTransitionSource.Default) {
         if (state.pushTransition.mode == PushTransitionMode.Enter) return
         val entry = PushEntry(

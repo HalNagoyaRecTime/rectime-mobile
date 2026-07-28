@@ -31,6 +31,18 @@ cd rectime-mobile
 
 依存関係は初回ビルド時に Gradle が自動取得します。
 
+### Firebase Android設定
+
+Android版のビルドには、Firebase Consoleから取得した設定ファイルが必要です。
+プロジェクト管理者から安全な方法で共有されたファイルを、次の場所へ配置してください。
+
+```text
+composeApp/google-services.json
+```
+
+`google-services.json`はGitの管理対象外です。コミットしないでください。
+CIでAndroid版をビルドする場合は、Repository Secretなどに保存した内容からビルド時に同じパスへ生成してください。
+
 詳細なセットアップ手順は [`setup/README.md`](setup/README.md) を参照。
 
 ## ディレクトリ構成
