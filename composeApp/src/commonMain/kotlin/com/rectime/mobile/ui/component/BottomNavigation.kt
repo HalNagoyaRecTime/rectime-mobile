@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.calendar.CalendarScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.ui.theme.AppTheme
@@ -50,12 +51,14 @@ private data class NavigationItemConfig(
 fun BottomNavigationBar(
     currentScreen: Screen,
     onSelectRoot: (Screen) -> Unit,
+    session: AuthSession,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val items = listOf(
     NavigationItemConfig(CalendarScreen, "カレンダー", SolidGroup.CalendarDays),
     NavigationItemConfig(NotificationsScreen, "通知", SolidGroup.Bell),
-    NavigationItemConfig(SettingsScreen, "設定", SolidGroup.Gear),
+    NavigationItemConfig(SettingsScreen(session = session, onLogout = onLogout), "設定", SolidGroup.Gear),
     NavigationItemConfig(RankingScreen, "ランキング", SolidGroup.Trophy),
 )
 

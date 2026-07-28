@@ -1,16 +1,21 @@
 package com.rectime.mobile.feature.settings
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
-object SettingsScreen : Screen {
+class SettingsScreen(
+    private val session: AuthSession,
+    private val onLogout: () -> Unit,
+) : Screen {
     override val key: String = "settings"
 
     @Composable
@@ -20,10 +25,18 @@ object SettingsScreen : Screen {
         ) {
             item {
                 Text(
-                    text = "設定画面です。将来的にユーザー設定などを追加します。",
-                    color = AppTheme.colors.textSecondary,
+                    text = session.user.displayName,
+                    color = AppTheme.colors.textPrimary,
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
+            }
+            item {
+                Button(
+                    onClick = onLogout,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                ) {
+                    Text("ログアウト")
+                }
             }
         }
     }
