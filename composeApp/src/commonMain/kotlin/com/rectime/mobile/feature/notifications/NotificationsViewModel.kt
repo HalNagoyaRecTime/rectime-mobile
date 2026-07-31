@@ -43,7 +43,7 @@ class NotificationsViewModel(
         )
         loadJob = viewModelScope.launch {
             try {
-                val notifications = fetchAllNotifications()
+                val notifications = fetchAllNotifications(gateway)
                 _uiState.value = NotificationsUiState(
                     notifications = notifications,
                     isLoading = false,
@@ -60,27 +60,28 @@ class NotificationsViewModel(
         }
     }
 
-    private suspend fun fetchAllNotifications(): List<UserNotification> {
-        val notifications = mutableListOf<UserNotification>()
-        var offset = 0
-
-        do {
-            val page = gateway.getNotifications(limit = PAGE_SIZE, offset = offset)
-            notifications += page.notifications
-            offset += page.notifications.size
-        } while (page.notifications.isNotEmpty() && offset < page.total)
-
-        return notifications
-    }
-
     override fun onCleared() {
         super.onCleared()
         gateway.close()
     }
+}
 
-    private companion object {
-        const val PAGE_SIZE = 100
-    }
+internal suspend fun fetchAllNotifications(
+    gateway: NotificationGateway,
+    pageSize: Int = 100,
+): List<UserNotification> {
+    require(pageSize > 0) { "Page size must be positive" }
+
+    val notifications = mutableListOf<UserNotification>()
+    var offset = 0
+
+    do {
+        val page = gateway.getNotifications(limit = pageSize, offset = offset)
+        notifications += page.notifications
+        offset += page.notifications.size
+    } while (page.notifications.isNotEmpty() && offset < page.total)
+
+    return notifications
 }
 
 data class NotificationDetailUiState(
