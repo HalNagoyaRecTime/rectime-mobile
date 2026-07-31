@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
+
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStore = AuthSessionStore(),
@@ -103,7 +105,7 @@ class AuthViewModel(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = "Could not open a browser for login.",
+                            error = AUTH_FAILED_MESSAGE,
                             message = "",
                         )
                     }
@@ -123,7 +125,7 @@ class AuthViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to start login",
+                        error = AUTH_FAILED_MESSAGE,
                     )
                 }
             }
@@ -134,18 +136,18 @@ class AuthViewModel(
         viewModelScope.launch {
             val pending = _uiState.value.pendingAuth
             if (pending == null) {
-                _uiState.update { it.copy(error = "No login request is in progress.") }
+                _uiState.update { it.copy(error = AUTH_FAILED_MESSAGE) }
                 return@launch
             }
 
             val code = readQueryValue(url, "code")
             val state = readQueryValue(url, "state")
             if (code.isNullOrBlank() || state.isNullOrBlank()) {
-                _uiState.update { it.copy(error = "Invalid callback URL.") }
+                _uiState.update { it.copy(error = AUTH_FAILED_MESSAGE) }
                 return@launch
             }
             if (state != pending.state) {
-                _uiState.update { it.copy(error = "Auth state does not match.") }
+                _uiState.update { it.copy(error = AUTH_FAILED_MESSAGE) }
                 return@launch
             }
 
@@ -167,7 +169,7 @@ class AuthViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to complete login",
+                        error = AUTH_FAILED_MESSAGE,
                     )
                 }
             }
