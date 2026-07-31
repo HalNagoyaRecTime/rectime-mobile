@@ -3,7 +3,9 @@ package com.rectime.mobile.feature.schedule
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.core.network.GatheringResponse
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.network.toModel
 import io.ktor.client.call.body
@@ -26,10 +28,10 @@ class CompetitionScheduleDetailViewModel(
     val uiState: StateFlow<CompetitionScheduleDetailUiState> = _uiState.asStateFlow()
 
     init {
-        fetchEventDetail()
+        fetchScheduleDetail()
     }
 
-    private fun fetchEventDetail() {
+    private fun fetchScheduleDetail() {
         viewModelScope.launch {
             _uiState.value = CompetitionScheduleDetailUiState(isLoading = true)
 
@@ -52,6 +54,7 @@ class CompetitionScheduleDetailViewModel(
                 _uiState.value = CompetitionScheduleDetailUiState(
                     isLoading = false,
                     eventDetail = eventDetail.toModel(),
+                    gatherings = fetchGatherings(),
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -62,6 +65,22 @@ class CompetitionScheduleDetailViewModel(
                     error = "スケジュール情報の取得に失敗しました",
                 )
             }
+        }
+    }
+
+    private suspend fun fetchGatherings(): List<Gathering> {
+        return try {
+            val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId/gatherings")
+            if (!response.status.isSuccess()) {
+                return emptyList()
+            }
+            val gatherings: List<GatheringResponse> = response.body()
+            gatherings.map { it.toModel() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
         }
     }
 
