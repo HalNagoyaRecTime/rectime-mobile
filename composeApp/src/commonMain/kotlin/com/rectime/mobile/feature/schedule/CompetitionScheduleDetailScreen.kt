@@ -78,17 +78,9 @@ data class CompetitionScheduleDetailScreen(val eventId: Int) : Screen {
                             modifier = Modifier.padding(vertical = 4.dp),
                         )
 
-                        val gatherings = uiState.gatherings
-                        gatherings.forEach { gathering ->
+                        uiState.gathering?.let { gathering ->
                             // 集合時刻 99:59 は未設定を表すセンチネル値
                             val time = if (gathering.gatheringTime == "99:59") "未定" else gathering.gatheringTime
-                            if (gatherings.size > 1) {
-                                Text(
-                                    text = "第${gathering.round}回",
-                                    color = AppTheme.colors.textSecondary,
-                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
-                                )
-                            }
                             Text(
                                 text = "集合時間：$time",
                                 color = AppTheme.colors.textSecondary,

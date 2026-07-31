@@ -6,6 +6,6 @@ import com.rectime.mobile.core.model.Gathering
 data class CompetitionScheduleDetailUiState(
     val isLoading: Boolean = false,
     val eventDetail: EventDetail? = null,
-    val gatherings: List<Gathering> = emptyList(),
+    val gathering: Gathering? = null,
     val error: String? = null,
 )

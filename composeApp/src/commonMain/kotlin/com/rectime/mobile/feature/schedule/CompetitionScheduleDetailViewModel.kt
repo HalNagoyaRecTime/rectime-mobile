@@ -54,7 +54,7 @@ class CompetitionScheduleDetailViewModel(
                 _uiState.value = CompetitionScheduleDetailUiState(
                     isLoading = false,
                     eventDetail = eventDetail.toModel(),
-                    gatherings = fetchGatherings(),
+                    gathering = fetchGathering(),
                 )
             } catch (e: CancellationException) {
                 throw e
@@ -68,19 +68,19 @@ class CompetitionScheduleDetailViewModel(
         }
     }
 
-    private suspend fun fetchGatherings(): List<Gathering> {
+    private suspend fun fetchGathering(): Gathering? {
         return try {
             val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId/gatherings")
             if (!response.status.isSuccess()) {
-                return emptyList()
+                return null
             }
             val gatherings: List<GatheringResponse> = response.body()
-            gatherings.map { it.toModel() }
+            gatherings.firstOrNull()?.toModel()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            emptyList()
+            null
         }
     }
 
