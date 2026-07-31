@@ -82,9 +82,20 @@ data class CompetitionScheduleDetailScreen(val eventId: Int) : Screen {
                         gatherings.forEach { gathering ->
                             // 集合時刻 99:59 は未設定を表すセンチネル値
                             val time = if (gathering.gatheringTime == "99:59") "未定" else gathering.gatheringTime
-                            val roundPrefix = if (gatherings.size > 1) "第${gathering.round}回　" else ""
+                            if (gatherings.size > 1) {
+                                Text(
+                                    text = "第${gathering.round}回",
+                                    color = AppTheme.colors.textSecondary,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                                )
+                            }
                             Text(
-                                text = "${roundPrefix}集合時間：$time　集合場所：${gathering.gatheringSpotName}",
+                                text = "集合時間：$time",
+                                color = AppTheme.colors.textSecondary,
+                                modifier = Modifier.padding(vertical = 4.dp),
+                            )
+                            Text(
+                                text = "集合場所：${gathering.gatheringSpotName}",
                                 color = AppTheme.colors.textSecondary,
                                 modifier = Modifier.padding(vertical = 4.dp),
                             )
