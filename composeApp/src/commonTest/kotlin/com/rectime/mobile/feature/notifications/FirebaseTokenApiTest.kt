@@ -60,6 +60,36 @@ class FirebaseTokenApiTest {
     }
 
     @Test
+    fun registerDoesNotMutateGlobalSessionTokenHolder() = runTest {
+        // ログアウト直後にFCMのトークンリフレッシュ(AndroidPushTokenRegistrar)が
+        // 永続化ストアの古いトークンでregister()を呼んでも、現在のセッション状態
+        // (SessionTokenHolder)を上書きしてしまわないことを検証する。上書きすると、
+        // 以後の全APIリクエストが古いトークンを送り続けてしまう。
+        SessionTokenHolder.accessToken = "current-session-token"
+        var capturedRequest: HttpRequestData? = null
+        val client = mockAppHttpClient { request ->
+            capturedRequest = request
+            respond(
+                content = """{"firebase_token_id":1}""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders,
+            )
+        }
+        val api = FirebaseTokenApi(client = client, baseUrl = apiBaseUrl)
+
+        api.register(fcmToken = "firebase-token", accessToken = "stale-persisted-token")
+
+        val request = requireNotNull(capturedRequest)
+        // リクエストには渡されたaccessTokenが使われる。
+        assertEquals(
+            listOf("Bearer stale-persisted-token"),
+            request.headers.getAll(HttpHeaders.Authorization),
+        )
+        // SessionTokenHolderは書き換えられていない。
+        assertEquals("current-session-token", SessionTokenHolder.accessToken)
+    }
+
+    @Test
     fun registerExposesBackendFailureWithoutLeakingItIntoMessage() = runTest {
         val client = mockAppHttpClient {
             respond(

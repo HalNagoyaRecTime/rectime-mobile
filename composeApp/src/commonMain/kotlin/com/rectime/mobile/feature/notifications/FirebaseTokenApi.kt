@@ -2,8 +2,9 @@ package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createAppHttpClient
-import com.rectime.mobile.feature.auth.SessionTokenHolder
+import com.rectime.mobile.core.network.mobileAuthHeaders
 import io.ktor.client.HttpClient
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -21,12 +22,16 @@ class FirebaseTokenApi(
         require(fcmToken.isNotBlank()) { "FCM token must not be blank" }
         require(accessToken.isNotBlank()) { "Access token must not be blank" }
 
-        // createAppHttpClient()がMobileAuthHeadersPlugin経由でAuthorization/
-        // X-Client-Typeを自動付与するため、ここでは重複させずSessionTokenHolder
-        // を最新化するだけにする(このAPIが呼ばれる時点のaccessTokenを確実に反映するため)。
-        SessionTokenHolder.accessToken = accessToken
-
         val response = client.post(endpoint) {
+            // このAPIはFCMのバックグラウンドコールバック(AndroidPushTokenRegistrar)
+            // からも、永続化ストアから読んだaccessTokenで呼ばれる。SessionTokenHolder
+            // (現在ログイン中のセッション用グローバル状態)は書き換えず、渡された
+            // accessTokenをこのリクエストにのみ明示的に付与する。ログアウト直後に
+            // FCMのトークンリフレッシュが走った場合でも、他のAPIリクエストへ古い
+            // トークンが漏れ出さないようにするため。
+            mobileAuthHeaders(endpoint, accessToken)?.forEach { (name, value) ->
+                header(name, value)
+            }
             contentType(ContentType.Application.Json)
             setBody(
                 RegisterFirebaseTokenRequest(

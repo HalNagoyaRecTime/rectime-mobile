@@ -15,8 +15,14 @@ expect fun createHttpClient(): HttpClient
 // defaultRequest{} のurlは、per-callのURLがマージされる前の空のビルダーを指しており
 // 実際のリクエスト先を反映しない(常に isApiUrl=false になり、ヘッダーが一切付与されない)。
 // per-call URLが確定した後に発火するonRequestフックを使う必要がある。
+//
+// 呼び出し元が既にAuthorizationヘッダーをセット済みの場合は上書きしない。
+// SessionTokenHolder(現在のログインセッション用のグローバル状態)と異なる
+// トークンをリクエスト単位で使いたいケース(FirebaseTokenApi.register()など)
+// を、グローバル状態を書き換えずに実現できるようにするため。
 internal val MobileAuthHeadersPlugin = createClientPlugin("MobileAuthHeaders") {
     onRequest { request, _ ->
+        if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
         mobileAuthHeaders(request.url.toString())?.forEach { (name, value) ->
             request.headers.append(name, value)
         }
@@ -49,6 +55,15 @@ internal val normalizedApiBaseUrl: String =
  */
 internal fun mobileAuthHeaders(url: String): Map<String, String>? {
     val token = SessionTokenHolder.accessToken ?: return null
+    return mobileAuthHeaders(url, token)
+}
+
+/**
+ * `token` を明示的に指定するオーバーロード。SessionTokenHolder(現在のログイン
+ * セッション)とは異なるトークンでリクエストしたい場合に、グローバル状態を
+ * 書き換えずに使う。
+ */
+internal fun mobileAuthHeaders(url: String, token: String): Map<String, String>? {
     if (!isApiUrl(url)) return null
     return mapOf(
         "X-Client-Type" to "mobile",
