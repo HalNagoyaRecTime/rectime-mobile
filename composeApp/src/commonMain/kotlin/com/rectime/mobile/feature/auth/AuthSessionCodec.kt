@@ -10,6 +10,8 @@ fun encodeAuthSession(session: AuthSession): String =
         session.user.displayName,
         session.user.avatarUrl ?: "",
         session.user.avatarUpdatedAt ?: "",
+        session.user.studentIdNumber ?: "",
+        session.user.classRoomName ?: "",
         session.user.role?.name ?: "",
     ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
 
