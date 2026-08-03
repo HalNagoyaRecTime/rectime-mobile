@@ -2,13 +2,13 @@ package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createAppHttpClient
+import com.rectime.mobile.core.network.mobileAuthHeaders
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
 
@@ -23,8 +23,15 @@ class FirebaseTokenApi(
         require(accessToken.isNotBlank()) { "Access token must not be blank" }
 
         val response = client.post(endpoint) {
-            header("X-Client-Type", "mobile")
-            header(HttpHeaders.Authorization, "Bearer $accessToken")
+            // このAPIはFCMのバックグラウンドコールバック(AndroidPushTokenRegistrar)
+            // からも、永続化ストアから読んだaccessTokenで呼ばれる。SessionTokenHolder
+            // (現在ログイン中のセッション用グローバル状態)は書き換えず、渡された
+            // accessTokenをこのリクエストにのみ明示的に付与する。ログアウト直後に
+            // FCMのトークンリフレッシュが走った場合でも、他のAPIリクエストへ古い
+            // トークンが漏れ出さないようにするため。
+            mobileAuthHeaders(endpoint, accessToken)?.forEach { (name, value) ->
+                header(name, value)
+            }
             contentType(ContentType.Application.Json)
             setBody(
                 RegisterFirebaseTokenRequest(

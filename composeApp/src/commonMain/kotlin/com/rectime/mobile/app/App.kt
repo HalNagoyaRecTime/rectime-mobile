@@ -15,7 +15,7 @@ import coil3.disk.DiskCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
-import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
@@ -28,9 +28,6 @@ import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
 import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
-import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.request.header
-import io.ktor.http.HttpHeaders
 import okio.Path.Companion.toPath
 
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
@@ -43,13 +40,7 @@ fun App() {
                 add(
                     KtorNetworkFetcherFactory(
                         createHttpClient().config {
-                            defaultRequest {
-                                val token = SessionTokenHolder.accessToken
-                                if (token != null && isApiUrl(url.buildString())) {
-                                    header("X-Client-Type", "mobile")
-                                    header(HttpHeaders.Authorization, "Bearer $token")
-                                }
-                            }
+                            install(MobileAuthHeadersPlugin)
                         }
                     )
                 )
@@ -120,9 +111,3 @@ fun App() {
         }
     }
 }
-
-internal fun isApiUrl(url: String): Boolean =
-    url == normalizedApiBaseUrl || url.startsWith("$normalizedApiBaseUrl/")
-
-internal val normalizedApiBaseUrl: String =
-    apiBaseUrl.trimEnd('/')
