@@ -26,11 +26,20 @@ jobs:
         run: |
           existing=$(gh pr list --base develop-v2 --head develop --state open --json number --jq 'length')
           if [ "$existing" = "0" ]; then
-            gh pr create \
+            if ! output=$(gh pr create \
               --base develop-v2 \
               --head develop \
               --title "Sync: develop -> develop-v2" \
-              --body "develop の更新を develop-v2 に反映するための自動生成PRです。"
+              --body "develop の更新を develop-v2 に反映するための自動生成PRです。" 2>&1); then
+              if echo "$output" | grep -q "No commits between"; then
+                echo "develop と develop-v2 の間に差分がないためPR作成をスキップします。"
+              else
+                echo "$output" >&2
+                exit 1
+              fi
+            else
+              echo "$output"
+            fi
           else
             echo "develop -> develop-v2 の open な PR は既に存在するためスキップします。"
           fi
