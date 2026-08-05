@@ -43,8 +43,16 @@ fun decodeAuthSession(value: String): AuthSession? {
             val s = parts[7].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
         } else null
-        val role = if (parts.size == 9) {
-            Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
+        val studentIdNumber = if (parts.size >= 10) {
+            val s = parts[8].decodeBase64UrlToString()
+            if (s.isEmpty()) null else s
+        } else null
+        val classRoomName = if (parts.size >= 10) {
+            val s = parts[9].decodeBase64UrlToString()
+            if (s.isEmpty()) null else s
+        } else null
+        val role = if (parts.size == 11) {
+            Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
         } else null
 
         AuthSession(
@@ -57,6 +65,8 @@ fun decodeAuthSession(value: String): AuthSession? {
                 displayName = parts[5].decodeBase64UrlToString(),
                 avatarUrl = avatarUrl,
                 avatarUpdatedAt = avatarUpdatedAt,
+                studentIdNumber = studentIdNumber,
+                classRoomName = classRoomName,
                 role = role,
             ),
         )
