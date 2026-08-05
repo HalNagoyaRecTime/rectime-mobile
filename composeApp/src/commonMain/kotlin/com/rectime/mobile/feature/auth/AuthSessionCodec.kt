@@ -32,7 +32,7 @@ fun decodePendingAuth(value: String): PendingAuth? {
 
 fun decodeAuthSession(value: String): AuthSession? {
     val parts = value.split(".")
-    if (parts.size != 6 && parts.size != 8 && parts.size != 9) return null
+    if (parts.size != 6 && parts.size != 8 && parts.size != 10 && parts.size != 11) return null
 
     return runCatching {
         val avatarUrl = if (parts.size >= 8) {
