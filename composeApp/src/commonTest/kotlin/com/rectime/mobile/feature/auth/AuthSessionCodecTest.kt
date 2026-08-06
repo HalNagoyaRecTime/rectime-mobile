@@ -73,4 +73,21 @@ class AuthSessionCodecTest {
 
         assertEquals(original, decoded)
     }
+
+    @Test
+    fun decodeRestoresLegacyNinePartSessionWithRoleOnly() {
+        val legacyEncoded = listOf(
+            "token123", "refresh456", "3600",
+            "6", "test@example.com", "テスト太郎",
+            "https://example.com/avatar.png", "2026-07-31",
+            "Student",
+        ).joinToString(".") { it.encodeToByteArray().toBase64Url() }
+
+        val decoded = decodeAuthSession(legacyEncoded)
+
+        assertEquals("6", decoded?.user?.id)
+        assertEquals(Role.Student, decoded?.user?.role)
+        assertEquals(null, decoded?.user?.studentIdNumber)
+        assertEquals(null, decoded?.user?.classRoomName)
+    }
 }
