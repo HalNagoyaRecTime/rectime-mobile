@@ -83,8 +83,8 @@ class AuthViewModel(
                     it.copy(
                         isLoading = false,
                         error = null,
-                        //session = createDevSession(),
-                        //message = "DEV_BYPASS_AUTH enabled",
+                        session = createDevSession(),
+                        message = "DEV_BYPASS_AUTH enabled",
                     )
                 }
                 return@launch
@@ -199,18 +199,18 @@ class AuthViewModel(
     }
 }
 
-//private fun createDevSession() = AuthSession(
-//    accessToken = "dev-bypass-token",
-//    refreshTokenId = "dev-bypass-refresh",
-//    expiresIn = 3600L,
-//    user = AuthUser(
-//        id = "dev-user",
-//        email = "dev@local",
-//        displayName = "Dev User",
-//        studentIdNumber = "55000",
-//        classRoomName = "IA12A203",
-//    ),
-//)
+private fun createDevSession() = AuthSession(
+    accessToken = "dev-bypass-token",
+    refreshTokenId = "dev-bypass-refresh",
+    expiresIn = 3600L,
+    user = AuthUser(
+        id = "dev-user",
+        email = "dev@local",
+        displayName = "Dev User",
+        studentIdNumber = "55000",
+        classRoomName = "IA12A203",
+    ),
+)
 
 private fun readQueryValue(url: String, key: String): String? {
     val queryStart = url.indexOf('?')
