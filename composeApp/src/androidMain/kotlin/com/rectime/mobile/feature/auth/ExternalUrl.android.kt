@@ -12,7 +12,7 @@ fun setExternalUrlContext(context: Context) {
     externalUrlContext = context.applicationContext
 }
 
-actual fun openExternalUrl(url: String): Boolean {
+actual suspend fun openExternalUrl(url: String): Boolean {
     val context = externalUrlContext ?: return false
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
