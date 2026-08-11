@@ -133,10 +133,16 @@ class LaneAssignmentTest {
             event(1, 60, 60),
             event(2, 90, 60),
         )
+        val shuffled = events.reversed()
 
         val result = assignLanes(events)
+        val shuffledResult = assignLanes(shuffled)
 
         assertEquals(setOf(1, 2, 3), result.map { it.eventId }.toSet())
         assertEquals(3, result.size)
+        assertEquals(
+            result.associate { it.eventId to (it.lane to it.laneCount) },
+            shuffledResult.associate { it.eventId to (it.lane to it.laneCount) },
+        )
     }
 }
