@@ -147,6 +147,10 @@ private fun CalendarScreenUI(
                         ) {
                             Column {
                                 Text(text = event.title, color = AppTheme.colors.textPrimary)
+                                Text(
+                                    text = "${event.startTimeLabel}〜${event.endTimeLabel}",
+                                    color = AppTheme.colors.textSecondary,
+                                )
                                 Text(text = event.venue, color = AppTheme.colors.textSecondary)
                             }
                         }

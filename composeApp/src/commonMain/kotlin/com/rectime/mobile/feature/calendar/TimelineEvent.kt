@@ -8,4 +8,6 @@ data class TimelineEvent(
     val durationMinutes: Int,
     val lane: Int,
     val laneCount: Int,
+    val startTimeLabel: String,
+    val endTimeLabel: String,
 )
