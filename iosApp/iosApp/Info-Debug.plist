@@ -1,6 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<!--
+  Info-Release.plist と2本立てで管理している。値だけが構成ごとに変わるキー
+  (API_BASE_URL, NSAppTransportSecurity)以外は、両方の plist で必ず一致させること。
+  特に CFBundleURLTypes(OAuthコールバックのURLスキーム登録)を片方だけ更新し
+  忘れると、そちらのビルドだけMicrosoftログインから復帰できなくなる。
+  共通キー: CADisableMinimumFrameDurationOnPhone, UILaunchScreen, CFBundleURLTypes
+-->
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
