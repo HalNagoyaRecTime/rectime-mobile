@@ -9,7 +9,7 @@ fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
     if (events.isEmpty()) return events
 
     val sorted = events.sortedWith(compareBy({ it.startMinuteOfDay }, { it.eventId }))
-    val result = arrayOfNulls<TimelineEvent>(sorted.size)
+    val result = ArrayList<TimelineEvent>(sorted.size)
 
     fun flushGroup(from: Int, until: Int) {
         val laneEndMinutes = mutableListOf<Int>()
@@ -31,7 +31,7 @@ fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
 
         val laneCount = laneEndMinutes.size
         for (i in from until until) {
-            result[i] = sorted[i].copy(lane = laneIndexOf[i - from], laneCount = laneCount)
+            result.add(sorted[i].copy(lane = laneIndexOf[i - from], laneCount = laneCount))
         }
     }
 
@@ -50,5 +50,5 @@ fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
     }
     flushGroup(groupStart, sorted.size)
 
-    return result.filterNotNull()
+    return result
 }

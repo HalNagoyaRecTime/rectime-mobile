@@ -86,7 +86,7 @@ class CalendarViewModel : ViewModel() {
                         title = it.eventName,
                         venue = it.venue,
                         startMinuteOfDay = startMinuteOfDay,
-                        durationMinutes = endMinuteOfDay - startMinuteOfDay,
+                        durationMinutes = (endMinuteOfDay - startMinuteOfDay).coerceAtLeast(0),
                         lane = 0,
                         laneCount = 1,
                         startTimeLabel = displayTimeFormat.format(startTime),
