@@ -134,24 +134,29 @@ private fun CalendarScreenUI(
                             val yOffset = hourHeight * (startMinutes / 60f)
                             val eventHeight = hourHeight * (event.durationMinutes / 60f)
 
+                        val isOverflow = event.overflowCount > 0
                         PressSurface(
-                            onClick = { onOpenEventDetail(event.eventId) },
+                            onClick = { if (!isOverflow) onOpenEventDetail(event.eventId) },
                             modifier = Modifier
                                 .width(laneWidth - 8.dp)
                                 .height(eventHeight - 6.dp)
                                 .padding(top = 4.dp)
                                 .align(Alignment.TopStart)
                                 .offset(x = xOffset + 4.dp, y = yOffset + 4.dp),
-                            color = AppTheme.colors.surfaceAccent,
+                            color = if (isOverflow) AppTheme.colors.surfaceMuted else AppTheme.colors.surfaceAccent,
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
                         ) {
-                            Column {
-                                Text(text = event.title, color = AppTheme.colors.textPrimary)
-                                Text(
-                                    text = "${event.startTimeLabel}〜${event.endTimeLabel}",
-                                    color = AppTheme.colors.textSecondary,
-                                )
-                                Text(text = event.venue, color = AppTheme.colors.textSecondary)
+                            if (isOverflow) {
+                                Text(text = "+${event.overflowCount}", color = AppTheme.colors.textSecondary)
+                            } else {
+                                Column {
+                                    Text(text = event.title, color = AppTheme.colors.textPrimary)
+                                    Text(
+                                        text = "${event.startTimeLabel}〜${event.endTimeLabel}",
+                                        color = AppTheme.colors.textSecondary,
+                                    )
+                                    Text(text = event.venue, color = AppTheme.colors.textSecondary)
+                                }
                             }
                         }
                     }

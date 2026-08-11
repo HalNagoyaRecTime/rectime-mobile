@@ -15,6 +15,8 @@ private fun event(
     durationMinutes = durationMinutes,
     lane = 0,
     laneCount = 1,
+    startTimeLabel = "",
+    endTimeLabel = "",
 )
 
 class LaneAssignmentTest {
@@ -124,6 +126,78 @@ class LaneAssignmentTest {
         assertEquals(3, byId.getValue(3).laneCount)
         assertEquals(3, byId.getValue(4).laneCount)
         assertEquals(3, byId.getValue(5).laneCount)
+    }
+
+    @Test
+    fun exactlyMaxVisibleLanesOverlappingEventsAreAllShownWithoutOverflow() {
+        val events = (1..MAX_VISIBLE_LANES).map { event(it, 600, 60) }
+
+        val result = assignLanes(events)
+
+        assertEquals(MAX_VISIBLE_LANES, result.size)
+        assertEquals((0 until MAX_VISIBLE_LANES).toSet(), result.map { it.lane }.toSet())
+        result.forEach {
+            assertEquals(MAX_VISIBLE_LANES, it.laneCount)
+            assertEquals(0, it.overflowCount)
+        }
+    }
+
+    @Test
+    fun overlappingEventsExceedingMaxVisibleLanesAreCollapsedIntoOneOverflowEntry() {
+        // 5件が完全に同じ時間帯で重複(600-660)。上限(MAX_VISIBLE_LANES=3)を超えるため、
+        // 先頭2件のみ個別表示し、残り3件を1件の"+N"集約エントリにまとめる。
+        val events = (1..5).map { event(it, 600, 60) }
+
+        val result = assignLanes(events)
+
+        val visible = result.filter { it.overflowCount == 0 }
+        val overflow = result.filter { it.overflowCount > 0 }
+
+        assertEquals(2, visible.size)
+        assertEquals(setOf(1, 2), visible.map { it.eventId }.toSet())
+        assertEquals(setOf(0, 1), visible.map { it.lane }.toSet())
+        visible.forEach { assertEquals(MAX_VISIBLE_LANES, it.laneCount) }
+
+        assertEquals(1, overflow.size)
+        val overflowEntry = overflow.single()
+        assertEquals(3, overflowEntry.overflowCount)
+        assertEquals(OVERFLOW_EVENT_ID, overflowEntry.eventId)
+        assertEquals(MAX_VISIBLE_LANES - 1, overflowEntry.lane)
+        assertEquals(MAX_VISIBLE_LANES, overflowEntry.laneCount)
+        assertEquals(600, overflowEntry.startMinuteOfDay)
+        assertEquals(60, overflowEntry.durationMinutes)
+    }
+
+    @Test
+    fun overflowEntrySpansTheActualTimeRangeOfTheHiddenEvents() {
+        // 上限超えのグループ内でも、溢れた側のイベントの開始・終了時刻は互いに
+        // ずれていることがある。集約エントリの時間帯は、溢れた側の実際の
+        // 開始最小値〜終了最大値に一致させる(グループ全体の時間帯ではない)。
+        val events = listOf(
+            event(1, 600, 120), // 600-720, visible
+            event(2, 620, 100), // 620-720, visible
+            event(3, 640, 30),  // 640-670, overflow
+            event(4, 660, 60),  // 660-720, overflow
+        )
+
+        val result = assignLanes(events)
+
+        val overflowEntry = result.single { it.overflowCount > 0 }
+        assertEquals(2, overflowEntry.overflowCount)
+        assertEquals(640, overflowEntry.startMinuteOfDay)
+        assertEquals(80, overflowEntry.durationMinutes) // 640 to 720
+    }
+
+    @Test
+    fun overflowDoesNotAffectASeparateNonOverlappingGroup() {
+        val events = (1..5).map { event(it, 600, 60) } + event(6, 800, 30)
+
+        val result = assignLanes(events)
+
+        val separate = result.single { it.eventId == 6 }
+        assertEquals(0, separate.lane)
+        assertEquals(1, separate.laneCount)
+        assertEquals(0, separate.overflowCount)
     }
 
     @Test
