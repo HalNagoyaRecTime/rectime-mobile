@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,44 +50,54 @@ class NotificationsViewModel(
             error = null,
         )
         loadJob = viewModelScope.launch {
-            when (
-                val result = fetchWithCacheFallback(
-                    fetchLive = { fetchAllNotifications(gateway) },
-                    loadCache = { cache.load<List<UserNotification>>(NOTIFICATIONS_CACHE_KEY) },
-                    saveCache = { cache.save(NOTIFICATIONS_CACHE_KEY, it) },
-                )
-            ) {
-                is CachedFetchResult.Fresh -> {
-                    _uiState.value = NotificationsUiState(
-                        notifications = result.value,
-                        isLoading = false,
+            try {
+                when (
+                    val result = fetchWithCacheFallback(
+                        fetchLive = { fetchAllNotifications(gateway) },
+                        loadCache = { cache.load<List<UserNotification>>(NOTIFICATIONS_CACHE_KEY) },
+                        saveCache = { cache.save(NOTIFICATIONS_CACHE_KEY, it) },
                     )
-                }
+                ) {
+                    is CachedFetchResult.Fresh -> {
+                        _uiState.value = NotificationsUiState(
+                            notifications = result.value,
+                            isLoading = false,
+                        )
+                    }
 
-                is CachedFetchResult.Cached -> {
-                    // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
-                    if ((result.error as? NotificationApiException)?.statusCode == 401) {
+                    is CachedFetchResult.Cached -> {
+                        // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
+                        if ((result.error as? NotificationApiException)?.statusCode == 401) {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                isRefreshing = false,
+                                error = result.error.toNotificationErrorMessage(),
+                            )
+                        } else {
+                            _uiState.value = NotificationsUiState(
+                                notifications = result.value,
+                                isLoading = false,
+                                isOffline = true,
+                            )
+                        }
+                    }
+
+                    is CachedFetchResult.Failed -> {
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             isRefreshing = false,
                             error = result.error.toNotificationErrorMessage(),
                         )
-                    } else {
-                        _uiState.value = NotificationsUiState(
-                            notifications = result.value,
-                            isLoading = false,
-                            isOffline = true,
-                        )
                     }
                 }
-
-                is CachedFetchResult.Failed -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        isRefreshing = false,
-                        error = result.error.toNotificationErrorMessage(),
-                    )
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isRefreshing = false,
+                    error = e.toNotificationErrorMessage(),
+                )
             }
         }
     }
@@ -147,41 +158,50 @@ class NotificationDetailViewModel(
 
         _uiState.value = NotificationDetailUiState(isLoading = true)
         loadJob = viewModelScope.launch {
-            when (
-                val result = fetchWithCacheFallback(
-                    fetchLive = { gateway.getNotification(notificationId) },
-                    loadCache = { cache.load<UserNotification>(cacheKey) },
-                    saveCache = { cache.save(cacheKey, it) },
-                )
-            ) {
-                is CachedFetchResult.Fresh -> {
-                    _uiState.value = NotificationDetailUiState(
-                        notification = result.value,
-                        isLoading = false,
+            try {
+                when (
+                    val result = fetchWithCacheFallback(
+                        fetchLive = { gateway.getNotification(notificationId) },
+                        loadCache = { cache.load<UserNotification>(cacheKey) },
+                        saveCache = { cache.save(cacheKey, it) },
                     )
-                }
+                ) {
+                    is CachedFetchResult.Fresh -> {
+                        _uiState.value = NotificationDetailUiState(
+                            notification = result.value,
+                            isLoading = false,
+                        )
+                    }
 
-                is CachedFetchResult.Cached -> {
-                    if ((result.error as? NotificationApiException)?.statusCode == 401) {
+                    is CachedFetchResult.Cached -> {
+                        if ((result.error as? NotificationApiException)?.statusCode == 401) {
+                            _uiState.value = NotificationDetailUiState(
+                                isLoading = false,
+                                error = result.error.toNotificationErrorMessage(),
+                            )
+                        } else {
+                            _uiState.value = NotificationDetailUiState(
+                                notification = result.value,
+                                isLoading = false,
+                                isOffline = true,
+                            )
+                        }
+                    }
+
+                    is CachedFetchResult.Failed -> {
                         _uiState.value = NotificationDetailUiState(
                             isLoading = false,
                             error = result.error.toNotificationErrorMessage(),
                         )
-                    } else {
-                        _uiState.value = NotificationDetailUiState(
-                            notification = result.value,
-                            isLoading = false,
-                            isOffline = true,
-                        )
                     }
                 }
-
-                is CachedFetchResult.Failed -> {
-                    _uiState.value = NotificationDetailUiState(
-                        isLoading = false,
-                        error = result.error.toNotificationErrorMessage(),
-                    )
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.value = NotificationDetailUiState(
+                    isLoading = false,
+                    error = e.toNotificationErrorMessage(),
+                )
             }
         }
     }

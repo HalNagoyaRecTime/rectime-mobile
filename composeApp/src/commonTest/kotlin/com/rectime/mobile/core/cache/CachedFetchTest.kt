@@ -53,6 +53,20 @@ class CachedFetchTest {
     }
 
     @Test
+    fun freshResultIsReturnedEvenWhenSaveCacheFails() = runTest {
+        // ライブ取得自体は成功しているので、キャッシュへの書き込み失敗を理由に
+        // 古いキャッシュへフォールバックしてはならない(オンラインなのに
+        // 「オフライン」表示になってしまうため)。
+        val result = fetchWithCacheFallback(
+            fetchLive = { "live-value" },
+            loadCache = { fail("loadCache should not be called when fetchLive succeeds") },
+            saveCache = { throw IllegalStateException("disk full") },
+        )
+
+        assertEquals(CachedFetchResult.Fresh("live-value"), result)
+    }
+
+    @Test
     fun cancellationExceptionPropagatesWithoutTouchingCache() = runTest {
         var loadCacheCalled = false
         var saveCacheCalled = false

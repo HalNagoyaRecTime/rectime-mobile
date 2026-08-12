@@ -15,13 +15,26 @@ suspend fun <T> fetchWithCacheFallback(
     fetchLive: suspend () -> T,
     loadCache: suspend () -> T?,
     saveCache: suspend (T) -> Unit,
-): CachedFetchResult<T> = try {
-    val value = fetchLive()
-    saveCache(value)
-    CachedFetchResult.Fresh(value)
-} catch (e: CancellationException) {
-    throw e
-} catch (e: Exception) {
-    val cached = loadCache()
-    if (cached != null) CachedFetchResult.Cached(cached, e) else CachedFetchResult.Failed(e)
+): CachedFetchResult<T> {
+    val value = try {
+        fetchLive()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        val cached = loadCache()
+        return if (cached != null) CachedFetchResult.Cached(cached, e) else CachedFetchResult.Failed(e)
+    }
+
+    // キャッシュへの書き込み失敗はベストエフォートとして無視する。ここでの失敗を
+    // fetchLive()の失敗と同様に扱うと、通信自体は成功しているのに古いキャッシュへ
+    // フォールバックしてしまう(オンラインなのに「オフライン」表示になる)ため。
+    try {
+        saveCache(value)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        // no-op
+    }
+
+    return CachedFetchResult.Fresh(value)
 }

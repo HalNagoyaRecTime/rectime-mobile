@@ -16,6 +16,7 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,57 +44,82 @@ class CompetitionScheduleDetailViewModel(
         viewModelScope.launch {
             _uiState.value = CompetitionScheduleDetailUiState(isLoading = true)
 
-            when (
-                val result = fetchWithCacheFallback(
-                    fetchLive = {
-                        val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId")
-                        if (!response.status.isSuccess()) throw HttpStatusException(response.status)
-                        response.body<EventDetailResponse>()
-                    },
-                    loadCache = { cache.load<EventDetailResponse>(eventCacheKey) },
-                    saveCache = { cache.save(eventCacheKey, it) },
-                )
-            ) {
-                is CachedFetchResult.Fresh -> {
-                    _uiState.value = CompetitionScheduleDetailUiState(
-                        isLoading = false,
-                        eventDetail = result.value.toModel(),
-                        gathering = fetchGathering(),
+            try {
+                when (
+                    val result = fetchWithCacheFallback(
+                        fetchLive = {
+                            val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId")
+                            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+                            response.body<EventDetailResponse>()
+                        },
+                        loadCache = { cache.load<EventDetailResponse>(eventCacheKey) },
+                        saveCache = { cache.save(eventCacheKey, it) },
                     )
-                }
-
-                is CachedFetchResult.Cached -> {
-                    // 削除済みイベントの古いキャッシュを誤表示しないよう、404はオフライン表示で隠さない。
-                    if ((result.error as? HttpStatusException)?.status == HttpStatusCode.NotFound) {
-                        _uiState.value = CompetitionScheduleDetailUiState(
-                            isLoading = false,
-                            error = "スケジュールが見つかりません",
-                        )
-                    } else {
+                ) {
+                    is CachedFetchResult.Fresh -> {
+                        // イベント自体は最新でも、呼び出し情報(gathering)は別APIの
+                        // 個別キャッシュにフォールバックしている可能性があるため、
+                        // その結果に応じてisOfflineを立てる。
+                        val (gathering, gatheringIsOffline) = fetchGathering()
                         _uiState.value = CompetitionScheduleDetailUiState(
                             isLoading = false,
                             eventDetail = result.value.toModel(),
-                            gathering = fetchGathering(),
-                            isOffline = true,
+                            gathering = gathering,
+                            isOffline = gatheringIsOffline,
+                        )
+                    }
+
+                    is CachedFetchResult.Cached -> {
+                        // 削除済み(404)・セッション切れ(401)の古いキャッシュを誤表示しないよう、
+                        // オフライン表示では隠さずエラーを優先する。
+                        val status = (result.error as? HttpStatusException)?.status
+                        when (status) {
+                            HttpStatusCode.NotFound -> _uiState.value = CompetitionScheduleDetailUiState(
+                                isLoading = false,
+                                error = "スケジュールが見つかりません",
+                            )
+                            HttpStatusCode.Unauthorized -> _uiState.value = CompetitionScheduleDetailUiState(
+                                isLoading = false,
+                                error = "ログイン情報の有効期限が切れました",
+                            )
+                            else -> {
+                                // イベント自体が既にオフライン(キャッシュ)なので、gatheringも
+                                // 通信を試みず直接キャッシュから読む(通信タイムアウトの二重待ちを避ける)。
+                                _uiState.value = CompetitionScheduleDetailUiState(
+                                    isLoading = false,
+                                    eventDetail = result.value.toModel(),
+                                    gathering = fetchGatheringFromCacheOnly(),
+                                    isOffline = true,
+                                )
+                            }
+                        }
+                    }
+
+                    is CachedFetchResult.Failed -> {
+                        result.error.printStackTrace()
+                        _uiState.value = CompetitionScheduleDetailUiState(
+                            isLoading = false,
+                            error = when ((result.error as? HttpStatusException)?.status) {
+                                HttpStatusCode.NotFound -> "スケジュールが見つかりません"
+                                HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
+                                else -> "スケジュール情報の取得に失敗しました"
+                            },
                         )
                     }
                 }
-
-                is CachedFetchResult.Failed -> {
-                    result.error.printStackTrace()
-                    _uiState.value = CompetitionScheduleDetailUiState(
-                        isLoading = false,
-                        error = when ((result.error as? HttpStatusException)?.status) {
-                            HttpStatusCode.NotFound -> "スケジュールが見つかりません"
-                            else -> "スケジュール情報の取得に失敗しました"
-                        },
-                    )
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.value = CompetitionScheduleDetailUiState(
+                    isLoading = false,
+                    error = "スケジュール情報の取得に失敗しました",
+                )
             }
         }
     }
 
-    private suspend fun fetchGathering(): Gathering? {
+    private suspend fun fetchGathering(): Pair<Gathering?, Boolean> {
         val result = fetchWithCacheFallback(
             fetchLive = {
                 val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId/gatherings")
@@ -104,14 +130,17 @@ class CompetitionScheduleDetailViewModel(
             saveCache = { cache.save(gatheringCacheKey, it) },
         )
         return when (result) {
-            is CachedFetchResult.Fresh -> result.value.firstOrNull()?.toModel()
-            is CachedFetchResult.Cached -> result.value.firstOrNull()?.toModel()
+            is CachedFetchResult.Fresh -> result.value.firstOrNull()?.toModel() to false
+            is CachedFetchResult.Cached -> result.value.firstOrNull()?.toModel() to true
             is CachedFetchResult.Failed -> {
                 result.error.printStackTrace()
-                null
+                null to false
             }
         }
     }
+
+    private suspend fun fetchGatheringFromCacheOnly(): Gathering? =
+        cache.load<List<GatheringResponse>>(gatheringCacheKey)?.firstOrNull()?.toModel()
 
     override fun onCleared() {
         super.onCleared()

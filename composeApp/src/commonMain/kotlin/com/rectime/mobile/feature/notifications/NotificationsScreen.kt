@@ -74,7 +74,15 @@ object NotificationsScreen : Screen {
                 }
 
                 uiState.notifications.isEmpty() -> item {
-                    NotificationMessage(message = "通知はありません")
+                    Column {
+                        if (uiState.isOffline) {
+                            OfflineBanner(
+                                message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
+                                modifier = Modifier.padding(bottom = 8.dp),
+                            )
+                        }
+                        NotificationMessage(message = "通知はありません")
+                    }
                 }
 
                 else -> {
