@@ -32,6 +32,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.schedule.CompetitionScheduleDetailScreen
+import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -56,6 +57,7 @@ object CalendarScreen : Screen {
             events = events,
             isLoading = viewModel.isLoading,
             error = viewModel.error,
+            isOffline = viewModel.isOffline,
         )
     }
 }
@@ -67,6 +69,7 @@ private fun CalendarScreenUI(
     events: List<TimelineEvent>,
     isLoading: Boolean,
     error: String?,
+    isOffline: Boolean,
 ) {
     val hourStart = 8
     val hourEnd = 22
@@ -92,6 +95,13 @@ private fun CalendarScreenUI(
                     color = AppTheme.colors.textSecondary,
                     modifier = Modifier.padding(start = hPad, top = 12.dp, bottom = 10.dp),
                 )
+
+                if (isOffline) {
+                    OfflineBanner(
+                        message = "オフライン: 最新のデータを取得できません。前回取得時の内容を表示しています。",
+                        modifier = Modifier.padding(horizontal = hPad, vertical = 4.dp),
+                    )
+                }
 
                 Row(modifier = Modifier.fillMaxWidth().padding(start = hPad)) {
                     Column(modifier = Modifier.width(56.dp)) {

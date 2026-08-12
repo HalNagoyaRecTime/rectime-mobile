@@ -8,4 +8,5 @@ data class CompetitionScheduleDetailUiState(
     val eventDetail: EventDetail? = null,
     val gathering: Gathering? = null,
     val error: String? = null,
+    val isOffline: Boolean = false,
 )

@@ -6,6 +6,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.call.body
@@ -28,8 +31,12 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
+private const val EVENTS_CACHE_KEY = "calendar_events_v1"
+
 @OptIn(ExperimentalTime::class)
-class CalendarViewModel : ViewModel() {
+class CalendarViewModel(
+    private val cache: LocalCache = LocalCache(),
+) : ViewModel() {
     val nowMinute: StateFlow<Int> = flow {
         while (true) {
             emit(currentMinuteOfDay())
@@ -55,6 +62,10 @@ class CalendarViewModel : ViewModel() {
     var error by mutableStateOf<String?>(null)
         private set
 
+    // trueのとき、_eventsは通信失敗時にローカルキャッシュから復元した前回取得分。
+    var isOffline by mutableStateOf(false)
+        private set
+
     val startTimeFormat = LocalTime.Format {
         hour()
         minute()
@@ -71,50 +82,64 @@ class CalendarViewModel : ViewModel() {
             try {
                 isLoading = true
                 error = null
-                val response = client.get(apiBaseUrl + "/api/v1/events")
-                val body: EventsResponse =
-                    response.body()
-                val timelineEvents = body.events.map {
-                    val startTime = LocalTime.parse(it.startTime, format = startTimeFormat)
-                    val endTime = LocalTime.parse(it.endTime, format = startTimeFormat)
-
-                    val startMinuteOfDay = startTime.hour * 60 + startTime.minute
-                    val endMinuteOfDay = endTime.hour * 60 + endTime.minute
-
-                    TimelineEvent(
-                        eventId = it.eventId,
-                        title = it.eventName,
-                        venue = it.venue,
-                        startMinuteOfDay = startMinuteOfDay,
-                        durationMinutes = endMinuteOfDay - startMinuteOfDay,
-                        lane = 0,
-                        laneCount = 1,
-                        startTimeLabel = displayTimeFormat.format(startTime),
-                        endTimeLabel = displayTimeFormat.format(endTime),
+                when (
+                    val result = fetchWithCacheFallback(
+                        fetchLive = { client.get(apiBaseUrl + "/api/v1/events").body<EventsResponse>() },
+                        loadCache = { cache.load<EventsResponse>(EVENTS_CACHE_KEY) },
+                        saveCache = { cache.save(EVENTS_CACHE_KEY, it) },
                     )
+                ) {
+                    is CachedFetchResult.Fresh -> {
+                        _events.value = toTimelineEvents(result.value)
+                        isOffline = false
+                    }
 
+                    is CachedFetchResult.Cached -> {
+                        _events.value = toTimelineEvents(result.value)
+                        isOffline = true
+                    }
+
+                    is CachedFetchResult.Failed -> {
+                        error = "通信に失敗しました"
+                        result.error.printStackTrace()
+                    }
                 }
-                _events.value = timelineEvents
-
-            }catch (e: CancellationException){
+            } catch (e: CancellationException) {
                 throw e
-            }catch (e: Exception) {
+            } catch (e: Exception) {
                 error = "通信に失敗しました"
                 e.printStackTrace()
             } finally {
                 isLoading = false
             }
-
         }
-
-
     }
+
+    private fun toTimelineEvents(body: EventsResponse): List<TimelineEvent> =
+        body.events.map {
+            val startTime = LocalTime.parse(it.startTime, format = startTimeFormat)
+            val endTime = LocalTime.parse(it.endTime, format = startTimeFormat)
+
+            val startMinuteOfDay = startTime.hour * 60 + startTime.minute
+            val endMinuteOfDay = endTime.hour * 60 + endTime.minute
+
+            TimelineEvent(
+                eventId = it.eventId,
+                title = it.eventName,
+                venue = it.venue,
+                startMinuteOfDay = startMinuteOfDay,
+                durationMinutes = endMinuteOfDay - startMinuteOfDay,
+                lane = 0,
+                laneCount = 1,
+                startTimeLabel = displayTimeFormat.format(startTime),
+                endTimeLabel = displayTimeFormat.format(endTime),
+            )
+        }
 
     override fun onCleared() {
         super.onCleared()
         client.close()
     }
-
 }
 
 
