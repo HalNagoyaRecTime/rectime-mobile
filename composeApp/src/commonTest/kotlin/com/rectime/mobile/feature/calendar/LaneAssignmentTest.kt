@@ -269,19 +269,39 @@ class LaneAssignmentTest {
     }
 
     @Test
-    fun zeroDurationEventDoesNotCrashAndIsTreatedAsAlwaysVisible() {
-        val events = listOf(
-            event(1, 600, 60),
-            event(2, 600, 60),
-            event(3, 600, 60),
-            event(4, 600, 0), // invalid/zero-length data
-        )
+    fun zeroDurationEventDoesNotCrashAndStaysWithinValidLaneBounds() {
+        // 5件の実イベントが重複してoverflow分岐に入るグループに、durationMinutes=0の
+        // 不正データ(6件目)を混ぜる。overflow分岐では通常、素朴な貪欲法のレーン番号を
+        // そのまま使うとlaneCount(MAX_VISIBLE_LANES)以上のレーン番号になり得るため、
+        // 0件表示イベントであっても lane < laneCount を必ず満たすことを検証する
+        // (満たさないと画面外にオフセットされて描画される)。
+        val events = (1..5).map { event(it, 600, 60) } + event(6, 600, 0)
 
         val result = assignLanes(events)
 
-        assertEquals(setOf(1, 2, 3, 4), result.map { it.eventId }.toSet())
-        val zeroDurationEvent = result.single { it.eventId == 4 }
+        // 1,2は個別表示、3,4,5は1件の集約エントリにまとめられ、6(duration=0)は
+        // 個別表示のまま残る(合わせて4件: 1,2,6 + 集約エントリ1件)。
+        val visible = result.filter { it.overflowCount == 0 }
+        val overflow = result.filter { it.overflowCount > 0 }
+        assertEquals(setOf(1, 2, 6), visible.map { it.eventId }.toSet())
+        assertEquals(1, overflow.size)
+        assertEquals(3, overflow.single().overflowCount)
+
+        val zeroDurationEvent = visible.single { it.eventId == 6 }
         assertEquals(0, zeroDurationEvent.overflowCount)
+        assertTrue(
+            zeroDurationEvent.lane < zeroDurationEvent.laneCount,
+            "zero-duration event's lane (${zeroDurationEvent.lane}) must be < laneCount (${zeroDurationEvent.laneCount})",
+        )
+    }
+
+    @Test
+    fun allZeroDurationEventsInAGroupDoNotDivideByZero() {
+        val events = listOf(event(1, 600, 0), event(2, 600, 0))
+
+        val result = assignLanes(events)
+
+        result.forEach { assertTrue(it.laneCount > 0, "laneCount must never be 0") }
     }
 
     @Test

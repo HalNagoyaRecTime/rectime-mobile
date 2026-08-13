@@ -36,6 +36,14 @@ internal fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
 
         for (i in from until until) {
             val event = sorted[i]
+            // durationMinutes <= 0 は不正データ(通常は上流で除外される想定)で、
+            // 時間軸上に占有区間を持たない。レーン計算に参加させると、オーバーフロー時に
+            // 割り当てレーン番号がlaneCount(MAX_VISIBLE_LANES)以上になり得て描画位置が
+            // 画面外にずれるため、常にlane=0(laneCountは何であれ有効な範囲)として扱う。
+            if (event.durationMinutes <= 0) {
+                laneOf[i - from] = 0
+                continue
+            }
             val eventEnd = event.startMinuteOfDay + event.durationMinutes
             val freeLane = laneEndMinutes.indexOfFirst { it <= event.startMinuteOfDay }
             val laneIndex = if (freeLane == -1) {
@@ -48,7 +56,9 @@ internal fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
             laneOf[i - from] = laneIndex
         }
 
-        val realLaneCount = laneEndMinutes.size
+        // 全イベントがduration<=0だとlaneEndMinutesが空になり、laneCount=0による
+        // ゼロ除算(containerWidth / laneCount)を招くため、最低1を保証する。
+        val realLaneCount = laneEndMinutes.size.coerceAtLeast(1)
         if (realLaneCount <= MAX_VISIBLE_LANES) {
             for (i in from until until) {
                 result.add(sorted[i].copy(lane = laneOf[i - from], laneCount = realLaneCount))
