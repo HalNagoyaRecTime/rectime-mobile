@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.calendar
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 private fun event(
     eventId: Int,
@@ -161,7 +162,7 @@ class LaneAssignmentTest {
         assertEquals(1, overflow.size)
         val overflowEntry = overflow.single()
         assertEquals(3, overflowEntry.overflowCount)
-        assertEquals(OVERFLOW_EVENT_ID, overflowEntry.eventId)
+        assertTrue(overflowEntry.eventId < 0, "overflow entry must use a synthetic negative eventId")
         assertEquals(MAX_VISIBLE_LANES - 1, overflowEntry.lane)
         assertEquals(MAX_VISIBLE_LANES, overflowEntry.laneCount)
         assertEquals(600, overflowEntry.startMinuteOfDay)
@@ -198,6 +199,89 @@ class LaneAssignmentTest {
         assertEquals(0, separate.lane)
         assertEquals(1, separate.laneCount)
         assertEquals(0, separate.overflowCount)
+    }
+
+    @Test
+    fun eventThatReusesAHighLaneButIsNotActuallyConcurrentWithManyOthersStaysVisible() {
+        // A,B: グループ全体を通して常時アクティブ(lane0,1)。
+        // C,D: 620-660のみA,Bと重なり、一時的に同時重複4件(A,B,C,D)を作る。
+        // E: 700-800に、C/Dが空けたレーンを再利用して登場するが、実際に重なるのは
+        //    A,Bだけ(合計3件で上限以内)なので、グループ全体のレーン数(4)だけを見て
+        //    判定すると誤って集約対象になってしまう。実際の同時重複数で判定すれば
+        //    Eは個別表示され続けるはず。
+        val events = listOf(
+            event(1, 600, 300), // A: 600-900
+            event(2, 610, 290), // B: 610-900
+            event(3, 620, 40),  // C: 620-660
+            event(4, 630, 30),  // D: 630-660
+            event(5, 700, 100), // E: 700-800 (reuses C/D's freed lane)
+        )
+
+        val result = assignLanes(events)
+
+        val visible = result.filter { it.overflowCount == 0 }.associateBy { it.eventId }
+        val overflow = result.filter { it.overflowCount > 0 }
+
+        assertEquals(setOf(1, 2, 5), visible.keys)
+        assertEquals(1, overflow.size)
+        val overflowEntry = overflow.single()
+        assertEquals(2, overflowEntry.overflowCount)
+        assertEquals(620, overflowEntry.startMinuteOfDay)
+        assertEquals(40, overflowEntry.durationMinutes) // 620 to 660 (C ∪ D)
+    }
+
+    @Test
+    fun twoSeparateOverflowBurstsInTheSameGroupProduceTwoOverflowEntries() {
+        // A,B: 0-500の間ずっとアクティブ(lane0,1)で、間の閑散期(60-210)を挟んで
+        // グループ全体を1つに連結する役割。
+        // 前半(20-60)にC,D、後半(210-250)にE,Fが重なり、それぞれ独立に
+        // 同時重複4件のバーストを作る。両方とも同じグループ内だが、時間的に
+        // 離れているので集約エントリは2件に分割されるべき。
+        val events = listOf(
+            event(1, 0, 500),   // A
+            event(2, 10, 490),  // B
+            event(3, 20, 40),   // C: 20-60
+            event(4, 30, 30),   // D: 30-60
+            event(5, 210, 40),  // E: 210-250
+            event(6, 220, 30),  // F: 220-250
+        )
+
+        val result = assignLanes(events)
+
+        val visible = result.filter { it.overflowCount == 0 }.associateBy { it.eventId }
+        val overflow = result.filter { it.overflowCount > 0 }.sortedBy { it.startMinuteOfDay }
+
+        assertEquals(setOf(1, 2), visible.keys)
+        assertEquals(2, overflow.size)
+
+        assertEquals(2, overflow[0].overflowCount)
+        assertEquals(20, overflow[0].startMinuteOfDay)
+        assertEquals(40, overflow[0].durationMinutes) // 20 to 60
+
+        assertEquals(2, overflow[1].overflowCount)
+        assertEquals(210, overflow[1].startMinuteOfDay)
+        assertEquals(40, overflow[1].durationMinutes) // 210 to 250
+
+        assertTrue(
+            overflow[0].eventId != overflow[1].eventId,
+            "separate overflow bursts must use distinct synthetic eventIds",
+        )
+    }
+
+    @Test
+    fun zeroDurationEventDoesNotCrashAndIsTreatedAsAlwaysVisible() {
+        val events = listOf(
+            event(1, 600, 60),
+            event(2, 600, 60),
+            event(3, 600, 60),
+            event(4, 600, 0), // invalid/zero-length data
+        )
+
+        val result = assignLanes(events)
+
+        assertEquals(setOf(1, 2, 3, 4), result.map { it.eventId }.toSet())
+        val zeroDurationEvent = result.single { it.eventId == 4 }
+        assertEquals(0, zeroDurationEvent.overflowCount)
     }
 
     @Test

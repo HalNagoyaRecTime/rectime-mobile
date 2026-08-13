@@ -74,19 +74,28 @@ class CalendarViewModel : ViewModel() {
                 val response = client.get(apiBaseUrl + "/api/v1/events")
                 val body: EventsResponse =
                     response.body()
-                val timelineEvents = body.events.map {
+                val timelineEvents = body.events.mapNotNull {
                     val startTime = LocalTime.parse(it.startTime, format = startTimeFormat)
                     val endTime = LocalTime.parse(it.endTime, format = startTimeFormat)
 
                     val startMinuteOfDay = startTime.hour * 60 + startTime.minute
                     val endMinuteOfDay = endTime.hour * 60 + endTime.minute
+                    val durationMinutes = endMinuteOfDay - startMinuteOfDay
+
+                    // end <= start(不正データ・日跨ぎ)は0分に潰さず、原因が追えるようログを
+                    // 出しつつ除外する。durationMinutes=0のカードはUI上の高さが0以下になり
+                    // 実質見えなくなるだけで、原因調査ができなくなるため。
+                    if (durationMinutes <= 0) {
+                        println("CalendarViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                        return@mapNotNull null
+                    }
 
                     TimelineEvent(
                         eventId = it.eventId,
                         title = it.eventName,
                         venue = it.venue,
                         startMinuteOfDay = startMinuteOfDay,
-                        durationMinutes = (endMinuteOfDay - startMinuteOfDay).coerceAtLeast(0),
+                        durationMinutes = durationMinutes,
                         lane = 0,
                         laneCount = 1,
                         startTimeLabel = displayTimeFormat.format(startTime),
