@@ -10,6 +10,8 @@ fun encodeAuthSession(session: AuthSession): String =
         session.user.displayName,
         session.user.avatarUrl ?: "",
         session.user.avatarUpdatedAt ?: "",
+        session.user.studentIdNumber ?: "",
+        session.user.classRoomName ?: "",
         session.user.role?.name ?: "",
     ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
 
@@ -30,7 +32,7 @@ fun decodePendingAuth(value: String): PendingAuth? {
 
 fun decodeAuthSession(value: String): AuthSession? {
     val parts = value.split(".")
-    if (parts.size != 6 && parts.size != 8 && parts.size != 9) return null
+    if (parts.size != 6 && parts.size != 8 && parts.size != 9 && parts.size != 11) return null
 
     return runCatching {
         val avatarUrl = if (parts.size >= 8) {
@@ -41,9 +43,19 @@ fun decodeAuthSession(value: String): AuthSession? {
             val s = parts[7].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
         } else null
-        val role = if (parts.size == 9) {
-            Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
+        val studentIdNumber = if (parts.size == 11) {
+            val s = parts[8].decodeBase64UrlToString()
+            if (s.isEmpty()) null else s
         } else null
+        val classRoomName = if (parts.size == 11) {
+            val s = parts[9].decodeBase64UrlToString()
+            if (s.isEmpty()) null else s
+        } else null
+        val role = when (parts.size) {
+            9 -> Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
+            11 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
+            else -> null
+        }
 
         AuthSession(
             accessToken = parts[0].decodeBase64UrlToString(),
@@ -55,6 +67,8 @@ fun decodeAuthSession(value: String): AuthSession? {
                 displayName = parts[5].decodeBase64UrlToString(),
                 avatarUrl = avatarUrl,
                 avatarUpdatedAt = avatarUpdatedAt,
+                studentIdNumber = studentIdNumber,
+                classRoomName = classRoomName,
                 role = role,
             ),
         )

@@ -41,7 +41,7 @@ class AuthViewModel(
                     it.copy(
                         isLoading = false,
                         session = createDevSession(),
-                        message = "DEV_BYPASS_AUTH enabled",
+                        //message = "DEV_BYPASS_AUTH enabled",
                     )
                 }
                 return@launch
@@ -225,6 +225,8 @@ private fun createDevSession() = AuthSession(
         id = "dev-user",
         email = "dev@local",
         displayName = "Dev User",
+        studentIdNumber = "55000",
+        classRoomName = "IA12A203",
     ),
 )
 

@@ -136,6 +136,8 @@ private fun AuthUserResponse.toAuthUser(): AuthUser {
             if (!avatarUpdatedAt.isNullOrBlank()) "$base?v=$avatarUpdatedAt" else base
         },
         avatarUpdatedAt = avatarUpdatedAt,
+        studentIdNumber = studentIdNumber,
+        classRoomName = classRoomName,
         role = Role.fromCategories(isStudent = isStudent, isStaff = isStaff, isTeacher = isTeacher),
     )
 }
@@ -177,6 +179,8 @@ private data class AuthUserResponse(
     val displayName: String = "",
     val avatarUrl: String? = null,
     val avatarUpdatedAt: String? = null,
+    val studentIdNumber: String? = null,
+    val classRoomName: String? = null,
     val isStudent: Boolean = false,
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
