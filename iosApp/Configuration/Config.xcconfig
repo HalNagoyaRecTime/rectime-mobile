@@ -1,5 +1,8 @@
 TEAM_ID=
 
+// API_BASE_URLはGit管理外のLocal.xcconfigで設定する。
+#include? "Local.xcconfig"
+
 PRODUCT_NAME=Rectimemobile
 PRODUCT_BUNDLE_IDENTIFIER=com.rectime.mobile.Rectimemobile$(TEAM_ID)
 

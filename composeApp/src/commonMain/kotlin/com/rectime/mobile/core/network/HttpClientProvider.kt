@@ -42,11 +42,15 @@ fun createAppHttpClient(): HttpClient = createHttpClient().config {
     install(MobileAuthHeadersPlugin)
 }
 
-internal fun isApiUrl(url: String): Boolean =
-    url == normalizedApiBaseUrl || url.startsWith("$normalizedApiBaseUrl/")
+internal fun isApiUrl(url: String): Boolean = isApiUrl(url, apiBaseUrl)
 
-internal val normalizedApiBaseUrl: String =
-    apiBaseUrl.trimEnd('/')
+internal fun isApiUrl(url: String, baseUrl: String): Boolean {
+    val normalizedBaseUrl = baseUrl.trimEnd('/')
+    return url == normalizedBaseUrl || url.startsWith("$normalizedBaseUrl/")
+}
+
+internal val normalizedApiBaseUrl: String
+    get() = apiBaseUrl.trimEnd('/')
 
 /**
  * `url` がrectime-apiへのリクエストで、かつログイン済みの場合に付与すべき
@@ -64,7 +68,11 @@ internal fun mobileAuthHeaders(url: String): Map<String, String>? {
  * 書き換えずに使う。
  */
 internal fun mobileAuthHeaders(url: String, token: String): Map<String, String>? {
-    if (!isApiUrl(url)) return null
+    return mobileAuthHeaders(url, token, apiBaseUrl)
+}
+
+internal fun mobileAuthHeaders(url: String, token: String, baseUrl: String): Map<String, String>? {
+    if (!isApiUrl(url, baseUrl)) return null
     return mapOf(
         "X-Client-Type" to "mobile",
         HttpHeaders.Authorization to "Bearer $token",

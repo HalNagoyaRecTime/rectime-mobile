@@ -99,10 +99,6 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-        val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
-            ?: findProperty("API_BASE_URL") as String?
-            ?: "http://10.0.2.2:8787"
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
     packaging {
         resources {
@@ -110,8 +106,20 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
+                ?: findProperty("API_BASE_URL") as String?
+                ?: providers.environmentVariable("API_BASE_URL").orNull
+                ?: ""
+            buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        }
         getByName("release") {
             isMinifyEnabled = false
+            val apiBaseUrl = localProperties.getProperty("RELEASE_API_BASE_URL")
+                ?: findProperty("RELEASE_API_BASE_URL") as String?
+                ?: providers.environmentVariable("RELEASE_API_BASE_URL").orNull
+                ?: ""
+            buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         }
     }
     compileOptions {
