@@ -6,6 +6,15 @@ import kotlin.test.assertNull
 
 class AuthSessionCodecTest {
     @Test
+    fun decodeRejectsSessionWithoutRequiredTokens() {
+        val sessionWithoutAccessToken = validSession(accessToken = "")
+        val sessionWithoutRefreshToken = validSession(refreshTokenId = "")
+
+        assertNull(decodeAuthSession(encodeAuthSession(sessionWithoutAccessToken)))
+        assertNull(decodeAuthSession(encodeAuthSession(sessionWithoutRefreshToken)))
+    }
+
+    @Test
     fun decodeRestoresAllFieldsAfterEncode() {
         val original = AuthSession(
             accessToken = "token123",
@@ -91,7 +100,6 @@ class AuthSessionCodecTest {
         assertEquals(null, decoded?.user?.studentIdNumber)
         assertEquals(null, decoded?.user?.classRoomName)
     }
-
     @Test
     fun decodeReturnsNullForUnsupportedPartCount() {
         val sevenParts = listOf("a", "b", "3600", "6", "e", "f", "g")
@@ -141,3 +149,17 @@ class AuthSessionCodecTest {
         assertNull(decodePendingAuth(""))
     }
 }
+
+private fun validSession(
+    accessToken: String = "token123",
+    refreshTokenId: String = "refresh456",
+) = AuthSession(
+    accessToken = accessToken,
+    refreshTokenId = refreshTokenId,
+    expiresIn = 3600L,
+    user = AuthUser(
+        id = "6",
+        email = "test@example.com",
+        displayName = "テスト太郎",
+    ),
+)
