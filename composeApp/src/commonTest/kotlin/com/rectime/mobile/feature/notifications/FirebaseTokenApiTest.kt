@@ -1,6 +1,5 @@
 package com.rectime.mobile.feature.notifications
 
-import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
@@ -41,12 +40,12 @@ class FirebaseTokenApiTest {
                 headers = jsonHeaders,
             )
         }
-        val api = FirebaseTokenApi(client = client, baseUrl = apiBaseUrl)
+        val api = FirebaseTokenApi(client = client, baseUrl = testBaseUrl)
 
         api.register(fcmToken = "firebase-token", accessToken = "access-token")
 
         val request = requireNotNull(capturedRequest)
-        assertEquals("$apiBaseUrl/api/v1/firebase-tokens", request.url.toString())
+        assertEquals("$testBaseUrl/api/v1/firebase-tokens", request.url.toString())
         // createAppHttpClient()のMobileAuthHeadersPluginが自動付与するため、
         // ここで2重に付与されていないこと(各1件のみ)を確認する。
         assertEquals(listOf("Bearer access-token"), request.headers.getAll(HttpHeaders.Authorization))
@@ -75,7 +74,7 @@ class FirebaseTokenApiTest {
                 headers = jsonHeaders,
             )
         }
-        val api = FirebaseTokenApi(client = client, baseUrl = apiBaseUrl)
+        val api = FirebaseTokenApi(client = client, baseUrl = testBaseUrl)
 
         api.register(fcmToken = "firebase-token", accessToken = "stale-persisted-token")
 
@@ -98,7 +97,7 @@ class FirebaseTokenApiTest {
                 headers = jsonHeaders,
             )
         }
-        val api = FirebaseTokenApi(client = client, baseUrl = apiBaseUrl)
+        val api = FirebaseTokenApi(client = client, baseUrl = testBaseUrl)
 
         val error = assertFailsWith<FirebaseTokenRegistrationException> {
             api.register(fcmToken = "firebase-token", accessToken = "expired-token")
@@ -138,6 +137,7 @@ class FirebaseTokenApiTest {
     }
 
     private companion object {
+        const val testBaseUrl = "https://api.example.invalid"
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
     }
 }

@@ -5,6 +5,7 @@
 xcuserdata
 !src/**/build/
 local.properties
+iosApp/Configuration/Local.xcconfig
 .idea
 .claude
 .DS_Store
