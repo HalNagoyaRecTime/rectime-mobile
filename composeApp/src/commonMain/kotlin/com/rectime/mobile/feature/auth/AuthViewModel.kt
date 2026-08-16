@@ -41,7 +41,7 @@ class AuthViewModel(
                     it.copy(
                         isLoading = false,
                         session = createDevSession(),
-                        //message = "DEV_BYPASS_AUTH enabled",
+                        message = "DEV_BYPASS_AUTH enabled",
                     )
                 }
                 return@launch
