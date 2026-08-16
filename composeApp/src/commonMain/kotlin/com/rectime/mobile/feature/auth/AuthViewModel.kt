@@ -40,7 +40,7 @@ class AuthViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        //session = createDevSession(),
+                        session = createDevSession(),
                         //message = "DEV_BYPASS_AUTH enabled",
                     )
                 }
