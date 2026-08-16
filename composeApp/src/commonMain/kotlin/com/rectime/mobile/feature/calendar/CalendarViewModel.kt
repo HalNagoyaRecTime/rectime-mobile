@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.toLocalTime
 import kotlin.time.Clock
@@ -59,6 +60,11 @@ class CalendarViewModel : ViewModel() {
         minute()
     }
 
+    private val displayTimeFormat = LocalTime.Format {
+        hour()
+        char(':')
+        minute()
+    }
 
     fun fetchEvents() {
         viewModelScope.launch {
@@ -82,7 +88,9 @@ class CalendarViewModel : ViewModel() {
                         startMinuteOfDay = startMinuteOfDay,
                         durationMinutes = endMinuteOfDay - startMinuteOfDay,
                         lane = 0,
-                        laneCount = 1
+                        laneCount = 1,
+                        startTimeLabel = displayTimeFormat.format(startTime),
+                        endTimeLabel = displayTimeFormat.format(endTime),
                     )
 
                 }

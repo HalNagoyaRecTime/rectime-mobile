@@ -2,12 +2,19 @@ package com.rectime.mobile.feature.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.config.isDebugBuild
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+private const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
+
+// リリースビルドでは内部エラーを露出させず、デバッグビルドでのみ原因を添える。
+private fun authFailed(reason: String?): String =
+    if (isDebugBuild && !reason.isNullOrBlank()) "$AUTH_FAILED_MESSAGE ($reason)" else AUTH_FAILED_MESSAGE
 
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
@@ -70,7 +77,10 @@ class AuthViewModel(
                     if (refreshError is CancellationException) throw refreshError
                     sessionStore.clear()
                     sessionStore.clearPendingAuth()
-                    _uiState.update { AuthUiState(error = "Session expired. Please login again.") }
+                    val detail = if (isDebugBuild) " (${refreshError.describe()})" else ""
+                    _uiState.update {
+                        AuthUiState(error = "Session expired. Please login again.$detail")
+                    }
                 }
             }
         }
@@ -103,7 +113,7 @@ class AuthViewModel(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = "Could not open a browser for login.",
+                            error = authFailed("ブラウザを開けませんでした"),
                             message = "",
                         )
                     }
@@ -123,7 +133,7 @@ class AuthViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to start login",
+                        error = authFailed("認証URL取得: ${error.describe()}"),
                     )
                 }
             }
@@ -134,18 +144,22 @@ class AuthViewModel(
         viewModelScope.launch {
             val pending = _uiState.value.pendingAuth
             if (pending == null) {
-                _uiState.update { it.copy(error = "No login request is in progress.") }
+                _uiState.update { it.copy(error = authFailed("認証待ち情報がありません")) }
                 return@launch
             }
 
             val code = readQueryValue(url, "code")
             val state = readQueryValue(url, "state")
             if (code.isNullOrBlank() || state.isNullOrBlank()) {
-                _uiState.update { it.copy(error = "Invalid callback URL.") }
+                val missing = listOfNotNull(
+                    "code".takeIf { code.isNullOrBlank() },
+                    "state".takeIf { state.isNullOrBlank() },
+                ).joinToString("/")
+                _uiState.update { it.copy(error = authFailed("コールバックに $missing がありません")) }
                 return@launch
             }
             if (state != pending.state) {
-                _uiState.update { it.copy(error = "Auth state does not match.") }
+                _uiState.update { it.copy(error = authFailed("state が一致しません")) }
                 return@launch
             }
 
@@ -167,7 +181,7 @@ class AuthViewModel(
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = error.message ?: "Failed to complete login",
+                        error = authFailed("トークン交換: ${error.describe()}"),
                     )
                 }
             }
@@ -198,6 +212,10 @@ class AuthViewModel(
         super.onCleared()
     }
 }
+
+// ネットワーク例外はmessageがnullになることがあり、その場合は型名だけが手がかりになる。
+private fun Throwable.describe(): String =
+    message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "unknown error"
 
 private fun createDevSession() = AuthSession(
     accessToken = "dev-bypass-token",

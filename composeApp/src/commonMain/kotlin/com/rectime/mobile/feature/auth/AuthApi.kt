@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -18,7 +19,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 
 class AuthApi(
-    private val client: HttpClient = HttpClient(),
+    private val client: HttpClient = createAppHttpClient(),
 ) {
     suspend fun requestAuthUrl(state: String, codeChallenge: String): String {
         val response = client.get("$apiBaseUrl/api/v1/auth/microsoft/login") {
