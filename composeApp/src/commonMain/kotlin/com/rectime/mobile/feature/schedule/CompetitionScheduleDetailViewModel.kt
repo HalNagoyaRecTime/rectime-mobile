@@ -131,7 +131,14 @@ class CompetitionScheduleDetailViewModel(
         )
         return when (result) {
             is CachedFetchResult.Fresh -> result.value.firstOrNull()?.toModel() to false
-            is CachedFetchResult.Cached -> result.value.firstOrNull()?.toModel() to true
+            is CachedFetchResult.Cached -> {
+                // 削除済み(404)の古いキャッシュをオフライン表示のまま出し続けないようにする。
+                if ((result.error as? HttpStatusException)?.status == HttpStatusCode.NotFound) {
+                    null to false
+                } else {
+                    result.value.firstOrNull()?.toModel() to true
+                }
+            }
             is CachedFetchResult.Failed -> {
                 result.error.printStackTrace()
                 null to false

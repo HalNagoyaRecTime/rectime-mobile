@@ -101,6 +101,7 @@ class CalendarViewModel(
 
                     is CachedFetchResult.Failed -> {
                         error = "通信に失敗しました"
+                        isOffline = false
                         result.error.printStackTrace()
                     }
                 }
@@ -108,6 +109,7 @@ class CalendarViewModel(
                 throw e
             } catch (e: Exception) {
                 error = "通信に失敗しました"
+                isOffline = false
                 e.printStackTrace()
             } finally {
                 isLoading = false

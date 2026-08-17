@@ -86,6 +86,7 @@ class NotificationsViewModel(
                         _uiState.value = _uiState.value.copy(
                             isLoading = false,
                             isRefreshing = false,
+                            isOffline = false,
                             error = result.error.toNotificationErrorMessage(),
                         )
                     }
@@ -96,6 +97,7 @@ class NotificationsViewModel(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isRefreshing = false,
+                    isOffline = false,
                     error = e.toNotificationErrorMessage(),
                 )
             }
