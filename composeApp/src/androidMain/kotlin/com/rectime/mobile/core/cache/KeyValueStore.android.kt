@@ -19,4 +19,13 @@ actual class PlatformKeyValueStore : KeyValueStore {
             .putString(key, value)
             .apply()
     }
+
+    override suspend fun clear() {
+        val context = getAuthPlatformContext() ?: return
+        context
+            .getSharedPreferences("rectime_cache", Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .apply()
+    }
 }

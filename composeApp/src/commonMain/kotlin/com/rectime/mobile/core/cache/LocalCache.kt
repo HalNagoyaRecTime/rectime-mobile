@@ -15,4 +15,9 @@ class LocalCache(@PublishedApi internal val store: KeyValueStore = PlatformKeyVa
     suspend inline fun <reified T> save(key: String, value: T) {
         store.putString(key, Json.encodeToString(value))
     }
+
+    // ログアウト・セッション失効時に他ユーザーへキャッシュが漏れないよう全消去する。
+    suspend fun clearAll() {
+        store.clear()
+    }
 }

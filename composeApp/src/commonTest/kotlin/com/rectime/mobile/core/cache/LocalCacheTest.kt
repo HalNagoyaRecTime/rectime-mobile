@@ -45,6 +45,16 @@ class LocalCacheTest {
 
         assertNull(cache.load<Sample>("key"))
     }
+
+    @Test
+    fun clearAllRemovesPreviouslySavedValues() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("key", Sample(id = 1, name = "test"))
+
+        cache.clearAll()
+
+        assertNull(cache.load<Sample>("key"))
+    }
 }
 
 private class InMemoryKeyValueStore : KeyValueStore {
@@ -54,5 +64,9 @@ private class InMemoryKeyValueStore : KeyValueStore {
 
     override suspend fun putString(key: String, value: String) {
         values[key] = value
+    }
+
+    override suspend fun clear() {
+        values.clear()
     }
 }

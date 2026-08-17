@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,7 @@ private fun authFailed(reason: String?): String =
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStore = AuthSessionStore(),
+    private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
     private val devAuthBypassEnabled = isDevAuthBypassEnabled()
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -77,6 +79,7 @@ class AuthViewModel(
                     if (refreshError is CancellationException) throw refreshError
                     sessionStore.clear()
                     sessionStore.clearPendingAuth()
+                    cache.clearAll()
                     val detail = if (isDebugBuild) " (${refreshError.describe()})" else ""
                     _uiState.update {
                         AuthUiState(error = "Session expired. Please login again.$detail")
@@ -202,6 +205,7 @@ class AuthViewModel(
             } finally {
                 sessionStore.clear()
                 sessionStore.clearPendingAuth()
+                cache.clearAll()
                 _uiState.update { AuthUiState(message = "Logged out") }
             }
         }

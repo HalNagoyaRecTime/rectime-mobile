@@ -10,4 +10,8 @@ actual class PlatformKeyValueStore : KeyValueStore {
     override suspend fun putString(key: String, value: String) {
         preferences.put(key, value)
     }
+
+    override suspend fun clear() {
+        preferences.clear()
+    }
 }
