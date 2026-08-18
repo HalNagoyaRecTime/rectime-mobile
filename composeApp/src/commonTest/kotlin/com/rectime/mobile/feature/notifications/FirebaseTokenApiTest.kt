@@ -110,6 +110,21 @@ class FirebaseTokenApiTest {
         assertFalse(error.message.orEmpty().contains("firebase-token"))
     }
 
+    @Test
+    fun registerRejectsBlankTokensBeforeNetwork() = runTest {
+        val api = FirebaseTokenApi(
+            client = mockAppHttpClient { error("Network request must not be sent") },
+            baseUrl = apiBaseUrl,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            api.register(fcmToken = "  ", accessToken = "access-token")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            api.register(fcmToken = "firebase-token", accessToken = "")
+        }
+    }
+
     private fun mockAppHttpClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
     ): HttpClient = HttpClient(MockEngine) {
