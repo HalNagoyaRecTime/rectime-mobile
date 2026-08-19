@@ -67,6 +67,22 @@ class CachedFetchTest {
     }
 
     @Test
+    fun failedResultIsReturnedWhenLiveFetchFailsAndLoadCacheItselfThrows() = runTest {
+        // loadCache自体が例外を投げても、fetchWithCacheFallbackの「例外を投げない」
+        // 契約を維持するため、キャッシュなしのFailedとして扱う。
+        val liveError = IllegalStateException("network down")
+
+        val result = fetchWithCacheFallback(
+            fetchLive = { throw liveError },
+            loadCache = { throw IllegalStateException("store read failed") },
+            saveCache = { fail("saveCache should not be called on failure") },
+        )
+
+        val failed = assertIs<CachedFetchResult.Failed>(result)
+        assertEquals(liveError, failed.error)
+    }
+
+    @Test
     fun cancellationExceptionPropagatesWithoutTouchingCache() = runTest {
         var loadCacheCalled = false
         var saveCacheCalled = false

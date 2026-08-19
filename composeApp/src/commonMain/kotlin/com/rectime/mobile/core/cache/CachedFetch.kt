@@ -21,7 +21,16 @@ suspend fun <T> fetchWithCacheFallback(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        val cached = loadCache()
+        // キャッシュの読み込み自体が失敗した場合も、キャッシュなし(Failed)として
+        // 扱う。ここで例外を伝播させると、この関数自体の「例外を投げない」契約が
+        // 崩れてしまう。
+        val cached = try {
+            loadCache()
+        } catch (cacheError: CancellationException) {
+            throw cacheError
+        } catch (cacheError: Exception) {
+            null
+        }
         return if (cached != null) CachedFetchResult.Cached(cached, e) else CachedFetchResult.Failed(e)
     }
 
