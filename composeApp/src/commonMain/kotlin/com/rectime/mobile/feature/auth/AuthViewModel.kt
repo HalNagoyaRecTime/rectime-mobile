@@ -18,9 +18,10 @@ private fun authFailed(reason: String?): String =
 
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
-    private val sessionStore: AuthSessionStore = AuthSessionStore(),
+    private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
+    private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
+    private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
 ) : ViewModel() {
-    private val devAuthBypassEnabled = isDevAuthBypassEnabled()
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
@@ -108,7 +109,7 @@ class AuthViewModel(
                 val codeChallenge = generateCodeChallenge(codeVerifier)
                 val state = generateBase64UrlRandom(32)
                 val authUrl = api.requestAuthUrl(state, codeChallenge)
-                val opened = openExternalUrl(authUrl)
+                val opened = openUrl(authUrl)
                 if (!opened) {
                     _uiState.update {
                         it.copy(
