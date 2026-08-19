@@ -30,6 +30,24 @@ class SettingsScreen(
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
+            session.user.studentIdNumber?.let { studentId ->
+                item {
+                    Text(
+                        text = "学籍番号：$studentId",
+                        color = AppTheme.colors.textSecondary,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            }
+            session.user.classRoomName?.let { className ->
+                item {
+                    Text(
+                        text = "クラス：$className",
+                        color = AppTheme.colors.textSecondary,
+                        modifier = Modifier.padding(vertical = 12.dp),
+                    )
+                }
+            }
             item {
                 Button(
                     onClick = onLogout,

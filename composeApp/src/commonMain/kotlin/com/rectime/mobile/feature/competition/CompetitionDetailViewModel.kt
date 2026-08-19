@@ -19,13 +19,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import io.ktor.client.HttpClient
 
 class CompetitionDetailViewModel(
     private val eventId: Int,
+    private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
 
-    private val httpClient = createAppHttpClient()
     private val cacheKey = "event_detail_v1_$eventId"
 
     private val _uiState = MutableStateFlow(CompetitionDetailUiState(isLoading = true))

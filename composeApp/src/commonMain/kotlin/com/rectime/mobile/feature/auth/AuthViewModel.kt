@@ -229,6 +229,8 @@ private fun createDevSession() = AuthSession(
         id = "dev-user",
         email = "dev@local",
         displayName = "Dev User",
+        studentIdNumber = "55000",
+        classRoomName = "IA12A203",
     ),
 )
 
