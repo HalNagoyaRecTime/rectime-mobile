@@ -10,9 +10,12 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,7 +87,11 @@ class CalendarViewModel(
                 error = null
                 when (
                     val result = fetchWithCacheFallback(
-                        fetchLive = { client.get(apiBaseUrl + "/api/v1/events").body<EventsResponse>() },
+                        fetchLive = {
+                            val response = client.get(apiBaseUrl + "/api/v1/events")
+                            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+                            response.body<EventsResponse>()
+                        },
                         loadCache = { cache.load<EventsResponse>(EVENTS_CACHE_KEY) },
                         saveCache = { cache.save(EVENTS_CACHE_KEY, it) },
                     )
@@ -95,12 +102,21 @@ class CalendarViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        _events.value = toTimelineEvents(result.value)
-                        isOffline = true
+                        // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
+                        if ((result.error as? HttpStatusException)?.status == HttpStatusCode.Unauthorized) {
+                            error = "ログイン情報の有効期限が切れました"
+                            isOffline = false
+                        } else {
+                            _events.value = toTimelineEvents(result.value)
+                            isOffline = true
+                        }
                     }
 
                     is CachedFetchResult.Failed -> {
-                        error = "通信に失敗しました"
+                        error = when ((result.error as? HttpStatusException)?.status) {
+                            HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
+                            else -> "通信に失敗しました"
+                        }
                         isOffline = false
                         result.error.printStackTrace()
                     }

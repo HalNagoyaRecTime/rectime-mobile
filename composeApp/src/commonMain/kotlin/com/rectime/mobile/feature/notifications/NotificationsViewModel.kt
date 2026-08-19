@@ -66,11 +66,13 @@ class NotificationsViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
-                        if ((result.error as? NotificationApiException)?.statusCode == 401) {
+                        // セッション切れ・取得失敗(404)はオフライン表示で隠さず、エラーを優先する。
+                        val statusCode = (result.error as? NotificationApiException)?.statusCode
+                        if (statusCode == 401 || statusCode == 404) {
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 isRefreshing = false,
+                                isOffline = false,
                                 error = result.error.toNotificationErrorMessage(),
                             )
                         } else {
@@ -176,7 +178,9 @@ class NotificationDetailViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        if ((result.error as? NotificationApiException)?.statusCode == 401) {
+                        // 削除済み(404)の古いキャッシュを誤表示し続けないようにする。
+                        val statusCode = (result.error as? NotificationApiException)?.statusCode
+                        if (statusCode == 401 || statusCode == 404) {
                             _uiState.value = NotificationDetailUiState(
                                 isLoading = false,
                                 error = result.error.toNotificationErrorMessage(),
