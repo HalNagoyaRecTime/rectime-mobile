@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class NotificationApiTest {
     @Test
@@ -116,6 +117,97 @@ class NotificationApiTest {
         }
 
         assertEquals(401, error.statusCode)
+    }
+
+    @Test
+    fun getNotificationsUsesDefaultPagingParameters() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val client = mockClient { request ->
+            capturedRequest = request
+            respond(
+                content = """{"notifications":[],"total":0,"limit":100,"offset":0}""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders,
+            )
+        }
+        val api = NotificationApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        val page = api.getNotifications()
+
+        assertEquals(
+            "https://api.example.com/api/v1/me/notifications?limit=100&offset=0",
+            requireNotNull(capturedRequest).url.toString(),
+        )
+        assertTrue(page.notifications.isEmpty())
+    }
+
+    @Test
+    fun getNotificationsExposesBackendStatusOnServerError() = runTest {
+        val client = mockClient {
+            respond(
+                content = """{"error":"internal server error"}""",
+                status = HttpStatusCode.InternalServerError,
+                headers = jsonHeaders,
+            )
+        }
+        val api = NotificationApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        val error = assertFailsWith<NotificationApiException> {
+            api.getNotifications()
+        }
+
+        assertEquals(500, error.statusCode)
+    }
+
+    @Test
+    fun requestFailsBeforeNetworkWhenSessionTokenIsBlank() = runTest {
+        val client = mockClient {
+            error("Network request must not be sent")
+        }
+        val api = NotificationApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "   " },
+        )
+
+        val error = assertFailsWith<NotificationApiException> {
+            api.getNotification(15)
+        }
+
+        assertEquals(401, error.statusCode)
+    }
+
+    @Test
+    fun outOfRangePagingParametersAreRejectedBeforeNetwork() = runTest {
+        val api = NotificationApi(
+            client = mockClient { error("Network request must not be sent") },
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        assertFailsWith<IllegalArgumentException> { api.getNotifications(limit = 0) }
+        assertFailsWith<IllegalArgumentException> { api.getNotifications(limit = 101) }
+        assertFailsWith<IllegalArgumentException> { api.getNotifications(offset = -1) }
+    }
+
+    @Test
+    fun nonPositiveNotificationIdIsRejectedBeforeNetwork() = runTest {
+        val api = NotificationApi(
+            client = mockClient { error("Network request must not be sent") },
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        assertFailsWith<IllegalArgumentException> { api.getNotification(0) }
+        assertFailsWith<IllegalArgumentException> { api.getNotification(-1) }
     }
 
     private fun mockClient(

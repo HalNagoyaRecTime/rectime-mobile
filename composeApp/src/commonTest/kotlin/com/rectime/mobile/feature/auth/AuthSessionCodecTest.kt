@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.auth
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class AuthSessionCodecTest {
     @Test
@@ -89,5 +90,54 @@ class AuthSessionCodecTest {
         assertEquals(Role.Student, decoded?.user?.role)
         assertEquals(null, decoded?.user?.studentIdNumber)
         assertEquals(null, decoded?.user?.classRoomName)
+    }
+
+    @Test
+    fun decodeReturnsNullForUnsupportedPartCount() {
+        val sevenParts = listOf("a", "b", "3600", "6", "e", "f", "g")
+            .joinToString(".") { it.encodeToByteArray().toBase64Url() }
+
+        assertNull(decodeAuthSession(sevenParts))
+        assertNull(decodeAuthSession(""))
+        assertNull(decodeAuthSession("garbage"))
+    }
+
+    @Test
+    fun decodeReturnsNullWhenExpiresInIsNotANumber() {
+        val broken = listOf("token123", "refresh456", "not-a-number", "6", "e", "f")
+            .joinToString(".") { it.encodeToByteArray().toBase64Url() }
+
+        assertNull(decodeAuthSession(broken))
+    }
+
+    @Test
+    fun decodeRestoresLegacySixPartSessionWithoutAvatar() {
+        val legacyEncoded = listOf("token123", "refresh456", "3600", "6", "test@example.com", "テスト太郎")
+            .joinToString(".") { it.encodeToByteArray().toBase64Url() }
+
+        val decoded = decodeAuthSession(legacyEncoded)
+
+        assertEquals("token123", decoded?.accessToken)
+        assertEquals(3600L, decoded?.expiresIn)
+        assertEquals("テスト太郎", decoded?.user?.displayName)
+        assertNull(decoded?.user?.avatarUrl)
+        assertNull(decoded?.user?.role)
+    }
+
+    @Test
+    fun pendingAuthSurvivesEncodeDecodeRoundTrip() {
+        val original = PendingAuth(state = "state-abc_123", codeVerifier = "verifier-xyz_456")
+
+        assertEquals(original, decodePendingAuth(encodePendingAuth(original)))
+    }
+
+    @Test
+    fun decodePendingAuthReturnsNullForWrongPartCount() {
+        val oneValue = "state-abc".encodeToByteArray().toBase64Url()
+        val threeValues = listOf("a", "b", "c").joinToString(".") { it.encodeToByteArray().toBase64Url() }
+
+        assertNull(decodePendingAuth(oneValue))
+        assertNull(decodePendingAuth(threeValues))
+        assertNull(decodePendingAuth(""))
     }
 }
