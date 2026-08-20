@@ -133,39 +133,43 @@ private fun CalendarScreenUI(
                             val startMinutes = event.startMinuteOfDay - hourStart * 60
                             val yOffset = hourHeight * (startMinutes / 60f)
                             val eventHeight = hourHeight * (event.durationMinutes / 60f)
-
-                        PressSurface(
-                            onClick = { onOpenEventDetail(event.eventId) },
-                            modifier = Modifier
+                            val cardModifier = Modifier
                                 .width(laneWidth - 8.dp)
                                 .height(eventHeight - 6.dp)
                                 .padding(top = 4.dp)
                                 .align(Alignment.TopStart)
-                                .offset(x = xOffset + 4.dp, y = yOffset + 4.dp),
-                            color = AppTheme.colors.surfaceAccent,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
-                        ) {
-                            Column {
-                                Text(text = event.title, color = AppTheme.colors.textPrimary)
-                                Text(
-                                    text = "${event.startTimeLabel}〜${event.endTimeLabel}",
-                                    color = AppTheme.colors.textSecondary,
-                                )
-                                Text(text = event.venue, color = AppTheme.colors.textSecondary)
+                                .offset(x = xOffset + 4.dp, y = yOffset + 4.dp)
+
+                            if (event.overflowCount > 0) {
+                                // 「+N」は集約表示であり個別のイベント詳細を持たないため、
+                                // クリック可能なPressSurfaceは使わず非インタラクティブなBoxにする
+                                // (押せるのに何も起きない、というダミー導線を作らないため)。
+                                Box(
+                                    modifier = cardModifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(AppTheme.colors.surfaceMuted)
+                                        .padding(8.dp),
+                                ) {
+                                    Text(text = "+${event.overflowCount}", color = AppTheme.colors.textSecondary)
+                                }
+                            } else {
+                                PressSurface(
+                                    onClick = { onOpenEventDetail(event.eventId) },
+                                    modifier = cardModifier,
+                                    color = AppTheme.colors.surfaceAccent,
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
+                                ) {
+                                    Column {
+                                        Text(text = event.title, color = AppTheme.colors.textPrimary)
+                                        Text(
+                                            text = "${event.startTimeLabel}〜${event.endTimeLabel}",
+                                            color = AppTheme.colors.textSecondary,
+                                        )
+                                        Text(text = event.venue, color = AppTheme.colors.textSecondary)
+                                    }
+                                }
                             }
                         }
-                    }
-
-                    PressSurface(
-                        onClick = {/* 後で実装 */},
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp),
-                        color = AppTheme.colors.surfacePrimary,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        Text(text = "+2", color = AppTheme.colors.textSecondary)
-                    }
 
                         if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
                             val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)
