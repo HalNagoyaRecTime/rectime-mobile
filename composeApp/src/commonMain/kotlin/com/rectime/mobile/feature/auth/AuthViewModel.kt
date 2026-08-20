@@ -77,12 +77,30 @@ class AuthViewModel(
                     _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
-                    sessionStore.clear()
-                    sessionStore.clearPendingAuth()
-                    cache.clearAll()
                     val detail = if (isDebugBuild) " (${refreshError.describe()})" else ""
-                    _uiState.update {
-                        AuthUiState(error = "Session expired. Please login again.$detail")
+                    if (refreshError is IllegalStateException) {
+                        // AuthApiは、サーバーが明示的に非2xxを返した場合のみ
+                        // IllegalStateExceptionを投げる(それ以外はネットワーク層の
+                        // 例外)。サーバーがrefreshを拒否した場合のみセッションが
+                        // 本当に無効と判断し、セッション・キャッシュをクリアする。
+                        sessionStore.clear()
+                        sessionStore.clearPendingAuth()
+                        cache.clearAll()
+                        _uiState.update {
+                            AuthUiState(error = "Session expired. Please login again.$detail")
+                        }
+                    } else {
+                        // 圏外・オフライン等、通信自体が失敗した場合。セッションが
+                        // 無効だとは判断できないため、セッション・オフラインキャッシュは
+                        // 保持し、保存済みの(古い)セッションでアプリを継続させる
+                        // (オフラインでもキャッシュ済みデータで各画面を使えるように)。
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                session = stored,
+                                message = "Offline$detail",
+                            )
+                        }
                     }
                 }
             }
