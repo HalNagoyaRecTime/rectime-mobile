@@ -217,6 +217,47 @@ class AuthViewModelTest {
         assertEquals("cached-value", cache.load<String>("some_cached_key"))
     }
 
+    @Test
+    fun restoreSessionKeepsSessionAndCacheWhenRefreshReturnsMalformedSuccessBody() = runTest(testDispatcher) {
+        // AuthApiは2xxでも本文解析に失敗した場合IllegalStateExceptionを投げるが、
+        // これはサーバーが明示的に拒否したわけではない(HttpStatusExceptionではない)
+        // ため、セッション失効とは判断してはならない。
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/me")) {
+                        respond(
+                            content = """{"error":{"message":"token expired"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        // /auth/refresh: 200 OKだがaccess_tokenを含まない不正な本文
+                        // (キャプティブポータル等でHTML等が返るケースを想定)。
+                        respond(
+                            content = """{"expires_in":7200}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(storedSession, state.session)
+        assertNull(state.error)
+        assertEquals(storedSession, store.session)
+        assertEquals("cached-value", cache.load<String>("some_cached_key"))
+    }
+
     // ---- startLogin ----
 
     @Test

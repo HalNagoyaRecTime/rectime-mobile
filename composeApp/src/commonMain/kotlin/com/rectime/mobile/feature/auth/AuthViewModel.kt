@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
+import com.rectime.mobile.core.network.HttpStatusException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -79,10 +80,11 @@ class AuthViewModel(
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
                     val detail = if (isDebugBuild) " (${refreshError.describe()})" else ""
-                    if (refreshError is IllegalStateException) {
+                    if (refreshError is HttpStatusException) {
                         // AuthApiは、サーバーが明示的に非2xxを返した場合のみ
-                        // IllegalStateExceptionを投げる(それ以外はネットワーク層の
-                        // 例外)。サーバーがrefreshを拒否した場合のみセッションが
+                        // HttpStatusExceptionを投げる(2xxなのに本文解析に失敗した
+                        // 場合や、ネットワーク層の例外はそれ以外の型のままになる)。
+                        // サーバーがrefreshを拒否した場合のみセッションが
                         // 本当に無効と判断し、セッション・キャッシュをクリアする。
                         sessionStore.clear()
                         sessionStore.clearPendingAuth()

@@ -103,7 +103,10 @@ class CalendarViewModel(
 
                     is CachedFetchResult.Cached -> {
                         // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
+                        // errorはスナックバーで一瞬しか表示されないため、消えた後も未検証の
+                        // 古いイベントが表示され続けないよう_eventsもクリアする。
                         if ((result.error as? HttpStatusException)?.status == HttpStatusCode.Unauthorized) {
+                            _events.value = emptyList()
                             error = "ログイン情報の有効期限が切れました"
                             isOffline = false
                         } else {
