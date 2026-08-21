@@ -1,5 +1,8 @@
 package com.rectime.mobile.feature.calendar
 
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.format.char
+
 /**
  * @param overflowCount 0より大きい場合、これは実イベントではなく
  *   「表示しきれず集約された残りN件」を表す合成エントリであることを示す
@@ -18,3 +21,34 @@ data class TimelineEvent(
     val endTimeLabel: String,
     val overflowCount: Int = 0,
 )
+
+private val apiTimeFormat = LocalTime.Format {
+    hour()
+    minute()
+}
+
+private val displayTimeFormat = LocalTime.Format {
+    hour()
+    char(':')
+    minute()
+}
+
+internal fun EventResponse.toTimelineEvent(): TimelineEvent {
+    val start = LocalTime.parse(startTime, format = apiTimeFormat)
+    val end = LocalTime.parse(endTime, format = apiTimeFormat)
+
+    val startMinuteOfDay = start.hour * 60 + start.minute
+    val endMinuteOfDay = end.hour * 60 + end.minute
+
+    return TimelineEvent(
+        eventId = eventId,
+        title = eventName,
+        venue = venue,
+        startMinuteOfDay = startMinuteOfDay,
+        durationMinutes = endMinuteOfDay - startMinuteOfDay,
+        lane = 0,
+        laneCount = 1,
+        startTimeLabel = displayTimeFormat.format(start),
+        endTimeLabel = displayTimeFormat.format(end),
+    )
+}
