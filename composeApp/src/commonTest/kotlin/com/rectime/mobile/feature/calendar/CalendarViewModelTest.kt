@@ -221,15 +221,27 @@ class CalendarViewModelTest {
 
     @Test
     fun fetchEventsIgnoresBodyOfNon2xxResponse() = runTest(testDispatcher) {
+        var callCount = 0
         val viewModel = buildViewModel(
-            mockClient { respondJson(eventsJson, HttpStatusCode.InternalServerError) },
+            mockClient {
+                callCount++
+                if (callCount == 1) {
+                    respondJson(eventsJson)
+                } else {
+                    respondJson(singleEventJson, HttpStatusCode.InternalServerError)
+                }
+            },
         )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
 
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
-        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals(2, viewModel.events.value.size)
     }
 
     @Test
@@ -479,6 +491,26 @@ class CalendarViewModelTest {
 
     private companion object {
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
+
+        val singleEventJson = """
+            {
+              "events": [
+                {
+                  "event_id": 99,
+                  "event_name": "エラー応答に紛れたイベント",
+                  "rule_text": null,
+                  "venue": "グラウンド",
+                  "start_time": "0900",
+                  "end_time": "0930",
+                  "created_at": "2026-04-01T00:00:00Z",
+                  "updated_at": "2026-04-01T00:00:00Z"
+                }
+              ],
+              "total": 1,
+              "limit": 50,
+              "offset": 0
+            }
+        """.trimIndent()
 
         val eventsJson = """
             {
