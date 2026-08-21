@@ -11,6 +11,7 @@ import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
@@ -59,6 +60,10 @@ class CalendarViewModel(
                 isLoading = true
                 error = null
                 val response = client.get("$baseUrl/api/v1/events")
+                if (!response.status.isSuccess()) {
+                    error = "イベントの取得に失敗しました"
+                    return@launch
+                }
                 val body: EventsResponse = response.body()
                 _events.value = body.events.map { it.toTimelineEvent() }
             } catch (e: CancellationException) {

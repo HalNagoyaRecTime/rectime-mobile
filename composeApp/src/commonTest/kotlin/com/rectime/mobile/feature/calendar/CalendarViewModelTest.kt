@@ -35,6 +35,7 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 private const val NETWORK_ERROR_MESSAGE = "通信に失敗しました"
+private const val SERVER_ERROR_MESSAGE = "イベントの取得に失敗しました"
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class CalendarViewModelTest {
@@ -174,7 +175,7 @@ class CalendarViewModelTest {
 
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
 
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -198,7 +199,7 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
         assertTrue(viewModel.events.value.isEmpty())
         assertFalse(viewModel.isLoading)
     }
@@ -214,8 +215,46 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
         assertFalse(viewModel.isLoading)
+    }
+
+    @Test
+    fun fetchEventsIgnoresBodyOfNon2xxResponse() = runTest(testDispatcher) {
+        val viewModel = buildViewModel(
+            mockClient { respondJson(eventsJson, HttpStatusCode.InternalServerError) },
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
+        assertTrue(viewModel.events.value.isEmpty())
+    }
+
+    @Test
+    fun fetchEventsDistinguishesServerErrorFromNetworkFailure() = runTest(testDispatcher) {
+        var callCount = 0
+        val viewModel = buildViewModel(
+            mockClient {
+                callCount++
+                if (callCount == 1) {
+                    respondJson("""{"error":{"message":"boom"}}""", HttpStatusCode.InternalServerError)
+                } else {
+                    error("接続できません")
+                }
+            },
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val serverError = viewModel.error
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(SERVER_ERROR_MESSAGE, serverError)
+        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
     }
 
     @Test
