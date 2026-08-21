@@ -101,6 +101,49 @@ class CalendarViewModelTest {
     }
 
     @Test
+    fun fetchEventsSkipsEventWhoseEndIsNotAfterStart() = runTest(testDispatcher) {
+        val viewModel = buildViewModel(
+            mockClient {
+                respondJson(
+                    eventsJsonOf(
+                        Triple(3, "1030", "1100"),
+                        Triple(7, "1300", "1230"),
+                        Triple(9, "1400", "1400"),
+                    ),
+                )
+            },
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(listOf(3), viewModel.events.value.map { it.eventId })
+        assertNull(viewModel.error)
+    }
+
+    @Test
+    fun fetchEventsAssignsLanesToOverlappingEvents() = runTest(testDispatcher) {
+        val viewModel = buildViewModel(
+            mockClient {
+                respondJson(
+                    eventsJsonOf(
+                        Triple(3, "1000", "1100"),
+                        Triple(7, "1030", "1130"),
+                    ),
+                )
+            },
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val events = viewModel.events.value
+        assertEquals(2, events.size)
+        assertEquals(listOf(0, 1), events.map { it.lane })
+        assertTrue(events.all { it.laneCount == 2 })
+    }
+
+    @Test
     fun fetchEventsKeepsEmptyListWhenNoEventIsRegistered() = runTest(testDispatcher) {
         val viewModel = buildViewModel(
             mockClient { respondJson("""{"events":[],"total":0,"limit":50,"offset":0}""") },
@@ -490,6 +533,24 @@ class CalendarViewModelTest {
     }
 
     private companion object {
+        fun eventsJsonOf(vararg events: Triple<Int, String, String>): String {
+            val items = events.joinToString(",") { (id, start, end) ->
+                """
+                {
+                  "event_id": $id,
+                  "event_name": "競技$id",
+                  "rule_text": null,
+                  "venue": "グラウンド",
+                  "start_time": "$start",
+                  "end_time": "$end",
+                  "created_at": "2026-04-01T00:00:00Z",
+                  "updated_at": "2026-04-01T00:00:00Z"
+                }
+                """.trimIndent()
+            }
+            return """{"events":[$items],"total":${events.size},"limit":50,"offset":0}"""
+        }
+
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
 
         val singleEventJson = """

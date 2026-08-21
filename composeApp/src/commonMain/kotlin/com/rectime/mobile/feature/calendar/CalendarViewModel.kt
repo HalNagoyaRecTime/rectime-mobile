@@ -65,7 +65,20 @@ class CalendarViewModel(
                     return@launch
                 }
                 val body: EventsResponse = response.body()
-                _events.value = body.events.map { it.toTimelineEvent() }
+                val timelineEvents = body.events.mapNotNull {
+                    val timelineEvent = it.toTimelineEvent()
+
+                    // end <= start(不正データ・日跨ぎ)は0分に潰さず、原因が追えるようログを
+                    // 出しつつ除外する。durationMinutes=0のカードはUI上の高さが0以下になり
+                    // 実質見えなくなるだけで、原因調査ができなくなるため。
+                    if (timelineEvent.durationMinutes <= 0) {
+                        println("CalendarViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                        return@mapNotNull null
+                    }
+
+                    timelineEvent
+                }
+                _events.value = assignLanes(timelineEvents)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

@@ -168,8 +168,10 @@ private fun NotificationRelatedEventLink(
     }
 }
 
-internal fun String.toNotificationDateTime(): String = runCatching {
-    val dateTime = Instant.parse(this).toLocalDateTime(TimeZone.currentSystemDefault())
+internal fun String.toNotificationDateTime(
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String = runCatching {
+    val dateTime = Instant.parse(this).toLocalDateTime(timeZone)
     "${dateTime.month.ordinal + 1}月${dateTime.day}日 " +
         "${dateTime.hour.toTwoDigits()}:${dateTime.minute.toTwoDigits()}"
 }.getOrElse { this }

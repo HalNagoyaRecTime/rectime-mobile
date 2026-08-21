@@ -22,11 +22,19 @@ class TimelineEventMappingTest {
     }
 
     @Test
-    fun laneIsFixedToSingleLaneUntilLaneCalculationIsImplemented() {
+    fun leavesLaneUnassignedForAssignLanesToOverwrite() {
         val timelineEvent = eventResponse().toTimelineEvent()
 
         assertEquals(0, timelineEvent.lane)
         assertEquals(1, timelineEvent.laneCount)
+        assertEquals(0, timelineEvent.overflowCount)
+    }
+
+    @Test
+    fun keepsNonPositiveDurationForCallerToReject() {
+        val timelineEvent = eventResponse(startTime = "1100", endTime = "1030").toTimelineEvent()
+
+        assertEquals(-30, timelineEvent.durationMinutes)
     }
 
     @Test
