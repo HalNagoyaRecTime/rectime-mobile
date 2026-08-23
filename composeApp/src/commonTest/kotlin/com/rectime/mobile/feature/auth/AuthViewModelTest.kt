@@ -258,6 +258,45 @@ class AuthViewModelTest {
         assertEquals("cached-value", cache.load<String>("some_cached_key"))
     }
 
+    @Test
+    fun restoreSessionKeepsSessionAndCacheWhenRefreshFailsWithServerError() = runTest(testDispatcher) {
+        // HttpStatusExceptionは401以外の非2xx(500/503等の一時的なサーバーエラー)でも
+        // 投げられるため、ステータスコードまで見ないと誤ってセッションを無効と
+        // 判断してしまう(レビュー指摘: MayugeStudio)。
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/me")) {
+                        respond(
+                            content = """{"error":{"message":"token expired"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        respond(
+                            content = """{"error":{"message":"internal server error"}}""",
+                            status = HttpStatusCode.InternalServerError,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(storedSession, state.session)
+        assertNull(state.error)
+        assertEquals(storedSession, store.session)
+        assertEquals("cached-value", cache.load<String>("some_cached_key"))
+    }
+
     // ---- startLogin ----
 
     @Test
