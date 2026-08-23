@@ -106,9 +106,15 @@ class CalendarViewModel(
                     }
 
                     is CachedFetchResult.Failed -> {
-                        error = when ((result.error as? HttpStatusException)?.status) {
+                        val status = (result.error as? HttpStatusException)?.status
+                        error = when (status) {
                             HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
                             else -> "通信に失敗しました"
+                        }
+                        if (status == HttpStatusCode.Unauthorized) {
+                            // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
+                            // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
+                            _events.value = emptyList()
                         }
                         isOffline = false
                         result.error.printStackTrace()

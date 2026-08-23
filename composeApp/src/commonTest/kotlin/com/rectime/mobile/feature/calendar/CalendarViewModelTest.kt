@@ -457,6 +457,35 @@ class CalendarViewModelTest {
         assertFalse(viewModel.isOffline)
     }
 
+    @Test
+    fun fetchEventsClearsEventsWhenUnauthorizedAndNoCacheIsAvailable() = runTest(testDispatcher) {
+        // CachedFetchResult.Cachedと違い、Failed(キャッシュが無い/読めない)経路でも
+        // 401時に古いeventsが残り続けてはならない。
+        var callCount = 0
+        val viewModel = buildViewModel(
+            mockClient {
+                callCount++
+                if (callCount == 1) {
+                    respondJson(eventsJson)
+                } else {
+                    respondJson("""{"error":{"message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
+                }
+            },
+            cache = LocalCache(NeverPersistingKeyValueStore()),
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
+        assertFalse(viewModel.isOffline)
+    }
+
     // ---- nowMinute ----
 
     @Test
@@ -587,6 +616,17 @@ class CalendarViewModelTest {
         override suspend fun clear() {
             values.clear()
         }
+    }
+
+    // 「保存はできるが、後で読み出すと必ず失われている(キャッシュ消失)」状況を
+    // シミュレートするためのフェイク。CachedFetchResult.Failed経路(loadCacheが
+    // 何も返さない)を、事前のsaveCache成功有無に関わらず強制的に発生させる。
+    private class NeverPersistingKeyValueStore : KeyValueStore {
+        override suspend fun getString(key: String): String? = null
+
+        override suspend fun putString(key: String, value: String) = Unit
+
+        override suspend fun clear() = Unit
     }
 
     private companion object {
