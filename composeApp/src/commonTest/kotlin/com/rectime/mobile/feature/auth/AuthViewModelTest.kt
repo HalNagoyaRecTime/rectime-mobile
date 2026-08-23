@@ -418,6 +418,31 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun handleCallbackUrlClearsPreviousUsersCacheOnSuccessfulLogin() = runTest(testDispatcher) {
+        // 共有端末で前のユーザーがログアウトせずアプリを離れていた場合を想定し、
+        // ログイン前の時点でキャッシュに何か残っている状態を再現する。
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "previous-user-data")
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(content = sessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+        assertNull(cache.load<String>("some_cached_key"))
+    }
+
+    @Test
     fun handleCallbackUrlDecodesPercentEncodedQueryValues() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state abc", "verifier-123"))
         var receivedPath: String? = null

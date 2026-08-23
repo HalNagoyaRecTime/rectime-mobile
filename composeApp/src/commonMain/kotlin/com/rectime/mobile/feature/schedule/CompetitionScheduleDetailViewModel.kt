@@ -153,8 +153,15 @@ class CompetitionScheduleDetailViewModel(
         }
     }
 
-    private suspend fun fetchGatheringFromCacheOnly(): Gathering? =
-        cache.load<List<GatheringResponse>>(gatheringCacheKey)?.firstOrNull()?.toModel()
+    private suspend fun fetchGatheringFromCacheOnly(): Gathering? {
+        // LocalCache.load()はJSONデコード失敗のみを吸収し、KeyValueStore自体の
+        // 読み込み失敗までは保護しない。ここで例外を伝播させると、既に復元できた
+        // event側のオフライン表示ごと汎用エラーに上書きされてしまうため、
+        // 呼び出し側でも防御する。
+        return runCatching {
+            cache.load<List<GatheringResponse>>(gatheringCacheKey)?.firstOrNull()?.toModel()
+        }.getOrNull()
+    }
 
     override fun onCleared() {
         super.onCleared()

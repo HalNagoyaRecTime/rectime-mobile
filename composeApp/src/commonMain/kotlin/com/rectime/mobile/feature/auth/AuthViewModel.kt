@@ -194,6 +194,10 @@ class AuthViewModel(
                 val session = api.exchangeCode(code, state, pending.codeVerifier)
                 sessionStore.save(session)
                 sessionStore.clearPendingAuth()
+                // 共有端末で前のユーザーがログアウトせずにアプリを離れていた場合、
+                // キャッシュキーはユーザーIDで分離されていないため、新規ログイン時にも
+                // 明示的にクリアしておかないと前ユーザーのデータが見えてしまう。
+                cache.clearAll()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
