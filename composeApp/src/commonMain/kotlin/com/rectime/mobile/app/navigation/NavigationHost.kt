@@ -152,10 +152,6 @@ fun NavigationHost(
             onPushFromMenu = { screen ->
                 navigationController.push(screen, PushTransitionSource.SideMenu)
             },
-            onPresentThemeSheet = { sheet ->
-                navigationController.presentSheet(sheet)
-            },
-            themeStateHolder = themeStateHolder,
             session = session,
             onLogout = onLogout,
         )
