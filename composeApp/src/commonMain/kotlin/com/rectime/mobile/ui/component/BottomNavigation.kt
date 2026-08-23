@@ -35,7 +35,6 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.CalendarDays
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.House
-import com.rectime.mobile.feature.ranking.RankingScreen
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Bell
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
@@ -59,7 +58,6 @@ fun BottomNavigationBar(
     NavigationItemConfig(CalendarScreen, "カレンダー", SolidGroup.CalendarDays),
     NavigationItemConfig(NotificationsScreen, "通知", SolidGroup.Bell),
     NavigationItemConfig(SettingsScreen(session = session, onLogout = onLogout), "設定", SolidGroup.Gear),
-    NavigationItemConfig(RankingScreen, "ランキング", SolidGroup.Trophy),
 )
 
     Column(
