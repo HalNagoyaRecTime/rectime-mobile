@@ -72,11 +72,16 @@ class CompetitionDetailViewModel(
                                 isLoading = false,
                                 error = "ログイン情報の有効期限が切れました",
                             )
-                            else -> _uiState.value = CompetitionDetailUiState(
-                                isLoading = false,
-                                eventDetail = result.value.toModel(),
-                                isOffline = true,
-                            )
+                            else -> {
+                                _uiState.value = CompetitionDetailUiState(
+                                    isLoading = false,
+                                    eventDetail = result.value.toModel(),
+                                    isOffline = true,
+                                )
+                                // 401/404以外の理由でのフォールバックは「オフライン」として
+                                // 静かに隠れてしまうため、原因を追えるようログには残す。
+                                result.error.printStackTrace()
+                            }
                         }
                     }
 

@@ -81,6 +81,9 @@ class NotificationsViewModel(
                                 isLoading = false,
                                 isOffline = true,
                             )
+                            // 401/404以外の理由でのフォールバックは「オフライン」として
+                            // 静かに隠れてしまうため、原因を追えるようログには残す。
+                            result.error.printStackTrace()
                         }
                     }
 
@@ -91,6 +94,7 @@ class NotificationsViewModel(
                             isOffline = false,
                             error = result.error.toNotificationErrorMessage(),
                         )
+                        result.error.printStackTrace()
                     }
                 }
             } catch (e: CancellationException) {
@@ -191,6 +195,9 @@ class NotificationDetailViewModel(
                                 isLoading = false,
                                 isOffline = true,
                             )
+                            // 401/404以外の理由でのフォールバックは「オフライン」として
+                            // 静かに隠れてしまうため、原因を追えるようログには残す。
+                            result.error.printStackTrace()
                         }
                     }
 
@@ -199,6 +206,7 @@ class NotificationDetailViewModel(
                             isLoading = false,
                             error = result.error.toNotificationErrorMessage(),
                         )
+                        result.error.printStackTrace()
                     }
                 }
             } catch (e: CancellationException) {

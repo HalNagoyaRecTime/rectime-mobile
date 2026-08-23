@@ -98,6 +98,10 @@ class CalendarViewModel(
                         } else {
                             _events.value = toTimelineEvents(result.value)
                             isOffline = true
+                            // 401以外の理由での フォールバックは「オフライン」として静かに
+                            // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
+                            // 可能性もある)を追えるようログには残す。
+                            result.error.printStackTrace()
                         }
                     }
 

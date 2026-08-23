@@ -92,6 +92,9 @@ class CompetitionScheduleDetailViewModel(
                                     gathering = fetchGatheringFromCacheOnly(),
                                     isOffline = true,
                                 )
+                                // 401/404以外の理由でのフォールバックは「オフライン」として
+                                // 静かに隠れてしまうため、原因を追えるようログには残す。
+                                result.error.printStackTrace()
                             }
                         }
                     }
@@ -139,6 +142,7 @@ class CompetitionScheduleDetailViewModel(
                 if (status == HttpStatusCode.NotFound || status == HttpStatusCode.Unauthorized) {
                     null to false
                 } else {
+                    result.error.printStackTrace()
                     result.value.firstOrNull()?.toModel() to true
                 }
             }
