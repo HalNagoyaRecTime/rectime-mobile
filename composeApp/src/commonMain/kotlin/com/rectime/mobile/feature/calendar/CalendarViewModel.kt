@@ -12,24 +12,21 @@ import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
+import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalTime
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.toLocalTime
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
@@ -38,23 +35,23 @@ private const val EVENTS_CACHE_KEY = "calendar_events_v1"
 
 @OptIn(ExperimentalTime::class)
 class CalendarViewModel(
+    private val client: HttpClient = createAppHttpClient(),
+    private val baseUrl: String = apiBaseUrl,
+    private val clock: Clock = Clock.System,
+    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
     val nowMinute: StateFlow<Int> = flow {
         while (true) {
-            emit(currentMinuteOfDay())
-            val second = Clock.System.now()
-                .toLocalDateTime(TimeZone.currentSystemDefault())
-                .second
-            delay(((60 - second) * 1000L).milliseconds)
+            val now = currentLocalDateTime()
+            emit(now.hour * 60 + now.minute)
+            delay(((60 - now.second) * 1000L).milliseconds)
         }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = currentMinuteOfDay(),
     )
-
-    private val client = createAppHttpClient()
 
     private val _events = mutableStateOf(listOf<TimelineEvent>())
     val events: State<List<TimelineEvent>> = _events
@@ -69,17 +66,6 @@ class CalendarViewModel(
     var isOffline by mutableStateOf(false)
         private set
 
-    val startTimeFormat = LocalTime.Format {
-        hour()
-        minute()
-    }
-
-    private val displayTimeFormat = LocalTime.Format {
-        hour()
-        char(':')
-        minute()
-    }
-
     fun fetchEvents() {
         viewModelScope.launch {
             try {
@@ -88,7 +74,7 @@ class CalendarViewModel(
                 when (
                     val result = fetchWithCacheFallback(
                         fetchLive = {
-                            val response = client.get(apiBaseUrl + "/api/v1/events")
+                            val response = client.get("$baseUrl/api/v1/events")
                             if (!response.status.isSuccess()) throw HttpStatusException(response.status)
                             response.body<EventsResponse>()
                         },
@@ -136,36 +122,33 @@ class CalendarViewModel(
         }
     }
 
-    private fun toTimelineEvents(body: EventsResponse): List<TimelineEvent> =
-        body.events.map {
-            val startTime = LocalTime.parse(it.startTime, format = startTimeFormat)
-            val endTime = LocalTime.parse(it.endTime, format = startTimeFormat)
+    private fun toTimelineEvents(body: EventsResponse): List<TimelineEvent> {
+        val timelineEvents = body.events.mapNotNull {
+            val timelineEvent = it.toTimelineEvent()
 
-            val startMinuteOfDay = startTime.hour * 60 + startTime.minute
-            val endMinuteOfDay = endTime.hour * 60 + endTime.minute
+            // end <= start(不正データ・日跨ぎ)は0分に潰さず、原因が追えるようログを
+            // 出しつつ除外する。durationMinutes=0のカードはUI上の高さが0以下になり
+            // 実質見えなくなるだけで、原因調査ができなくなるため。
+            if (timelineEvent.durationMinutes <= 0) {
+                println("CalendarViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                return@mapNotNull null
+            }
 
-            TimelineEvent(
-                eventId = it.eventId,
-                title = it.eventName,
-                venue = it.venue,
-                startMinuteOfDay = startMinuteOfDay,
-                durationMinutes = endMinuteOfDay - startMinuteOfDay,
-                lane = 0,
-                laneCount = 1,
-                startTimeLabel = displayTimeFormat.format(startTime),
-                endTimeLabel = displayTimeFormat.format(endTime),
-            )
+            timelineEvent
         }
+        return assignLanes(timelineEvents)
+    }
 
     override fun onCleared() {
         super.onCleared()
         client.close()
     }
-}
 
+    private fun currentLocalDateTime(): LocalDateTime =
+        clock.now().toLocalDateTime(timeZone)
 
-@OptIn(ExperimentalTime::class)
-private fun currentMinuteOfDay(): Int {
-    val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-    return now.hour * 60 + now.minute
+    private fun currentMinuteOfDay(): Int {
+        val now = currentLocalDateTime()
+        return now.hour * 60 + now.minute
+    }
 }

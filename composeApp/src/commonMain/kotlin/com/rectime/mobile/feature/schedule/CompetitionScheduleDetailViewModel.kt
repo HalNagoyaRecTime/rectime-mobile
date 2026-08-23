@@ -21,13 +21,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import io.ktor.client.HttpClient
 
 class CompetitionScheduleDetailViewModel(
     private val eventId: Int,
+    private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
 
-    private val httpClient = createAppHttpClient()
 
     // 競技詳細(CompetitionDetailViewModel)と同じエンドポイント/データのため、キーも共有する。
     private val eventCacheKey = "event_detail_v1_$eventId"
