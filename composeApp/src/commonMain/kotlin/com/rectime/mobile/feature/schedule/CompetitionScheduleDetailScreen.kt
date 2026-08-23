@@ -21,6 +21,7 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -60,6 +61,13 @@ data class CompetitionScheduleDetailScreen(val eventId: Int) : Screen {
                     }
 
                     event != null -> {
+                        if (uiState.isOffline) {
+                            OfflineBanner(
+                                message = "オフライン: 最新のスケジュール情報を取得できません。前回取得時の内容を表示しています。",
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+
                         Text(
                             text = event.eventName,
                             style = MaterialTheme.typography.headlineMedium,

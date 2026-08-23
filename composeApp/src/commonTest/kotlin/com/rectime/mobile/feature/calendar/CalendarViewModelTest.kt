@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.calendar
 
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -34,8 +36,8 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
-private const val NETWORK_ERROR_MESSAGE = "通信に失敗しました"
-private const val SERVER_ERROR_MESSAGE = "イベントの取得に失敗しました"
+private const val LOAD_FAILED_MESSAGE = "通信に失敗しました"
+private const val SESSION_EXPIRED_MESSAGE = "ログイン情報の有効期限が切れました"
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class CalendarViewModelTest {
@@ -218,7 +220,7 @@ class CalendarViewModelTest {
 
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
 
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -226,7 +228,7 @@ class CalendarViewModelTest {
         assertEquals(2, viewModel.events.value.size)
     }
 
-    // ---- fetchEvents 異常系 ----
+    // ---- fetchEvents 異常系(キャッシュなし) ----
 
     @Test
     fun fetchEventsReportsErrorOnServerError() = runTest(testDispatcher) {
@@ -242,13 +244,13 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertTrue(viewModel.events.value.isEmpty())
         assertFalse(viewModel.isLoading)
     }
 
     @Test
-    fun fetchEventsReportsErrorOnUnauthorized() = runTest(testDispatcher) {
+    fun fetchEventsReportsSessionExpiredOnUnauthorized() = runTest(testDispatcher) {
         val viewModel = buildViewModel(
             mockClient {
                 respondJson("""{"error":{"message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
@@ -258,37 +260,14 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
+        // キャッシュが無い場合はCachedFetchResult.Failedになり、401は専用メッセージになる
+        // (他画面のセッション切れ判定と同じ基準)。
+        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
         assertFalse(viewModel.isLoading)
     }
 
     @Test
-    fun fetchEventsIgnoresBodyOfNon2xxResponse() = runTest(testDispatcher) {
-        var callCount = 0
-        val viewModel = buildViewModel(
-            mockClient {
-                callCount++
-                if (callCount == 1) {
-                    respondJson(eventsJson)
-                } else {
-                    respondJson(singleEventJson, HttpStatusCode.InternalServerError)
-                }
-            },
-        )
-
-        viewModel.fetchEvents()
-        testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(2, viewModel.events.value.size)
-
-        viewModel.fetchEvents()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals(SERVER_ERROR_MESSAGE, viewModel.error)
-        assertEquals(2, viewModel.events.value.size)
-    }
-
-    @Test
-    fun fetchEventsDistinguishesServerErrorFromNetworkFailure() = runTest(testDispatcher) {
+    fun fetchEventsReportsSameGenericMessageForServerErrorAndNetworkFailure() = runTest(testDispatcher) {
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -308,8 +287,8 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(SERVER_ERROR_MESSAGE, serverError)
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, serverError)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
     }
 
     @Test
@@ -319,7 +298,7 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertFalse(viewModel.isLoading)
     }
 
@@ -336,7 +315,7 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertTrue(viewModel.events.value.isEmpty())
     }
 
@@ -370,7 +349,7 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertTrue(viewModel.events.value.isEmpty())
     }
 
@@ -381,12 +360,27 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertFalse(viewModel.isLoading)
     }
 
     @Test
-    fun fetchEventsKeepsAlreadyLoadedEventsWhenReloadFails() = runTest(testDispatcher) {
+    fun fetchEventsDoesNotReportErrorWhenCancelled() = runTest(testDispatcher) {
+        val viewModel = buildViewModel(
+            mockClient { throw CancellationException("画面を離れた") },
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.error)
+        assertFalse(viewModel.isLoading)
+    }
+
+    // ---- fetchEvents オフラインキャッシュフォールバック ----
+
+    @Test
+    fun fetchEventsFallsBackToCachedEventsWithoutErrorWhenReloadFails() = runTest(testDispatcher) {
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -401,21 +395,95 @@ class CalendarViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
+        // 初回成功時にキャッシュへ保存されるため、2回目の失敗はエラー表示ではなく
+        // 「オフライン+キャッシュ済みイベント」にフォールバックする。
         assertEquals(2, viewModel.events.value.size)
-        assertEquals(NETWORK_ERROR_MESSAGE, viewModel.error)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
     }
 
     @Test
-    fun fetchEventsDoesNotReportErrorWhenCancelled() = runTest(testDispatcher) {
+    fun fetchEventsIgnoresBodyOfNon2xxResponseEvenWhenFallingBackToCache() = runTest(testDispatcher) {
+        var callCount = 0
         val viewModel = buildViewModel(
-            mockClient { throw CancellationException("画面を離れた") },
+            mockClient {
+                callCount++
+                if (callCount == 1) {
+                    respondJson(eventsJson)
+                } else {
+                    respondJson(singleEventJson, HttpStatusCode.InternalServerError)
+                }
+            },
         )
 
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
 
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // 500応答の本文(別のイベント1件)は読まれず、キャッシュ済みの2件のまま。
+        assertEquals(2, viewModel.events.value.size)
         assertNull(viewModel.error)
-        assertFalse(viewModel.isLoading)
+        assertTrue(viewModel.isOffline)
+    }
+
+    @Test
+    fun fetchEventsClearsEventsAndReportsSessionExpiredWhenReloadReturnsUnauthorized() = runTest(testDispatcher) {
+        var callCount = 0
+        val viewModel = buildViewModel(
+            mockClient {
+                callCount++
+                if (callCount == 1) {
+                    respondJson(eventsJson)
+                } else {
+                    respondJson("""{"error":{"message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
+                }
+            },
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // 401はキャッシュがあっても隠さない。errorはスナックバーで一瞬しか表示され
+        // ないため、未検証の古いイベントが表示され続けないようeventsもクリアする。
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
+        assertFalse(viewModel.isOffline)
+    }
+
+    @Test
+    fun fetchEventsClearsEventsWhenUnauthorizedAndNoCacheIsAvailable() = runTest(testDispatcher) {
+        // CachedFetchResult.Cachedと違い、Failed(キャッシュが無い/読めない)経路でも
+        // 401時に古いeventsが残り続けてはならない。
+        var callCount = 0
+        val viewModel = buildViewModel(
+            mockClient {
+                callCount++
+                if (callCount == 1) {
+                    respondJson(eventsJson)
+                } else {
+                    respondJson("""{"error":{"message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
+                }
+            },
+            cache = LocalCache(NeverPersistingKeyValueStore()),
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
+        assertFalse(viewModel.isOffline)
     }
 
     // ---- nowMinute ----
@@ -504,11 +572,13 @@ class CalendarViewModelTest {
         client: HttpClient,
         clock: Clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z")),
         timeZone: TimeZone = TimeZone.UTC,
+        cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
     ) = CalendarViewModel(
         client = client,
         baseUrl = "https://api.example.com",
         clock = clock,
         timeZone = timeZone,
+        cache = cache,
     )
 
     private fun mockClient(
@@ -530,6 +600,33 @@ class CalendarViewModelTest {
 
     private class FakeClock(var instant: Instant) : Clock {
         override fun now(): Instant = instant
+    }
+
+    // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
+    // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
+    private class InMemoryKeyValueStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+
+        override suspend fun getString(key: String): String? = values[key]
+
+        override suspend fun putString(key: String, value: String) {
+            values[key] = value
+        }
+
+        override suspend fun clear() {
+            values.clear()
+        }
+    }
+
+    // 「保存はできるが、後で読み出すと必ず失われている(キャッシュ消失)」状況を
+    // シミュレートするためのフェイク。CachedFetchResult.Failed経路(loadCacheが
+    // 何も返さない)を、事前のsaveCache成功有無に関わらず強制的に発生させる。
+    private class NeverPersistingKeyValueStore : KeyValueStore {
+        override suspend fun getString(key: String): String? = null
+
+        override suspend fun putString(key: String, value: String) = Unit
+
+        override suspend fun clear() = Unit
     }
 
     private companion object {

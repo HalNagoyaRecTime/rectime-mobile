@@ -9,6 +9,8 @@ fun setAuthPlatformContext(context: Context) {
     setExternalUrlContext(context)
 }
 
+internal fun getAuthPlatformContext(): Context? = authPlatformContext
+
 actual class AuthSessionStore {
     actual suspend fun load(): AuthSession? {
         val context = authPlatformContext ?: return null

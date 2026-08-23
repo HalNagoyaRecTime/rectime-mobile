@@ -1,5 +1,9 @@
 package com.rectime.mobile.feature.schedule
 
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.core.network.GatheringResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -22,7 +26,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CompetitionScheduleDetailViewModelTest {
@@ -115,7 +121,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -132,7 +138,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = jsonOk("[]"),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -151,7 +157,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = statusOnly(HttpStatusCode.InternalServerError),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -168,7 +174,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = throwing(),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -187,7 +193,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = statusOnly(HttpStatusCode.NotFound),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 999, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 999, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -204,7 +210,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = statusOnly(HttpStatusCode.InternalServerError),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -221,7 +227,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = throwing(),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -238,7 +244,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = jsonOk("""{"event_id": 1}"""),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -255,7 +261,7 @@ class CompetitionScheduleDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = jsonOk("""[{"gathering_id": 1}]"""),
         )
-        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -264,5 +270,112 @@ class CompetitionScheduleDetailViewModelTest {
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
         assertNull(state.gathering)
+    }
+
+    // ---- オフラインキャッシュフォールバック ----
+
+    private suspend fun seedCache(eventId: Int, cache: LocalCache, withGathering: Boolean = true) {
+        cache.save(
+            "event_detail_v1_$eventId",
+            EventDetailResponse(
+                eventId = eventId,
+                eventName = "100m走",
+                venue = "第1グラウンド",
+                startTime = "0900",
+                endTime = "0930",
+                ruleText = "スパイク禁止",
+            ),
+        )
+        if (withGathering) {
+            cache.save(
+                "event_gathering_v1_$eventId",
+                listOf(
+                    GatheringResponse(
+                        gatheringId = 10,
+                        eventId = eventId,
+                        gatheringSpotId = 5,
+                        gatheringTime = "08:45",
+                        round = 1,
+                        eventName = "100m走",
+                        gatheringSpotName = "第1集合場所",
+                    ),
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun fetchScheduleDetailFallsBackToCachedEventAndGatheringWhenBothRequestsFail() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(eventsHandler = throwing(), gatheringsHandler = throwing())
+
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertTrue(state.isOffline)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertEquals("第1集合場所", state.gathering?.gatheringSpotName)
+    }
+
+    @Test
+    fun fetchScheduleDetailIgnoresCacheAndShowsSessionExpiredWhenEventFetchReturnsUnauthorized() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(
+            eventsHandler = statusOnly(HttpStatusCode.Unauthorized),
+            gatheringsHandler = jsonOk(validGatheringsBody),
+        )
+
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("ログイン情報の有効期限が切れました", state.error)
+        assertNull(state.eventDetail)
+        assertNull(state.gathering)
+        assertFalse(state.isOffline)
+    }
+
+    @Test
+    fun fetchScheduleDetailIgnoresCachedGatheringWhenGatheringFetchReturnsUnauthorized() = runTest(testDispatcher) {
+        // eventDetailはFreshで取得成功、gatheringだけ401(セッション切れ)になるケース。
+        // 古いgatheringキャッシュを単なる「オフライン」として出し続けてはならない。
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(
+            eventsHandler = jsonOk(validEventBody),
+            gatheringsHandler = statusOnly(HttpStatusCode.Unauthorized),
+        )
+
+        val viewModel = CompetitionScheduleDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertNull(state.gathering)
+        assertFalse(state.isOffline)
+    }
+
+    // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
+    // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
+    private class InMemoryKeyValueStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+
+        override suspend fun getString(key: String): String? = values[key]
+
+        override suspend fun putString(key: String, value: String) {
+            values[key] = value
+        }
+
+        override suspend fun clear() {
+            values.clear()
+        }
     }
 }
