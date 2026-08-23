@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.competition
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.network.EventDetailResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -22,7 +23,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CompetitionDetailViewModelTest {
@@ -184,6 +187,70 @@ class CompetitionDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertEquals("競技情報の取得に失敗しました", state.error)
         assertNull(state.eventDetail)
+    }
+
+    // ---- オフラインキャッシュフォールバック ----
+
+    private suspend fun seedCache(eventId: Int, cache: LocalCache) {
+        cache.save(
+            "event_detail_v1_$eventId",
+            EventDetailResponse(
+                eventId = eventId,
+                eventName = "100m走",
+                venue = "第1グラウンド",
+                startTime = "0900",
+                endTime = "0930",
+                ruleText = "スパイク禁止",
+            ),
+        )
+    }
+
+    @Test
+    fun fetchEventDetailFallsBackToCachedDetailWithoutErrorWhenLiveFetchFails() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildFailingClient()
+
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertTrue(state.isOffline)
+        assertEquals("100m走", state.eventDetail?.eventName)
+    }
+
+    @Test
+    fun fetchEventDetailIgnoresCacheAndShowsSessionExpiredOnUnauthorized() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(HttpStatusCode.Unauthorized, """{"error":"unauthorized"}""")
+
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("ログイン情報の有効期限が切れました", state.error)
+        assertNull(state.eventDetail)
+        assertFalse(state.isOffline)
+    }
+
+    @Test
+    fun fetchEventDetailIgnoresCacheAndShowsNotFoundOn404() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(HttpStatusCode.NotFound, """{"error":"not found"}""")
+
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("競技が見つかりません", state.error)
+        assertNull(state.eventDetail)
+        assertFalse(state.isOffline)
     }
 }
 
