@@ -12,10 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -33,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.theme.AppTheme
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.rectime_logo
@@ -64,13 +69,16 @@ private fun AuthLoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .padding(horizontal = 28.dp, vertical = 40.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             modifier = Modifier
                 .widthIn(max = 420.dp)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -94,6 +102,15 @@ private fun AuthLoginScreen(
                 isLoading = state.isLoading,
                 onClick = onLogin,
             )
+
+            Text(
+                text = "学校指定のMicrosoftアカウントでログインしてください。",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTheme.colors.textSecondary,
+                textAlign = TextAlign.Center,
+            )
+
+            LegalDocumentLinks()
 
             if (state.isLoading) {
                 CircularProgressIndicator(

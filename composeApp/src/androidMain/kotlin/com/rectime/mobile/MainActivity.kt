@@ -14,8 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.rectime.mobile.app.App
+import com.rectime.mobile.core.platform.initializePlatformContext
 import com.rectime.mobile.feature.auth.AuthDeepLinkHandler
-import com.rectime.mobile.feature.auth.setAuthPlatformContext
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.RectimeNotificationChannel
 
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
                 darkScrim = android.graphics.Color.TRANSPARENT,
             ),
         )
-        setAuthPlatformContext(this)
+        initializePlatformContext(this)
         handleAuthCallback(intent)
         handleNotificationNavigation(intent)
         RectimeNotificationChannel.create(this)
