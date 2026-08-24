@@ -1,6 +1,8 @@
 package com.rectime.mobile.feature.legal
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -49,17 +51,23 @@ internal fun LegalDocumentLinks(
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TextButton(
-            enabled = !state.isOpening,
-            onClick = { open(LegalDocument.Terms) },
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("利用規約")
-        }
-        TextButton(
-            enabled = !state.isOpening,
-            onClick = { open(LegalDocument.PrivacyPolicy) },
-        ) {
-            Text("プライバシーポリシー")
+            TextButton(
+                enabled = !state.isOpening,
+                onClick = { open(LegalDocument.Terms) },
+            ) {
+                Text("利用規約")
+            }
+            TextButton(
+                enabled = !state.isOpening,
+                onClick = { open(LegalDocument.PrivacyPolicy) },
+            ) {
+                Text("プライバシーポリシー")
+            }
         }
         state.errorMessage?.let { message ->
             Text(
