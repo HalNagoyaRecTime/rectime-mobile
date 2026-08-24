@@ -44,6 +44,53 @@ private val defaultLight = AppColorTokens(
     borderSubtle = Color(0xFFE2E5ED),
     borderStrong = Color(0xFFB8BECA),
     overlayBackdrop = Color(0xCC0D1018),
+
+    //テーマ
+    themeColorFirst = Color(0xFFFF4000),
+    themeColorSecond = Color(0xFF2ab3bf),
+    textThemeColorFirst = Color(0xFFFFFFFF),
+    textThemeColorSecond = Color(0xFFFFFFFF),
+    //コモン
+    commonBackground = Color(0xFFFFFFFF),
+    commonSeparatorLine = Color(0xFFcccccc), //区切り線
+    //ナビゲーション
+    navigationDefaultBackground = Color(0xCCFFFFFF),
+    navigationActiveBackground = Color(0xB3FFFFFF),
+    textNavigationInactive = Color(0xFF666666),
+    //ヘッダーとか
+    headerBackground = Color(0xB3FFFFFF),
+    edgeFadeColor = Color(0xFFe6e6e6),
+    //ドロップシャドウ
+    dropShadowDark = Color(0x1A000000),
+    dropShadowLight = Color(0x26000000),
+    //通知一覧画面
+    textUnreadNotificationTitle = Color(0xFF000000),
+    textUnreadNotificationBody = Color(0xFF666666),
+    textUnreadNotificationTime = Color(0xFF000000),
+    textReadNotificationTitle = Color(0xFF333333),
+    textReadNotificationBody = Color(0xFF808080),
+    textReadNotificationTime = Color(0xFFb3b3b3),
+    notificationBackground = Color(0xFFf2f2f2),
+    //スケジュール画面
+    textScheduleTimeBar = Color(0xFF999999),
+    textScheduleTimeLine = Color(0xFFb3b3b3),
+    scheduleTimeBarBackground = Color(0xCCFFFFFF),
+    pastAreaBackground = Color(0x33000000),
+    eventCardOverlay = Color(0x40FFFFFF),
+    eventCardBoundaryLine = Color(0x80FFFFFF),
+    eventVenueBackground = Color(0x26000000),
+    //設定画面
+    userInformationHeader = Color(0xFF808080),
+    userInformationBody = Color(0xFF333333),
+    settingBackground = Color(0xFFf2f2f2),
+    //詳細画面
+    textDetailsScreenHeader = Color(0xFF666666),
+    textDetailsScreenTitle = Color(0xFF000000),
+    textDetailsScreenTime = Color(0xFF999999),
+    textDetailsScreenBody = Color(0xFF333333),
+    textRelationEvent = Color(0xFF808080),
+    //モーダル画面
+    modalBackground = Color(0x4D000000),
 )
 
 internal fun appColors(themeId: ThemeId): AppColorTokens = when (themeId) {
