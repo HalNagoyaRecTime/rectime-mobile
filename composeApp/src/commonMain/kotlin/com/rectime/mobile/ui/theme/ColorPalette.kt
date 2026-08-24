@@ -80,6 +80,8 @@ private val defaultLight = AppColorTokens(
     //設定画面
     userInformationHeader = Color(0xFF808080),
     userInformationBody = Color(0xFF333333),
+    textContactInformation = Color(0xFF666666),
+    textCopyRight = Color(0xFF808080),
     settingBackground = Color(0xFFf2f2f2),
     //詳細画面
     textDetailsScreenHeader = Color(0xFF666666),
@@ -89,6 +91,9 @@ private val defaultLight = AppColorTokens(
     textRelationEvent = Color(0xFF808080),
     //モーダル画面
     modalBackground = Color(0x4D000000),
+    textMapModal = Color(0xFF808080),
+    textSettingModalHeader = Color(0xFF333333),
+    textSettingModalBody = Color(0xFF999999),
 )
 
 internal fun appColors(themeId: ThemeId): AppColorTokens = when (themeId) {
