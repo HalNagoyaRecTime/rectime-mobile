@@ -21,6 +21,58 @@ data class AppColorTokens(
     val borderSubtle: Color,
     val borderStrong: Color,
     val overlayBackdrop: Color,
+
+    // テーマ
+    val themeColorFirst: Color,
+    val themeColorSecond: Color,
+    val textThemeColorFirst: Color,
+    val textThemeColorSecond: Color,
+    // コモン
+    val commonBackground: Color,
+    val commonSeparatorLine: Color,
+    // ナビゲーション
+    val navigationDefaultBackground: Color,
+    val navigationActiveBackground: Color,
+    val textNavigationInactive: Color,
+    // ヘッダーとか
+    val headerBackground: Color,
+    val edgeFadeColor: Color,
+    // ドロップシャドウ
+    val dropShadowDark: Color,
+    val dropShadowLight: Color,
+    // 通知一覧画面
+    val textUnreadNotificationTitle: Color,
+    val textUnreadNotificationBody: Color,
+    val textUnreadNotificationTime: Color,
+    val textReadNotificationTitle: Color,
+    val textReadNotificationBody: Color,
+    val textReadNotificationTime: Color,
+    val notificationBackground: Color,
+    // スケジュール画面
+    val textScheduleTimeBar: Color,
+    val textScheduleTimeLine: Color,
+    val scheduleTimeBarBackground: Color,
+    val pastAreaBackground: Color,
+    val eventCardOverlay: Color,
+    val eventCardBoundaryLine: Color,
+    val eventVenueBackground: Color,
+    // 設定画面
+    val userInformationHeader: Color,
+    val userInformationBody: Color,
+    val textContactInformation: Color,
+    val textCopyRight: Color,
+    val settingBackground: Color,
+    // 詳細画面
+    val textDetailsScreenHeader: Color,
+    val textDetailsScreenTitle: Color,
+    val textDetailsScreenTime: Color,
+    val textDetailsScreenBody: Color,
+    val textRelationEvent: Color,
+    // モーダル画面
+    val modalBackground: Color,
+    val textMapModal: Color,
+    val textSettingModalHeader: Color,
+    val textSettingModalBody: Color,
 )
 
 private val defaultLight = AppColorTokens(
