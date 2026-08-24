@@ -98,7 +98,7 @@ fun PushScreenScaffold(
             ),
             content = content,
         )
-        PushAppBar(
+        PushHeader(
             title = title,
             onBack = onBack,
             modifier = Modifier
@@ -139,7 +139,7 @@ fun SheetScaffold(
                 .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
             content = content,
         )
-        SheetAppBar(
+        SheetHeader(
             title = title,
             onClose = onClose,
             modifier = Modifier

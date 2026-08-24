@@ -11,14 +11,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import com.rectime.mobile.ui.theme.AppTheme
 
 @Composable
 internal fun HeaderTitleBar(
     title: String,
     modifier: Modifier = Modifier,
-    fontSize: TextUnit = TextUnit.Unspecified,
     onLeadingClick: (() -> Unit)? = null,
     leading: @Composable (() -> Unit)? = null,
     onTrailingClick: (() -> Unit)? = null,
@@ -34,7 +32,6 @@ internal fun HeaderTitleBar(
             text = title,
             color = AppTheme.colors.textPrimary,
             fontWeight = FontWeight.SemiBold,
-            fontSize = fontSize,
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
