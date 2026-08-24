@@ -19,6 +19,7 @@ data class TimelineEvent(
     val laneCount: Int,
     val startTimeLabel: String,
     val endTimeLabel: String,
+    val isParticipating: Boolean = false,
     val overflowCount: Int = 0,
 )
 
