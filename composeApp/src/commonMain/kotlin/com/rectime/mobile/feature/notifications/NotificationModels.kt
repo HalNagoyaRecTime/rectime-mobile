@@ -3,6 +3,7 @@ package com.rectime.mobile.feature.notifications
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+@Serializable
 data class UserNotification(
     val id: Int,
     val type: String,
@@ -12,6 +13,7 @@ data class UserNotification(
     val relatedEvent: NotificationRelatedEvent?,
 )
 
+@Serializable
 data class NotificationRelatedEvent(
     val id: Int,
     val name: String,

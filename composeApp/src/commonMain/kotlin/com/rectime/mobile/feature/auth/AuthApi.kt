@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -68,7 +69,11 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw IllegalStateException(readErrorMessage(body) ?: "セッション確認に失敗しました")
+            // サーバーが明示的に非2xxを返した場合のみHttpStatusExceptionを投げる。
+            // 2xxなのにレスポンス本文の解析に失敗した場合(下のnullチェック)は
+            // 別の例外型のままにし、AuthViewModelが「セッションが本当に無効」と
+            // 誤認しないようにする。
+            throw HttpStatusException(response.status, readErrorMessage(body) ?: "セッション確認に失敗しました")
         }
 
         val user = decodeBody<UserEnvelope>(body)?.user
@@ -84,7 +89,9 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw IllegalStateException(readErrorMessage(body) ?: "セッション更新に失敗しました")
+            // currentUser()と同様、明示的な非2xxのみHttpStatusExceptionにする
+            // (AuthViewModel側でセッション失効かどうかの判定に使うため)。
+            throw HttpStatusException(response.status, readErrorMessage(body) ?: "セッション更新に失敗しました")
         }
 
         val parsed = decodeBody<AuthSessionResponse>(body)

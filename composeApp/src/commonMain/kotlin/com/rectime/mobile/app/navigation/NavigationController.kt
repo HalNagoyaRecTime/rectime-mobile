@@ -12,30 +12,24 @@ class NavigationController(
         private set
 
     fun setRoot(screen: Screen) {
-        state = state.copy(
-            rootScreen = screen,
-            menuProgress = 0f,
-            activeGesture = ActiveGesture.None
-        )
+        state = state.copy(rootScreen = screen)
     }
 
     fun reset(screen: Screen) {
         state = NavigationState(rootScreen = screen)
     }
 
-    fun push(screen: Screen, source: PushTransitionSource = PushTransitionSource.Default) {
+    fun push(screen: Screen) {
         if (state.pushTransition.mode == PushTransitionMode.Enter) return
         val entry = PushEntry(
             key = "${screen.key}_${Clock.nextId()}",
-            screen = screen,
-            source = source
+            screen = screen
         )
         state = state.copy(
             pushStack = state.pushStack + entry,
             pushTransition = PushTransitionState(
                 mode = PushTransitionMode.Enter,
-                routeKey = entry.key,
-                sourceProgress = state.menuProgress
+                routeKey = entry.key
             )
         )
     }
@@ -48,7 +42,6 @@ class NavigationController(
     fun completePop(key: String) {
         state = state.copy(
             pushStack = state.pushStack.filter { it.key != key },
-            menuProgress = 0f,
             backDragOffsetPx = 0f,
         )
     }
@@ -77,7 +70,6 @@ class NavigationController(
         state.isTransitioning -> ActiveGesture.None
         state.sheet != null -> ActiveGesture.None
         state.pushStack.isNotEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Back
-        state.pushStack.isEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Menu
         else -> ActiveGesture.None
     }
 
@@ -98,34 +90,13 @@ class NavigationController(
         state = state.copy(activeGesture = ActiveGesture.None)
     }
 
-    fun setMenuProgress(progress: Float) {
-        state = state.copy(menuProgress = progress.coerceIn(0f, 1f))
-    }
-
-    fun openMenu(velocityProgress: Float = 0f) {
-        state = state.copy(menuProgress = 1f, menuSettleVelocity = velocityProgress, activeGesture = ActiveGesture.None)
-    }
-
-    fun closeMenu(velocityProgress: Float = 0f) {
-        state = state.copy(menuProgress = 0f, menuSettleVelocity = velocityProgress, activeGesture = ActiveGesture.None)
-    }
-
     fun setPushEnterProgress(progress: Float) {
-        state = state.copy(
-            pushTransition = state.pushTransition.copy(progress = progress),
-            menuProgress = if (state.pushTransition.sourceProgress > 0) {
-                state.pushTransition.sourceProgress * (1f - progress)
-            } else 0f
-        )
+        state = state.copy(pushTransition = state.pushTransition.copy(progress = progress))
     }
 
     fun finishPushEnter(key: String) {
         if (state.pushTransition.routeKey == key) {
-            state = state.copy(
-                pushTransition = PushTransitionState(mode = PushTransitionMode.Idle),
-                menuProgress = 0f,
-                menuSettleVelocity = 0f,
-            )
+            state = state.copy(pushTransition = PushTransitionState(mode = PushTransitionMode.Idle))
         }
     }
 }

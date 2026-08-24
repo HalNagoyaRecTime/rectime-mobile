@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.network.HttpStatusException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -383,7 +384,7 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.currentUser("access-token")
         }
 
@@ -475,7 +476,7 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.refresh(storedSession)
         }
 

@@ -1,5 +1,8 @@
 package com.rectime.mobile.feature.competition
 
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.network.EventDetailResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -20,7 +23,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CompetitionDetailViewModelTest {
@@ -91,7 +96,7 @@ class CompetitionDetailViewModelTest {
         """.trimIndent()
 
         val client = buildClient(HttpStatusCode.OK, responseBody)
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -117,7 +122,7 @@ class CompetitionDetailViewModelTest {
         """.trimIndent()
 
         val client = buildClient(HttpStatusCode.OK, responseBody)
-        val viewModel = CompetitionDetailViewModel(eventId = 2, httpClient = client)
+        val viewModel = CompetitionDetailViewModel(eventId = 2, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -132,7 +137,7 @@ class CompetitionDetailViewModelTest {
     @Test
     fun fetchEventDetailReturns404SetsNotFoundError() = runTest(testDispatcher) {
         val client = buildClient(HttpStatusCode.NotFound, """{"error":"not found"}""")
-        val viewModel = CompetitionDetailViewModel(eventId = 999, httpClient = client)
+        val viewModel = CompetitionDetailViewModel(eventId = 999, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -145,7 +150,7 @@ class CompetitionDetailViewModelTest {
     @Test
     fun fetchEventDetailReturns500SetsGenericError() = runTest(testDispatcher) {
         val client = buildClient(HttpStatusCode.InternalServerError, """{"error":"server error"}""")
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -158,7 +163,7 @@ class CompetitionDetailViewModelTest {
     @Test
     fun fetchEventDetailThrowsExceptionSetsGenericError() = runTest(testDispatcher) {
         val client = buildFailingClient()
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -174,7 +179,7 @@ class CompetitionDetailViewModelTest {
         val malformedBody = """{"event_id": 1}"""
 
         val client = buildClient(HttpStatusCode.OK, malformedBody)
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client)
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -182,5 +187,85 @@ class CompetitionDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertEquals("競技情報の取得に失敗しました", state.error)
         assertNull(state.eventDetail)
+    }
+
+    // ---- オフラインキャッシュフォールバック ----
+
+    private suspend fun seedCache(eventId: Int, cache: LocalCache) {
+        cache.save(
+            "event_detail_v1_$eventId",
+            EventDetailResponse(
+                eventId = eventId,
+                eventName = "100m走",
+                venue = "第1グラウンド",
+                startTime = "0900",
+                endTime = "0930",
+                ruleText = "スパイク禁止",
+            ),
+        )
+    }
+
+    @Test
+    fun fetchEventDetailFallsBackToCachedDetailWithoutErrorWhenLiveFetchFails() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildFailingClient()
+
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertTrue(state.isOffline)
+        assertEquals("100m走", state.eventDetail?.eventName)
+    }
+
+    @Test
+    fun fetchEventDetailIgnoresCacheAndShowsSessionExpiredOnUnauthorized() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(HttpStatusCode.Unauthorized, """{"error":"unauthorized"}""")
+
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("ログイン情報の有効期限が切れました", state.error)
+        assertNull(state.eventDetail)
+        assertFalse(state.isOffline)
+    }
+
+    @Test
+    fun fetchEventDetailIgnoresCacheAndShowsNotFoundOn404() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(HttpStatusCode.NotFound, """{"error":"not found"}""")
+
+        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("競技が見つかりません", state.error)
+        assertNull(state.eventDetail)
+        assertFalse(state.isOffline)
+    }
+}
+
+// LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
+// テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
+private class InMemoryKeyValueStore : KeyValueStore {
+    private val values = mutableMapOf<String, String>()
+
+    override suspend fun getString(key: String): String? = values[key]
+
+    override suspend fun putString(key: String, value: String) {
+        values[key] = value
+    }
+
+    override suspend fun clear() {
+        values.clear()
     }
 }
