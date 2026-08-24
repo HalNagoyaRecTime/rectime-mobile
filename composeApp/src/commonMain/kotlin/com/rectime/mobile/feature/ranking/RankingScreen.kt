@@ -1,20 +1,14 @@
 package com.rectime.mobile.feature.ranking
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -23,13 +17,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.List
@@ -44,52 +37,21 @@ object RankingScreen : Screen {
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AppTheme.colors.surfacePrimary)
-                .padding(horizontal = 18.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 32.dp, bottom = 24.dp)
-            ) {
-                Text(
-                    text = "ランキング",
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    color = AppTheme.colors.textPrimary,
+        RootScreenScaffold(
+            title = "ランキング",
+            onTrailingClick = { /* TODO: 表示切替機能を実装予定 */ },
+            trailing = {
+                Icon(
+                    imageVector = SolidGroup.List,
+                    contentDescription = "表示切り替え",
+                    tint = AppTheme.colors.textPrimary,
+                    modifier = Modifier.size(18.dp),
                 )
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(28.dp)
-                        .clickable { /* TODO: 表示切替機能を実装予定 */ }
-                        .border(
-                            width = 1.dp,
-                            color = AppTheme.colors.borderStrong,
-                            shape = RoundedCornerShape(4.dp),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = SolidGroup.List,
-                        contentDescription = "表示切り替え",
-                        modifier = Modifier.size(14.dp),
-                        tint = AppTheme.colors.textPrimary,
-                    )
-                }
-            }
-
-            uiState.rankingItems.forEach { item ->
+            },
+        ) {
+            items(uiState.rankingItems) { item ->
                 RankingRow(item = item)
             }
-
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
     }
 }
