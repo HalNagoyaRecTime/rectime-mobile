@@ -1,7 +1,11 @@
 package com.rectime.mobile.feature.settings
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -9,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
+import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -46,6 +51,26 @@ class SettingsScreen(
                         color = AppTheme.colors.textSecondary,
                         modifier = Modifier.padding(vertical = 12.dp),
                     )
+                }
+            }
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "法務情報",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = AppTheme.colors.textPrimary,
+                    )
+                    Text(
+                        text = "RecTimeの利用条件と個人情報の取り扱いを確認できます。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTheme.colors.textSecondary,
+                    )
+                    LegalDocumentLinks()
                 }
             }
             item {
