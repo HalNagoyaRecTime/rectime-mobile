@@ -52,7 +52,8 @@ internal fun AccountDeletionSection(
         ) {
             Text(
                 text = "アカウント削除手続き",
-                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 

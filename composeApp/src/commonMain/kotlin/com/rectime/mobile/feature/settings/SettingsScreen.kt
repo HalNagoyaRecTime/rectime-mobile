@@ -75,17 +75,17 @@ class SettingsScreen(
                 }
             }
             item {
-                AccountDeletionSection(
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
-            }
-            item {
                 Button(
                     onClick = onLogout,
                     modifier = Modifier.padding(vertical = 12.dp),
                 ) {
                     Text("ログアウト")
                 }
+            }
+            item {
+                AccountDeletionSection(
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
             }
         }
     }
