@@ -2,7 +2,11 @@ package com.rectime.mobile.feature.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
+import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.platform.openExternalUrl
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +23,7 @@ private fun authFailed(reason: String?): String =
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
+    private val cache: LocalCache = LocalCache(),
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
 ) : ViewModel() {
@@ -76,11 +81,32 @@ class AuthViewModel(
                     _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
-                    sessionStore.clear()
-                    sessionStore.clearPendingAuth()
                     val detail = if (isDebugBuild) " (${refreshError.describe()})" else ""
-                    _uiState.update {
-                        AuthUiState(error = "Session expired. Please login again.$detail")
+                    if (refreshError is HttpStatusException && refreshError.status == HttpStatusCode.Unauthorized) {
+                        // HttpStatusExceptionは非2xx全般(500/503等の一時的な
+                        // サーバーエラーも含む)で投げられるため、ステータスコードまで
+                        // 見て判定する。401(refreshTokenId自体が無効・失効)の場合のみ
+                        // セッションが本当に無効と判断し、セッション・キャッシュを
+                        // クリアする。他画面(Calendar/Competition等)のセッション切れ
+                        // 判定も同様に401のみを見ている。
+                        sessionStore.clear()
+                        sessionStore.clearPendingAuth()
+                        cache.clearAll()
+                        _uiState.update {
+                            AuthUiState(error = "Session expired. Please login again.$detail")
+                        }
+                    } else {
+                        // 圏外・オフライン等、通信自体が失敗した場合。セッションが
+                        // 無効だとは判断できないため、セッション・オフラインキャッシュは
+                        // 保持し、保存済みの(古い)セッションでアプリを継続させる
+                        // (オフラインでもキャッシュ済みデータで各画面を使えるように)。
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                session = stored,
+                                message = "Offline$detail",
+                            )
+                        }
                     }
                 }
             }
@@ -169,6 +195,10 @@ class AuthViewModel(
                 val session = api.exchangeCode(code, state, pending.codeVerifier)
                 sessionStore.save(session)
                 sessionStore.clearPendingAuth()
+                // 共有端末で前のユーザーがログアウトせずにアプリを離れていた場合、
+                // キャッシュキーはユーザーIDで分離されていないため、新規ログイン時にも
+                // 明示的にクリアしておかないと前ユーザーのデータが見えてしまう。
+                cache.clearAll()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -203,6 +233,7 @@ class AuthViewModel(
             } finally {
                 sessionStore.clear()
                 sessionStore.clearPendingAuth()
+                cache.clearAll()
                 _uiState.update { AuthUiState(message = "Logged out") }
             }
         }

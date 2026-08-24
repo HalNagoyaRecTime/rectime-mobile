@@ -51,7 +51,7 @@ fun SheetLayer(
                 targetValue = 0f,
                 animationSpec = spring(
                     dampingRatio = 0.9f,
-                    stiffness = GestureTokens.menuOpenCloseStiffness,
+                    stiffness = GestureTokens.layerSettleStiffness,
                 ),
             ) {
                 offsetPx = value
@@ -137,7 +137,7 @@ fun SheetLayer(
                                         targetValue = 0f,
                                         animationSpec = spring(
                                             dampingRatio = 0.9f,
-                                            stiffness = GestureTokens.menuOpenCloseStiffness,
+                                            stiffness = GestureTokens.layerSettleStiffness,
                                         ),
                                     ) {
                                         offsetPx = value

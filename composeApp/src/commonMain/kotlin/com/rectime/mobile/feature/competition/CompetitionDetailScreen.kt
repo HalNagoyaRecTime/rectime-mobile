@@ -16,6 +16,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.util.toFormattedTime
+import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -62,6 +63,13 @@ data class CompetitionDetailScreen(val eventId: Int) : Screen {
                     }
 
                     event != null -> {
+                        if (uiState.isOffline) {
+                            OfflineBanner(
+                                message = "オフライン: 最新の競技情報を取得できません。前回取得時の内容を表示しています。",
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+
                         Text(
                             text = event.eventName,
                             style = MaterialTheme.typography.headlineMedium,
@@ -87,6 +95,21 @@ data class CompetitionDetailScreen(val eventId: Int) : Screen {
                             color = AppTheme.colors.textSecondary,
                             modifier = Modifier.padding(vertical = 12.dp),
                         )
+
+                        uiState.gathering?.let { gathering ->
+                            // 集合時刻 99:59 は未設定を表すセンチネル値
+                            val time = if (gathering.gatheringTime == "99:59") "未定" else gathering.gatheringTime
+                            Text(
+                                text = "集合時間：$time",
+                                color = AppTheme.colors.textSecondary,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                            )
+                            Text(
+                                text = "集合場所：${gathering.gatheringSpotName}",
+                                color = AppTheme.colors.textSecondary,
+                                modifier = Modifier.padding(vertical = 12.dp),
+                            )
+                        }
                     }
                 }
             }

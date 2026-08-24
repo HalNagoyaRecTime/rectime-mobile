@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +42,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun uiStateIsLoadingUntilFirstResponseArrives() = runTest(testDispatcher) {
         val gateway = FakeGateway { notification(it) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         val state = viewModel.uiState.value
         assertTrue(state.isLoading)
@@ -53,7 +55,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun initLoadsRequestedNotification() = runTest(testDispatcher) {
         val gateway = FakeGateway { notification(it) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -75,7 +77,7 @@ class NotificationDetailViewModelTest {
             endTime = "2026-07-31T09:45:00+09:00",
         )
         val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -91,7 +93,7 @@ class NotificationDetailViewModelTest {
             callCount++
             if (callCount == 1) throw NotificationApiException(statusCode = 500) else notification(id)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(DETAIL_LOAD_FAILED_MESSAGE, viewModel.uiState.value.error)
 
@@ -114,7 +116,7 @@ class NotificationDetailViewModelTest {
             gate.await()
             notification(id)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.retry()
@@ -139,7 +141,7 @@ class NotificationDetailViewModelTest {
             gate.await()
             notification(id)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.retry()
@@ -158,7 +160,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun notFoundResponseReportsMissingNotification() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw NotificationApiException(statusCode = 404) }
-        val viewModel = NotificationDetailViewModel(notificationId = 999, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 999, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -171,7 +173,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun unauthorizedResponseReportsExpiredSession() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw NotificationApiException(statusCode = 401) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -181,7 +183,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun otherFailuresReportGenericMessage() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw IllegalStateException("接続できません") }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -197,7 +199,7 @@ class NotificationDetailViewModelTest {
             callCount++
             if (callCount == 1) notification(id) else throw NotificationApiException(statusCode = 404)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.retry()
@@ -211,7 +213,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun cancellationIsNotReportedAsError() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw CancellationException("画面を離れた") }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway)
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -238,6 +240,22 @@ class NotificationDetailViewModelTest {
         override suspend fun getNotification(notificationId: Int): UserNotification {
             requestedIds += notificationId
             return notificationProvider(notificationId)
+        }
+    }
+
+    // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
+    // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
+    private class InMemoryKeyValueStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+
+        override suspend fun getString(key: String): String? = values[key]
+
+        override suspend fun putString(key: String, value: String) {
+            values[key] = value
+        }
+
+        override suspend fun clear() {
+            values.clear()
         }
     }
 }

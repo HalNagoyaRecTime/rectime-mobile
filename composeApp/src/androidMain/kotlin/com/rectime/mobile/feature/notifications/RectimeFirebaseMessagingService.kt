@@ -2,12 +2,12 @@ package com.rectime.mobile.feature.notifications
 
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.rectime.mobile.feature.auth.setAuthPlatformContext
+import com.rectime.mobile.core.platform.initializePlatformContext
 
 class RectimeFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        setAuthPlatformContext(applicationContext)
+        initializePlatformContext(applicationContext)
         AndroidPushTokenRegistrar.onTokenRefreshed(token)
     }
 

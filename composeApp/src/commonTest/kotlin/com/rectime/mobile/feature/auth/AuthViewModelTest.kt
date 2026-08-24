@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -144,11 +146,13 @@ class AuthViewModelTest {
     // ---- restoreSession 異常系 ----
 
     @Test
-    fun restoreSessionClearsStoreWhenRefreshAlsoFails() = runTest(testDispatcher) {
+    fun restoreSessionClearsStoreAndCacheWhenServerExplicitlyRejectsRefresh() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(
             session = storedSession,
             pendingAuth = PendingAuth("state-abc", "verifier-123"),
         )
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
         val viewModel = buildViewModel(
             api = AuthApi(
                 mockClient {
@@ -160,6 +164,7 @@ class AuthViewModelTest {
                 },
             ),
             store = store,
+            cache = cache,
         )
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -173,6 +178,123 @@ class AuthViewModelTest {
         )
         assertNull(store.session)
         assertNull(store.pendingAuth)
+        assertNull(cache.load<String>("some_cached_key"))
+    }
+
+    @Test
+    fun restoreSessionKeepsSessionAndCacheWhenRefreshFailsDueToNetworkError() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/me")) {
+                        respond(
+                            content = """{"error":{"message":"token expired"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        // /auth/refresh: レスポンスを返す前に通信自体が失敗する
+                        // (圏外・オフライン等)ケースをシミュレートする。
+                        throw RuntimeException("network down")
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        // オフライン(通信自体の失敗)ではセッションは無効と判断せず、保存済みの
+        // セッションでアプリを継続させる。キャッシュも消してはならない。
+        assertEquals(storedSession, state.session)
+        assertNull(state.error)
+        assertEquals(storedSession, store.session)
+        assertEquals("cached-value", cache.load<String>("some_cached_key"))
+    }
+
+    @Test
+    fun restoreSessionKeepsSessionAndCacheWhenRefreshReturnsMalformedSuccessBody() = runTest(testDispatcher) {
+        // AuthApiは2xxでも本文解析に失敗した場合IllegalStateExceptionを投げるが、
+        // これはサーバーが明示的に拒否したわけではない(HttpStatusExceptionではない)
+        // ため、セッション失効とは判断してはならない。
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/me")) {
+                        respond(
+                            content = """{"error":{"message":"token expired"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        // /auth/refresh: 200 OKだがaccess_tokenを含まない不正な本文
+                        // (キャプティブポータル等でHTML等が返るケースを想定)。
+                        respond(
+                            content = """{"expires_in":7200}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(storedSession, state.session)
+        assertNull(state.error)
+        assertEquals(storedSession, store.session)
+        assertEquals("cached-value", cache.load<String>("some_cached_key"))
+    }
+
+    @Test
+    fun restoreSessionKeepsSessionAndCacheWhenRefreshFailsWithServerError() = runTest(testDispatcher) {
+        // HttpStatusExceptionは401以外の非2xx(500/503等の一時的なサーバーエラー)でも
+        // 投げられるため、ステータスコードまで見ないと誤ってセッションを無効と
+        // 判断してしまう(レビュー指摘: MayugeStudio)。
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/me")) {
+                        respond(
+                            content = """{"error":{"message":"token expired"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        respond(
+                            content = """{"error":{"message":"internal server error"}}""",
+                            status = HttpStatusCode.InternalServerError,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(storedSession, state.session)
+        assertNull(state.error)
+        assertEquals(storedSession, store.session)
+        assertEquals("cached-value", cache.load<String>("some_cached_key"))
     }
 
     // ---- startLogin ----
@@ -296,6 +418,31 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun handleCallbackUrlClearsPreviousUsersCacheOnSuccessfulLogin() = runTest(testDispatcher) {
+        // 共有端末で前のユーザーがログアウトせずアプリを離れていた場合を想定し、
+        // ログイン前の時点でキャッシュに何か残っている状態を再現する。
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "previous-user-data")
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(content = sessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+        assertNull(cache.load<String>("some_cached_key"))
+    }
+
+    @Test
     fun handleCallbackUrlDecodesPercentEncodedQueryValues() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state abc", "verifier-123"))
         var receivedPath: String? = null
@@ -394,12 +541,14 @@ class AuthViewModelTest {
     // ---- logout ----
 
     @Test
-    fun logoutClearsStoredSessionAfterCallingServer() = runTest(testDispatcher) {
+    fun logoutClearsStoredSessionAndCacheAfterCallingServer() = runTest(testDispatcher) {
         var logoutCalled = false
         val store = FakeAuthSessionStorage(
             session = storedSession,
             pendingAuth = PendingAuth("state-abc", "verifier-123"),
         )
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
         val viewModel = buildViewModel(
             api = AuthApi(
                 mockClient { request ->
@@ -416,6 +565,7 @@ class AuthViewModelTest {
                 },
             ),
             store = store,
+            cache = cache,
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -429,11 +579,14 @@ class AuthViewModelTest {
         assertEquals("Logged out", state.message)
         assertNull(store.session)
         assertNull(store.pendingAuth)
+        assertNull(cache.load<String>("some_cached_key"))
     }
 
     @Test
-    fun logoutClearsLocalSessionEvenWhenServerLogoutFails() = runTest(testDispatcher) {
+    fun logoutClearsLocalSessionAndCacheEvenWhenServerLogoutFails() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
         val viewModel = buildViewModel(
             api = AuthApi(
                 mockClient { request ->
@@ -448,6 +601,7 @@ class AuthViewModelTest {
                 },
             ),
             store = store,
+            cache = cache,
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -459,6 +613,7 @@ class AuthViewModelTest {
         assertNull(state.error)
         assertEquals("Logged out", state.message)
         assertNull(store.session)
+        assertNull(cache.load<String>("some_cached_key"))
     }
 
     // ---- DEV_BYPASS_AUTH ----
@@ -501,11 +656,13 @@ class AuthViewModelTest {
     private fun buildViewModel(
         api: AuthApi,
         store: FakeAuthSessionStorage,
+        cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
+        cache = cache,
         devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
     )
@@ -544,6 +701,22 @@ class AuthViewModelTest {
 
         override suspend fun clearPendingAuth() {
             pendingAuth = null
+        }
+    }
+
+    // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
+    // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
+    private class InMemoryKeyValueStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+
+        override suspend fun getString(key: String): String? = values[key]
+
+        override suspend fun putString(key: String, value: String) {
+            values[key] = value
+        }
+
+        override suspend fun clear() {
+            values.clear()
         }
     }
 

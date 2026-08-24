@@ -8,13 +8,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.rectime.mobile.app.App
+import com.rectime.mobile.core.platform.initializePlatformContext
 import com.rectime.mobile.feature.auth.AuthDeepLinkHandler
-import com.rectime.mobile.feature.auth.setAuthPlatformContext
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.RectimeNotificationChannel
 
@@ -28,8 +29,17 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
 
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setAuthPlatformContext(this)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(
+                scrim = android.graphics.Color.TRANSPARENT,
+                darkScrim = android.graphics.Color.TRANSPARENT,
+            ),
+            navigationBarStyle = SystemBarStyle.light(
+                scrim = android.graphics.Color.TRANSPARENT,
+                darkScrim = android.graphics.Color.TRANSPARENT,
+            ),
+        )
+        initializePlatformContext(this)
         handleAuthCallback(intent)
         handleNotificationNavigation(intent)
         RectimeNotificationChannel.create(this)

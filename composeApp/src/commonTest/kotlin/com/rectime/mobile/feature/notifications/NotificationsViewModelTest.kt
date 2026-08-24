@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +42,7 @@ class NotificationsViewModelTest {
     @Test
     fun uiStateIsLoadingUntilFirstResponseArrives() = runTest(testDispatcher) {
         val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), total = 1, limit, offset) }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         val state = viewModel.uiState.value
         assertTrue(state.isLoading)
@@ -56,7 +58,7 @@ class NotificationsViewModelTest {
         val gateway = FakeGateway { limit, offset ->
             page(listOf(notification(1), notification(2)), total = 2, limit, offset)
         }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -71,7 +73,7 @@ class NotificationsViewModelTest {
     @Test
     fun initKeepsEmptyListWhenBackendHasNoNotification() = runTest(testDispatcher) {
         val gateway = FakeGateway { limit, offset -> page(emptyList(), total = 0, limit, offset) }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -92,7 +94,7 @@ class NotificationsViewModelTest {
             if (callCount > 1) gate.await()
             page(listOf(notification(callCount)), total = 1, limit, offset)
         }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.refresh()
@@ -121,7 +123,7 @@ class NotificationsViewModelTest {
             gate.await()
             page(listOf(notification(1)), total = 1, limit, offset)
         }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.refresh()
@@ -144,7 +146,7 @@ class NotificationsViewModelTest {
             if (callCount == 1) throw NotificationApiException(statusCode = 500)
             page(listOf(notification(1)), total = 1, limit, offset)
         }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(LOAD_FAILED_MESSAGE, viewModel.uiState.value.error)
 
@@ -165,7 +167,7 @@ class NotificationsViewModelTest {
             gate.await()
             page(listOf(notification(1)), total = 1, limit, offset)
         }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.refresh()
@@ -184,7 +186,7 @@ class NotificationsViewModelTest {
     @Test
     fun unauthorizedResponseReportsExpiredSession() = runTest(testDispatcher) {
         val gateway = FakeGateway { _, _ -> throw NotificationApiException(statusCode = 401) }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -198,7 +200,7 @@ class NotificationsViewModelTest {
     @Test
     fun notFoundResponseReportsMissingNotification() = runTest(testDispatcher) {
         val gateway = FakeGateway { _, _ -> throw NotificationApiException(statusCode = 404) }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -214,7 +216,7 @@ class NotificationsViewModelTest {
 
         failures.forEach { failure ->
             val gateway = FakeGateway { _, _ -> failure() }
-            val viewModel = NotificationsViewModel(gateway)
+            val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
             testDispatcher.scheduler.advanceUntilIdle()
 
@@ -223,7 +225,10 @@ class NotificationsViewModelTest {
     }
 
     @Test
-    fun refreshFailureKeepsAlreadyLoadedNotifications() = runTest(testDispatcher) {
+    fun refreshFailureFallsBackToCachedNotificationsWithoutError() = runTest(testDispatcher) {
+        // 初回ロード成功時にキャッシュへ保存されるため、直後のrefresh失敗は
+        // エラー表示ではなく「オフライン+キャッシュ済み一覧」にフォールバックする
+        // (fetchWithCacheFallbackの意図的な挙動)。
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
             callCount++
@@ -233,7 +238,7 @@ class NotificationsViewModelTest {
                 throw IllegalStateException("接続できません")
             }
         }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.refresh()
@@ -241,7 +246,8 @@ class NotificationsViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(listOf(1), state.notifications.map(UserNotification::id))
-        assertEquals(LOAD_FAILED_MESSAGE, state.error)
+        assertNull(state.error)
+        assertTrue(state.isOffline)
         assertFalse(state.isLoading)
         assertFalse(state.isRefreshing)
     }
@@ -249,7 +255,7 @@ class NotificationsViewModelTest {
     @Test
     fun cancellationIsNotReportedAsError() = runTest(testDispatcher) {
         val gateway = FakeGateway { _, _ -> throw CancellationException("画面を離れた") }
-        val viewModel = NotificationsViewModel(gateway)
+        val viewModel = NotificationsViewModel(gateway, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -289,5 +295,21 @@ class NotificationsViewModelTest {
 
         override suspend fun getNotification(notificationId: Int): UserNotification =
             error("Notification detail is not used in list tests")
+    }
+
+    // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
+    // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
+    private class InMemoryKeyValueStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+
+        override suspend fun getString(key: String): String? = values[key]
+
+        override suspend fun putString(key: String, value: String) {
+            values[key] = value
+        }
+
+        override suspend fun clear() {
+            values.clear()
+        }
     }
 }
