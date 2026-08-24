@@ -10,18 +10,35 @@ internal const val ACCOUNT_DELETION_OPEN_ERROR =
 internal class AccountDeletionLinkState(
     private val openPage: suspend () -> Boolean,
 ) {
+    var isDialogVisible: Boolean by mutableStateOf(false)
+        private set
+
     var isOpening: Boolean by mutableStateOf(false)
         private set
 
     var errorMessage: String? by mutableStateOf(null)
         private set
 
+    fun showDialog() {
+        if (isOpening) return
+        errorMessage = null
+        isDialogVisible = true
+    }
+
+    fun dismissDialog() {
+        if (isOpening) return
+        errorMessage = null
+        isDialogVisible = false
+    }
+
     suspend fun open() {
         if (isOpening) return
         isOpening = true
         errorMessage = null
         try {
-            if (!openPage()) {
+            if (openPage()) {
+                isDialogVisible = false
+            } else {
                 errorMessage = ACCOUNT_DELETION_OPEN_ERROR
             }
         } finally {

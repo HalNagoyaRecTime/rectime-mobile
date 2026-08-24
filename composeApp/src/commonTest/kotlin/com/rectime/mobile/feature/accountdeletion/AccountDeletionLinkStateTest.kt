@@ -21,12 +21,15 @@ class AccountDeletionLinkStateTest {
             callCount > 1
         }
 
+        state.showDialog()
         state.open()
         assertFalse(state.isOpening)
+        assertTrue(state.isDialogVisible)
         assertEquals(ACCOUNT_DELETION_OPEN_ERROR, state.errorMessage)
 
         state.open()
         assertFalse(state.isOpening)
+        assertFalse(state.isDialogVisible)
         assertNull(state.errorMessage)
         assertEquals(2, callCount)
     }
@@ -40,6 +43,7 @@ class AccountDeletionLinkStateTest {
             browserResult.await()
         }
 
+        state.showDialog()
         val firstOpen = launch(start = CoroutineStart.UNDISPATCHED) {
             state.open()
         }
@@ -51,6 +55,7 @@ class AccountDeletionLinkStateTest {
         browserResult.complete(true)
         firstOpen.join()
         assertFalse(state.isOpening)
+        assertFalse(state.isDialogVisible)
         assertNull(state.errorMessage)
     }
 
@@ -60,10 +65,28 @@ class AccountDeletionLinkStateTest {
             throw CancellationException("cancelled")
         }
 
+        state.showDialog()
         assertFailsWith<CancellationException> {
             state.open()
         }
         assertFalse(state.isOpening)
+        assertTrue(state.isDialogVisible)
         assertNull(state.errorMessage)
+    }
+
+    @Test
+    fun dialogCanBeDismissedWithoutOpeningPage() = runTest {
+        var callCount = 0
+        val state = AccountDeletionLinkState {
+            callCount += 1
+            true
+        }
+
+        state.showDialog()
+        assertTrue(state.isDialogVisible)
+
+        state.dismissDialog()
+        assertFalse(state.isDialogVisible)
+        assertEquals(0, callCount)
     }
 }

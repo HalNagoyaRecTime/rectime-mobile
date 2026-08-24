@@ -76,7 +76,7 @@ class SettingsScreen(
             }
             item {
                 AccountDeletionSection(
-                    modifier = Modifier.padding(vertical = 12.dp),
+                    modifier = Modifier.padding(vertical = 4.dp),
                 )
             }
             item {

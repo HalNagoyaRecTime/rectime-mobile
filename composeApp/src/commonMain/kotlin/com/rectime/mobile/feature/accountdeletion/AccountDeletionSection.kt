@@ -2,10 +2,11 @@ package com.rectime.mobile.feature.accountdeletion
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -16,7 +17,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
@@ -39,7 +39,6 @@ internal fun AccountDeletionSection(
 
     Column(
         modifier = modifier
-            .fillMaxWidth()
             .semantics {
                 if (state.isOpening) {
                     stateDescription = "削除手続きページを開いています"
@@ -47,39 +46,65 @@ internal fun AccountDeletionSection(
             },
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = "アカウント削除手続き",
-            style = MaterialTheme.typography.titleMedium,
-            color = AppTheme.colors.textPrimary,
-        )
-        Text(
-            text = "RecTimeアカウントの削除はWebで手続きします。",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTheme.colors.textSecondary,
-        )
-        Text(
-            text = "Microsoft 365アカウント自体は削除されません。Webページで内容を確認し、削除手続きの最終確認を行ってください。",
-            style = MaterialTheme.typography.bodySmall,
-            color = AppTheme.colors.textSecondary,
-        )
-        OutlinedButton(
-            enabled = !state.isOpening,
-            onClick = {
-                coroutineScope.launch {
-                    state.open()
-                }
-            },
+        TextButton(
+            onClick = state::showDialog,
+            contentPadding = PaddingValues(horizontal = 0.dp),
         ) {
-            Text("削除手続きページを開く")
-        }
-        state.errorMessage?.let { message ->
             Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
+                text = "アカウント削除手続き",
                 color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.semantics {
-                    liveRegion = LiveRegionMode.Polite
+            )
+        }
+
+        if (state.isDialogVisible) {
+            AlertDialog(
+                onDismissRequest = state::dismissDialog,
+                title = {
+                    Text("アカウント削除手続き")
+                },
+                text = {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.semantics {
+                            if (state.isOpening) {
+                                stateDescription = "削除手続きページを開いています"
+                            }
+                        },
+                    ) {
+                        Text("RecTimeアカウントの削除はWebで手続きします。")
+                        Text("Microsoft 365アカウント自体は削除されません。Webページで内容を確認し、削除手続きの最終確認を行ってください。")
+                        state.errorMessage?.let { message ->
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.semantics {
+                                    liveRegion = LiveRegionMode.Polite
+                                },
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = !state.isOpening,
+                        onClick = {
+                            coroutineScope.launch {
+                                state.open()
+                            }
+                        },
+                    ) {
+                        Text("削除手続きページを開く")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        enabled = !state.isOpening,
+                        onClick = state::dismissDialog,
+                    ) {
+                        Text("キャンセル")
+                    }
                 },
             )
         }
