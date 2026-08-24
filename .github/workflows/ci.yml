@@ -56,6 +56,9 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Setup iOS Config
+        run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
+
       - name: Run commonTest on iOS simulator target
         run: ./gradlew :composeApp:iosSimulatorArm64Test
 

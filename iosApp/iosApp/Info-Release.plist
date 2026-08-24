@@ -19,7 +19,7 @@
 		<string>LaunchBackground</string>
 	</dict>
 	<key>API_BASE_URL</key>
-	<string>https://rectime-api.rectime-project.workers.dev</string>
+	<string>$(API_BASE_URL)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

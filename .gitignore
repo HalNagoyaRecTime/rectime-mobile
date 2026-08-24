@@ -26,3 +26,6 @@ CLAUDE.md
 
 # Firebase Android project configuration is provided locally or by CI.
 composeApp/google-services.json
+
+# Developer-specific Xcode signing and API settings.
+iosApp/Configuration/Config.xcconfig
