@@ -1,9 +1,9 @@
-package com.rectime.mobile.feature.auth
+package com.rectime.mobile.core.platform
 
 import java.awt.Desktop
 import java.net.URI
 
-actual suspend fun openExternalUrl(url: String): Boolean =
+internal actual suspend fun openPlatformExternalUrl(url: String): Boolean =
     runCatching {
         if (!Desktop.isDesktopSupported()) return false
         Desktop.getDesktop().browse(URI(url))

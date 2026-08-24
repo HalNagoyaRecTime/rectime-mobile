@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.platform.openExternalUrl
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
