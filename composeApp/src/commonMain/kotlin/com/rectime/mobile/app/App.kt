@@ -103,7 +103,6 @@ fun App() {
             ) {
                 NavigationHost(
                     navigationController = navigationController,
-                    themeStateHolder = themeStateHolder,
                     session = session,
                     onLogout = onLogout,
                 )

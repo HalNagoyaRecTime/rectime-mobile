@@ -11,8 +11,6 @@ data class AppLayout(
     val bottomTabMinHeight: Dp = 44.dp,
     val rootBottomNavigationInset: Dp = 90.dp,
     val bottomInsetMin: Dp = 14.dp,
-    val sideMenuRevealMin: Dp = 280.dp,
-    val sideMenuRevealMax: Dp = 380.dp,
 )
 
 fun screenHorizontalPaddingFor(widthDp: Dp): Dp = when {
