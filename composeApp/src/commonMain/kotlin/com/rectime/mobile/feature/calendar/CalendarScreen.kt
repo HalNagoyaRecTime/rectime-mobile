@@ -31,7 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.schedule.CompetitionScheduleDetailScreen
+import com.rectime.mobile.feature.competition.CompetitionDetailScreen
 import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
@@ -53,7 +53,7 @@ object CalendarScreen : Screen {
 
         CalendarScreenUI(
             nowMinute = nowMinute,
-            onOpenEventDetail = { eventId -> navigationController.push(CompetitionScheduleDetailScreen(eventId)) },
+            onOpenEventDetail = { eventId -> navigationController.push(CompetitionDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
             error = viewModel.error,
