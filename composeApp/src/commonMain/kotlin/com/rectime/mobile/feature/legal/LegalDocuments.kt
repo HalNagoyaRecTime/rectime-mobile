@@ -12,14 +12,12 @@ enum class LegalDocument(internal val path: String) {
 
 class LegalDocumentLauncher(
     private val origin: String = productionWebOrigin,
-    private val releaseBuild: Boolean = true,
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
 ) {
     suspend fun open(document: LegalDocument): Boolean {
         val url = resolvePublicWebUrl(
             path = document.path,
             origin = origin,
-            releaseBuild = releaseBuild,
         ) ?: return false
 
         return try {

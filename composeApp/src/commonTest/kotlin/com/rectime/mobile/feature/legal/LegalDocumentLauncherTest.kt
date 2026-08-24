@@ -11,7 +11,6 @@ class LegalDocumentLauncherTest {
     fun opensTermsAtProductionUrl() = runTest {
         var openedUrl: String? = null
         val launcher = LegalDocumentLauncher(
-            releaseBuild = true,
             openUrl = { url ->
                 openedUrl = url
                 true
@@ -26,7 +25,6 @@ class LegalDocumentLauncherTest {
     fun opensPrivacyPolicyAtProductionUrl() = runTest {
         var openedUrl: String? = null
         val launcher = LegalDocumentLauncher(
-            releaseBuild = true,
             openUrl = { url ->
                 openedUrl = url
                 true
@@ -38,11 +36,10 @@ class LegalDocumentLauncherTest {
     }
 
     @Test
-    fun releaseDoesNotCallOpenerForPreviewOrigin() = runTest {
+    fun doesNotCallOpenerForPreviewOrigin() = runTest {
         var callCount = 0
         val launcher = LegalDocumentLauncher(
             origin = "https://pr-150.recwatch.pages.dev",
-            releaseBuild = true,
             openUrl = {
                 callCount += 1
                 true
@@ -57,7 +54,6 @@ class LegalDocumentLauncherTest {
     fun canRetryAfterOpenerFailure() = runTest {
         var callCount = 0
         val launcher = LegalDocumentLauncher(
-            releaseBuild = true,
             openUrl = {
                 callCount += 1
                 callCount > 1

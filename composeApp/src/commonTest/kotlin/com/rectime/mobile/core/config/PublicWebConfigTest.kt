@@ -12,7 +12,6 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = "/legal/terms.html",
                 origin = productionWebOrigin,
-                releaseBuild = true,
             ),
         )
     }
@@ -24,19 +23,19 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = "/legal/privacy.html",
                 origin = "$productionWebOrigin/",
-                releaseBuild = true,
             ),
         )
     }
 
     @Test
-    fun releaseRejectsNonProductionOrigins() {
+    fun rejectsNonProductionOrigins() {
         listOf(
             "",
             "http://recwatch.pages.dev",
             "https://localhost",
             "https://127.0.0.1",
             "https://example.com",
+            "https://other.pages.dev",
             "https://placeholder.invalid",
             "https://pr-150.recwatch.pages.dev",
             "https://develop.recwatch.pages.dev",
@@ -46,9 +45,8 @@ class PublicWebConfigTest {
                 resolvePublicWebUrl(
                     path = "/legal/terms.html",
                     origin = origin,
-                    releaseBuild = true,
                 ),
-                "Release build must reject $origin",
+                "Public web config must reject $origin",
             )
         }
     }
@@ -62,7 +60,7 @@ class PublicWebConfigTest {
             "/legal/terms.html#section",
             "/legal\\terms.html",
         ).forEach { path ->
-            assertNull(resolvePublicWebUrl(path = path, releaseBuild = true))
+            assertNull(resolvePublicWebUrl(path = path))
         }
     }
 }

@@ -15,33 +15,31 @@ private val httpsOriginPattern = Regex(
 /**
  * Resolves a path against the public web origin.
  *
- * Release builds accept only the single approved production origin, preventing
- * preview, staging, localhost, example and placeholder origins from shipping.
+ * Every build accepts only the single approved production origin, preventing
+ * preview, staging, localhost, example and placeholder origins from being used.
  */
 fun resolvePublicWebUrl(
     path: String,
     origin: String = productionWebOrigin,
-    releaseBuild: Boolean = true,
 ): String? {
     if (!path.startsWith('/') || path.startsWith("//")) return null
     if ('?' in path || '#' in path || '\\' in path) return null
     val originMatch = httpsOriginPattern.matchEntire(origin) ?: return null
 
     val normalizedOrigin = origin.trimEnd('/')
-    if (releaseBuild) {
-        val host = originMatch.groupValues[1].lowercase()
-        val forbiddenHost = host == "localhost" ||
-            host == "127.0.0.1" ||
-            host.endsWith(".invalid") ||
-            "placeholder" in host ||
-            host == "example.com" ||
-            host.endsWith(".example.com") ||
-            host.startsWith("pr-") ||
-            host.startsWith("preview.") ||
-            host.startsWith("develop.") ||
-            host.startsWith("development.") ||
-            host.startsWith("staging.")
-        if (forbiddenHost || normalizedOrigin != productionWebOrigin) return null
-    }
+    val host = originMatch.groupValues[1].lowercase()
+    val forbiddenHost = host == "localhost" ||
+        host == "127.0.0.1" ||
+        host.endsWith(".invalid") ||
+        "placeholder" in host ||
+        host == "example.com" ||
+        host.endsWith(".example.com") ||
+        host.startsWith("pr-") ||
+        host.startsWith("preview.") ||
+        host.startsWith("develop.") ||
+        host.startsWith("development.") ||
+        host.startsWith("staging.")
+    if (forbiddenHost || normalizedOrigin != productionWebOrigin) return null
+
     return normalizedOrigin + path
 }
