@@ -52,7 +52,7 @@ import com.rectime.mobile.feature.settings.SettingsScreen
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.regular.Bell
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
 
-// 最も長いラベル（カレンダー）に合わせて、3タブの見た目の幅を揃える
+// 3タブの幅を揃えたい（最長ラベルの「カレンダー」が収まる値にしている）
 private val NavItemContentWidth = 120.dp
 
 private data class NavigationItemConfig(
@@ -85,7 +85,7 @@ fun BottomNavigationBar(
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .fillMaxWidth(),
     ) {
-        // 背景の周囲のみに影をかけ、半透明の背景の後ろには回り込ませない
+        // 半透明背景の内側に影が透けて二重に暗く見えるのを防ぎたい
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -102,7 +102,7 @@ fun BottomNavigationBar(
                 .background(AppTheme.colors.navigationDefaultBackground, shape)
                 .heightIn(min = AppTheme.layout.bottomTabMinHeight),
         ) {
-            // 選択中の強調表示は共有の1つのインジケーターにして、タブ切り替え時に位置をスライドさせる
+            // タブ切り替え時に強調表示をスライドさせたい
             val selectedBounds = itemBounds[currentScreen.key]
             if (selectedBounds != null) {
                 val animationSpec = spring<Dp>(dampingRatio = 0.8f, stiffness = 380f)
@@ -125,8 +125,8 @@ fun BottomNavigationBar(
             }
 
             items.forEachIndexed { index, item ->
-                // Rowだと余白不足時に最後の要素だけ縮んでしまうため、各アイテムを個別に配置して
-                // 3つとも同じ希望幅を保てるようにする（幅が余ってはみ出す＝重なるのは許容する）
+                // 3タブとも同じ幅を保ちたい（Rowだと幅が足りないとき最後の要素だけ縮んでしまうため。
+                // はみ出して重なるのは許容する）
                 val itemAlignment = when (index) {
                     0 -> Alignment.BottomStart
                     items.lastIndex -> Alignment.BottomEnd
@@ -154,7 +154,7 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
     val pillShape = RoundedCornerShape(AppTheme.radius.full)
 
     Box(modifier = modifier) {
-        // 背景2の周囲かつ元の背景の内側のみに影をかける
+        // 影が背景の外にはみ出さないようにしたい
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -170,7 +170,7 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
                 .matchParentSize()
                 .background(AppTheme.colors.navigationActiveBackground, pillShape),
         )
-        // ピルと同じ丸みでクリップし、端がピルの丸みに溶け込むようにする
+        // 下線の端をピルの丸みに馴染ませたい
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -221,8 +221,7 @@ private fun BottomNavigationItem(
                     modifier = Modifier.size(20.dp),
                 )
                 if (showBadge) {
-                    // アイコンと点が被らないよう、半透明の背景色そのままの縁を点の周囲に敷く
-                    // （不透明色や二重合成にせず、単純に一度だけ重ねる）
+                    // アイコンの線と点が重ならないようにしたい
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)

@@ -34,7 +34,7 @@ fun RootLayer(
             rootScreen.Content(navigationController)
         }
 
-        // ボトムナビゲーションの背後で、コンテンツが画面下端に向かって滑らかにフェードするようにする
+        // コンテンツを画面下端に向かって滑らかにフェードさせたい
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
