@@ -133,6 +133,20 @@ class CachedFetchTest {
     }
 
     @Test
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileSaveCacheIsInFlight() = runTest {
+        // fetchLive自体は世代が変わる前に完了していても、その後のsaveCache()実行中に
+        // clearAll()が走った場合、呼び出し元へFreshとして返してはならない
+        // (saveCacheもsuspend関数のため、その内部で中断点を挟む可能性がある)。
+        val result = fetchWithCacheFallback(
+            fetchLive = { "live-value" },
+            loadCache = { fail("loadCache should not be called in this scenario") },
+            saveCache = { CacheGeneration.bump() },
+        )
+
+        assertIs<CachedFetchResult.Failed>(result)
+    }
+
+    @Test
     fun resultIsDiscardedAsFailedWhenClearAllRunsWhileFetchLiveIsInFlightAndFails() = runTest {
         // fetchLive失敗時のキャッシュフォールバック経路でも同様に、通信中に
         // clearAll()が走った場合はloadCache()の結果を呼び出し元へ返してはならない。

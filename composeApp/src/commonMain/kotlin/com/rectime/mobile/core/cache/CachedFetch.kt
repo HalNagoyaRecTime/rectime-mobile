@@ -71,5 +71,9 @@ suspend fun <T> fetchWithCacheFallback(
         // no-op
     }
 
+    // saveCache自体もsuspend関数のため、その実行中に世代が変わっている可能性が
+    // ある。呼び出し元への返却直前に再確認する。
+    staleResultOrNull()?.let { return it }
+
     return CachedFetchResult.Fresh(value)
 }
