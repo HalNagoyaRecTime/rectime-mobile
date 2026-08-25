@@ -60,7 +60,7 @@ private object AndroidNotificationPermissionController : NotificationPermissionC
     override suspend fun requestPermissionOrOpenSettings(): NotificationPermissionStatus {
         val status = getStatus()
         if (status != NotificationPermissionStatus.NotDetermined) {
-            if (status == NotificationPermissionStatus.Denied) openSystemSettings()
+            openSystemSettings()
             return status
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return status
