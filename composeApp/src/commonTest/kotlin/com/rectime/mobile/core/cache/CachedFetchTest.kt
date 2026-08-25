@@ -101,4 +101,24 @@ class CachedFetchTest {
         assertFalse(loadCacheCalled)
         assertFalse(saveCacheCalled)
     }
+
+    @Test
+    fun saveCacheIsSkippedWhenClearAllRunsWhileFetchLiveIsInFlight() = runTest {
+        // ログアウト・新規ログイン等で、通信中にLocalCache.clearAll()が別画面から
+        // 呼ばれた場合、この通信の結果(前ユーザー/前セッションのものである可能性が
+        // ある)をキャッシュへ書き戻してはならない。
+        var saveCacheCalled = false
+
+        val result = fetchWithCacheFallback(
+            fetchLive = {
+                CacheGeneration.bump()
+                "live-value"
+            },
+            loadCache = { fail("loadCache should not be called when fetchLive succeeds") },
+            saveCache = { saveCacheCalled = true },
+        )
+
+        assertEquals(CachedFetchResult.Fresh("live-value"), result)
+        assertFalse(saveCacheCalled)
+    }
 }

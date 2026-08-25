@@ -55,6 +55,16 @@ class LocalCacheTest {
 
         assertNull(cache.load<Sample>("key"))
     }
+
+    @Test
+    fun clearAllBumpsCacheGenerationSoInFlightFetchesDoNotWriteStaleDataBack() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val generationBefore = CacheGeneration.value
+
+        cache.clearAll()
+
+        assertEquals(generationBefore + 1, CacheGeneration.value)
+    }
 }
 
 private class InMemoryKeyValueStore : KeyValueStore {

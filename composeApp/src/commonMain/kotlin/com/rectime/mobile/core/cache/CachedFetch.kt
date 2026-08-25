@@ -16,6 +16,10 @@ suspend fun <T> fetchWithCacheFallback(
     loadCache: suspend () -> T?,
     saveCache: suspend (T) -> Unit,
 ): CachedFetchResult<T> {
+    // fetchLive実行中にログアウト・新規ログイン等でLocalCache.clearAll()が
+    // 走った場合、この通信は前ユーザー(または前セッション)のものである
+    // 可能性があるため、キャッシュへ書き戻してはならない(CacheGeneration参照)。
+    val generationAtStart = CacheGeneration.value
     val value = try {
         fetchLive()
     } catch (e: CancellationException) {
@@ -34,15 +38,18 @@ suspend fun <T> fetchWithCacheFallback(
         return if (cached != null) CachedFetchResult.Cached(cached, e) else CachedFetchResult.Failed(e)
     }
 
-    // キャッシュへの書き込み失敗はベストエフォートとして無視する。ここでの失敗を
-    // fetchLive()の失敗と同様に扱うと、通信自体は成功しているのに古いキャッシュへ
-    // フォールバックしてしまう(オンラインなのに「オフライン」表示になる)ため。
-    try {
-        saveCache(value)
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        // no-op
+    if (generationAtStart == CacheGeneration.value) {
+        // キャッシュへの書き込み失敗はベストエフォートとして無視する。ここでの
+        // 失敗をfetchLive()の失敗と同様に扱うと、通信自体は成功しているのに
+        // 古いキャッシュへフォールバックしてしまう(オンラインなのに
+        // 「オフライン」表示になる)ため。
+        try {
+            saveCache(value)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // no-op
+        }
     }
 
     return CachedFetchResult.Fresh(value)

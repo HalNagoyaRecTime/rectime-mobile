@@ -19,5 +19,9 @@ class LocalCache(@PublishedApi internal val store: KeyValueStore = PlatformKeyVa
     // ログアウト・セッション失効時に他ユーザーへキャッシュが漏れないよう全消去する。
     suspend fun clearAll() {
         store.clear()
+        // clearAll()実行中に他画面の通信が既に完了しており、そのsaveCacheが
+        // この後に走ってしまうすれ違いをfetchWithCacheFallback側で検知できる
+        // ようにする(CacheGeneration参照)。
+        CacheGeneration.bump()
     }
 }
