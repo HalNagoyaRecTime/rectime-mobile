@@ -2,6 +2,7 @@ package com.rectime.mobile.core.cache
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -9,6 +10,13 @@ import kotlin.test.assertIs
 import kotlin.test.fail
 
 class CachedFetchTest {
+    @BeforeTest
+    fun resetSharedState() {
+        // CacheGenerationはプロセス全体で共有されるため、テスト間で値が
+        // 漏れないようリセットする。
+        CacheGeneration.resetForTest()
+    }
+
     @Test
     fun freshResultIsReturnedAndSavedToCacheOnSuccess() = runTest {
         var saved: String? = null

@@ -27,15 +27,19 @@ suspend fun <T> fetchWithCacheFallback(
     // あるため、キャッシュへの書き込みだけでなく、呼び出し元への返却(画面表示)も
     // 行ってはならない(CacheGeneration参照)。
     val generationAtStart = CacheGeneration.value
+    fun staleResultOrNull(): CachedFetchResult<T>? =
+        if (generationAtStart != CacheGeneration.value) {
+            CachedFetchResult.Failed(StaleCacheGenerationException())
+        } else {
+            null
+        }
 
     val value = try {
         fetchLive()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        if (generationAtStart != CacheGeneration.value) {
-            return CachedFetchResult.Failed(StaleCacheGenerationException())
-        }
+        staleResultOrNull()?.let { return it }
 
         // キャッシュの読み込み自体が失敗した場合も、キャッシュなし(Failed)として
         // 扱う。ここで例外を伝播させると、この関数自体の「例外を投げない」契約が
@@ -48,16 +52,12 @@ suspend fun <T> fetchWithCacheFallback(
             null
         }
 
-        if (generationAtStart != CacheGeneration.value) {
-            return CachedFetchResult.Failed(StaleCacheGenerationException())
-        }
+        staleResultOrNull()?.let { return it }
 
         return if (cached != null) CachedFetchResult.Cached(cached, e) else CachedFetchResult.Failed(e)
     }
 
-    if (generationAtStart != CacheGeneration.value) {
-        return CachedFetchResult.Failed(StaleCacheGenerationException())
-    }
+    staleResultOrNull()?.let { return it }
 
     // キャッシュへの書き込み失敗はベストエフォートとして無視する。ここでの
     // 失敗をfetchLive()の失敗と同様に扱うと、通信自体は成功しているのに
