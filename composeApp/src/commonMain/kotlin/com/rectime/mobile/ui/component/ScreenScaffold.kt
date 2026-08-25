@@ -55,10 +55,7 @@ fun RootScreenScaffold(
         )
         RootHeader(
             title = title,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(horizontal = hPad)
-                .padding(top = spacing),
+            modifier = Modifier,
             onTrailingClick = onTrailingClick,
             trailing = trailing,
         )
