@@ -8,6 +8,9 @@ package com.rectime.mobile.core.config
  */
 const val productionWebOrigin: String = "https://recwatch.pages.dev"
 
+/** Public entry point for starting the RecTime account deletion process. */
+const val accountDeletionPath: String = "/account-deletion"
+
 private val httpsOriginPattern = Regex(
     pattern = "^https://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[1-9][0-9]{0,4})?/?$",
 )

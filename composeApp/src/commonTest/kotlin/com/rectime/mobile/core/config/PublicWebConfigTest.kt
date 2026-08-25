@@ -17,6 +17,14 @@ class PublicWebConfigTest {
     }
 
     @Test
+    fun resolvesAccountDeletionPathWithoutQueryOrFragment() {
+        assertEquals(
+            "https://recwatch.pages.dev/account-deletion",
+            resolvePublicWebUrl(path = accountDeletionPath),
+        )
+    }
+
+    @Test
     fun acceptsTrailingSlashOnApprovedProductionOrigin() {
         assertEquals(
             "https://recwatch.pages.dev/legal/privacy.html",

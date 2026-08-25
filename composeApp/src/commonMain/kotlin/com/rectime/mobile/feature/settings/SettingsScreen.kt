@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.component.RootScreenScaffold
@@ -80,6 +81,11 @@ class SettingsScreen(
                 ) {
                     Text("ログアウト")
                 }
+            }
+            item {
+                AccountDeletionSection(
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
             }
         }
     }
