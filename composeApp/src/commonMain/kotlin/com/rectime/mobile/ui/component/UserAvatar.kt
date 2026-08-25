@@ -35,21 +35,25 @@ fun UserAvatar(
     imageUrl: String? = null,
     modifier: Modifier = Modifier
 ) {
+    // 認証ヘッダーはApp.ktのKtorNetworkFetcherFactoryクライアントに
+    // installしたMobileAuthHeadersPluginが自動付与するため、ここで個別に
+    // NetworkHeadersを組み立てて付与すると二重になってしまう。imageUrlを
+    // そのままmodelとして渡すだけでよい。
     Box(
         modifier = modifier
             .clip(CircleShape)
             .background(AppTheme.colors.surfaceAccentStrong),
         contentAlignment = Alignment.Center,
     ) {
-        if (imageUrl != null) {
+        Text(text = initials, color = AppTheme.colors.textOnAccent, fontWeight = FontWeight.Bold)
+        if (!imageUrl.isNullOrBlank()) {
             AsyncImage(
                 model = imageUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-        } else {
-            Text(text = initials, color = AppTheme.colors.textOnAccent, fontWeight = FontWeight.Bold)
         }
     }
 }
+

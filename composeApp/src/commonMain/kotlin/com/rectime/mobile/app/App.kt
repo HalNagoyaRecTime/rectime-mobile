@@ -6,38 +6,107 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
+import coil3.disk.DiskCache
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
+import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
+import com.rectime.mobile.core.network.createHttpClient
+import com.rectime.mobile.feature.auth.AuthGate
+import com.rectime.mobile.feature.auth.AuthViewModel
+import com.rectime.mobile.feature.auth.SessionTokenHolder
+import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
+import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
+import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
+import okio.Path.Companion.toPath
 
+@OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
 @Preview
 fun App() {
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
             .components {
-                add(KtorNetworkFetcherFactory())
+                add(
+                    KtorNetworkFetcherFactory(
+                        createHttpClient().config {
+                            install(MobileAuthHeadersPlugin)
+                        }
+                    )
+                )
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory((getCacheDir(context) + "/image_cache").toPath())
+                    .maxSizePercent(0.02)
+                    .build()
             }
             .build()
     }
 
     val navigationController = remember { NavigationController() }
+    var notificationNavigationTarget by remember {
+        mutableStateOf<NotificationNavigationTarget?>(null)
+    }
     val themeStateHolder = remember { ThemeStateHolder() }
+    val authViewModel: AuthViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer { AuthViewModel() }
+        }
+    )
+
+    val authState by authViewModel.uiState.collectAsState()
+    LaunchedEffect(authState.session) {
+        SessionTokenHolder.accessToken = authState.session?.accessToken
+        updatePushTokenRegistration(authState.session?.accessToken)
+    }
+    LaunchedEffect(Unit) {
+        NotificationNavigationHandler.targets.collect {
+            notificationNavigationTarget = it
+        }
+    }
 
     AppTheme(themeStateHolder = themeStateHolder) {
-        Box(
-            modifier = Modifier
-                .background(AppTheme.colors.surfacePrimary)
-                .fillMaxSize(),
-        ) {
-            NavigationHost(
-                navigationController = navigationController,
-                themeStateHolder = themeStateHolder,
-            )
+        AuthGate(viewModel = authViewModel) { session, onLogout ->
+            SessionTokenHolder.accessToken = session.accessToken
+            LaunchedEffect(notificationNavigationTarget) {
+                when (val target = notificationNavigationTarget) {
+                    NotificationNavigationTarget.Home -> {
+                        navigationController.reset(CalendarScreen)
+                    }
+                    is NotificationNavigationTarget.EventDetail -> {
+                        navigationController.reset(CalendarScreen)
+                        navigationController.push(CompetitionDetailScreen(target.eventId))
+                    }
+                    is NotificationNavigationTarget.NotificationDetail -> {
+                        navigationController.reset(CalendarScreen)
+                        navigationController.push(NotificationDetailScreen(target.notificationId))
+                    }
+                    null -> Unit
+                }
+                notificationNavigationTarget = null
+            }
+            Box(
+                modifier = Modifier
+                    .background(AppTheme.colors.surfacePrimary)
+                    .fillMaxSize(),
+            ) {
+                NavigationHost(
+                    navigationController = navigationController,
+                    session = session,
+                    onLogout = onLogout,
+                )
+            }
         }
     }
 }
