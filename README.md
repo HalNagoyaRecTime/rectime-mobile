@@ -43,6 +43,17 @@ composeApp/google-services.json
 `google-services.json`はGitの管理対象外です。コミットしないでください。
 CIでAndroid版をビルドする場合は、Repository Secretなどに保存した内容からビルド時に同じパスへ生成してください。
 
+### iOSローカル設定
+
+`iosApp/Configuration/Config.xcconfig.example` を `iosApp/Configuration/Config.xcconfig` へコピーして使用します。
+
+```shell
+cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
+```
+
+実機デバッグ時は `Config.xcconfig` 内の `API_BASE_URL`（例: `http://<MacのIP>:8787`）や `TEAM_ID`（Apple Developer Team ID）を各自の環境に合わせて設定してください。
+`Config.xcconfig` はGit管理対象外です。
+
 詳細なセットアップ手順は [`setup/README.md`](setup/README.md) を参照。
 
 ## ディレクトリ構成
@@ -112,3 +123,4 @@ IDE のツールバーから Run Configuration `composeApp [mobile]` を使う�
 ---
 
 [Kotlin Multiplatform について詳しく](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)
+
