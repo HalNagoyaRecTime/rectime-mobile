@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.calendar
 
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import io.ktor.client.HttpClient
@@ -47,6 +48,9 @@ class CalendarViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        // CacheGenerationはプロセス全体で共有されるため、テスト間で値が
+        // 漏れないようリセットする。
+        CacheGeneration.resetForTest()
     }
 
     @AfterTest
