@@ -16,7 +16,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -30,22 +34,16 @@ fun RootHeader(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(AppTheme.layout.headerEdgeFade)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            AppTheme.colors.edgeFadeColor,
-                            AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
-                        ),
-                    ),
+                .background(color = AppTheme.colors.headerBackground)
+                .dropShadow(
+                    shape = RectangleShape,
+                    shadow = Shadow(
+                        radius = 8.dp,
+                        color = AppTheme.colors.dropShadowDark,
+                        offset = DpOffset(x = 0.dp, y = 4.dp)
+                    )
                 ),
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(color = AppTheme.colors.headerBackground),
-        ){
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -72,5 +70,6 @@ fun RootHeader(
                 }
             }
         }
+
     }
 }

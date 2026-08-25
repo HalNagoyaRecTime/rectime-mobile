@@ -23,6 +23,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.ui.theme.AppTheme
@@ -52,6 +53,19 @@ fun RootScreenScaffold(
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
             content = content,
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(AppTheme.layout.headerEdgeFade)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            AppTheme.colors.edgeFadeColor,
+                            AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+                        ),
+                    ),
+                ),
         )
         RootHeader(
             title = title,
