@@ -26,11 +26,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.feature.competition.CompetitionDetailScreen
 import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
@@ -143,12 +145,13 @@ private fun CalendarScreenUI(
                             val startMinutes = event.startMinuteOfDay - hourStart * 60
                             val yOffset = hourHeight * (startMinutes / 60f)
                             val eventHeight = hourHeight * (event.durationMinutes / 60f)
+
                             val cardModifier = Modifier
-                                .width(laneWidth - 8.dp)
-                                .height(eventHeight - 6.dp)
-                                .padding(top = 4.dp)
+                                .width(laneWidth - 0.dp)
+                                .height(eventHeight - 0.dp)
+                                .padding(0.dp)
                                 .align(Alignment.TopStart)
-                                .offset(x = xOffset + 4.dp, y = yOffset + 4.dp)
+                                .offset(x = xOffset + 0.dp, y = yOffset + 0.dp)
 
                             if (event.overflowCount > 0) {
                                 // 「+N」は集約表示であり個別のイベント詳細を持たないため、
@@ -156,28 +159,30 @@ private fun CalendarScreenUI(
                                 // (押せるのに何も起きない、というダミー導線を作らないため)。
                                 Box(
                                     modifier = cardModifier
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(12.dp))
                                         .background(AppTheme.colors.surfaceMuted)
                                         .padding(8.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text(text = "+${event.overflowCount}", color = AppTheme.colors.textSecondary)
+                                    Text(
+                                        text = "+${event.overflowCount}",
+                                        color = AppTheme.colors.textSecondary,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             } else {
-                                PressSurface(
+                                val endMinuteOfDay = event.startMinuteOfDay + event.durationMinutes
+                                val isLive = nowMinute in event.startMinuteOfDay..endMinuteOfDay
+
+                                EventCard(
+                                    time = "${event.startTimeLabel}-${event.endTimeLabel}",
+                                    title = event.title,
+                                    court = event.venue,
+                                    isLive = isLive,
+                                    isParticipating = event.isParticipating,
                                     onClick = { onOpenEventDetail(event.eventId) },
-                                    modifier = cardModifier,
-                                    color = AppTheme.colors.surfaceAccent,
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
-                                ) {
-                                    Column {
-                                        Text(text = event.title, color = AppTheme.colors.textPrimary)
-                                        Text(
-                                            text = "${event.startTimeLabel}〜${event.endTimeLabel}",
-                                            color = AppTheme.colors.textSecondary,
-                                        )
-                                        Text(text = event.venue, color = AppTheme.colors.textSecondary)
-                                    }
-                                }
+                                    modifier = cardModifier
+                                )
                             }
                         }
 
