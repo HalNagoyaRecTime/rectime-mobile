@@ -103,10 +103,12 @@ class CachedFetchTest {
     }
 
     @Test
-    fun saveCacheIsSkippedWhenClearAllRunsWhileFetchLiveIsInFlight() = runTest {
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileFetchLiveIsInFlightAndSucceeds() = runTest {
         // ログアウト・新規ログイン等で、通信中にLocalCache.clearAll()が別画面から
         // 呼ばれた場合、この通信の結果(前ユーザー/前セッションのものである可能性が
-        // ある)をキャッシュへ書き戻してはならない。
+        // ある)はキャッシュへ書き戻すだけでなく、呼び出し元(画面)へ返して
+        // 表示させてもならない。書き込みだけ止めてもFreshとして返せば、
+        // 呼び出し元の画面に前ユーザーのデータが表示されてしまうため。
         var saveCacheCalled = false
 
         val result = fetchWithCacheFallback(
@@ -114,11 +116,49 @@ class CachedFetchTest {
                 CacheGeneration.bump()
                 "live-value"
             },
-            loadCache = { fail("loadCache should not be called when fetchLive succeeds") },
+            loadCache = { fail("loadCache should not be called in this scenario") },
             saveCache = { saveCacheCalled = true },
         )
 
-        assertEquals(CachedFetchResult.Fresh("live-value"), result)
+        assertIs<CachedFetchResult.Failed>(result)
         assertFalse(saveCacheCalled)
+    }
+
+    @Test
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileFetchLiveIsInFlightAndFails() = runTest {
+        // fetchLive失敗時のキャッシュフォールバック経路でも同様に、通信中に
+        // clearAll()が走った場合はloadCache()の結果を呼び出し元へ返してはならない。
+        val liveError = IllegalStateException("network down")
+
+        val result = fetchWithCacheFallback(
+            fetchLive = {
+                CacheGeneration.bump()
+                throw liveError
+            },
+            loadCache = { fail("loadCache should not be called in this scenario") },
+            saveCache = { fail("saveCache should not be called on failure") },
+        )
+
+        assertIs<CachedFetchResult.Failed>(result)
+    }
+
+    @Test
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileLoadCacheIsInFlight() = runTest {
+        // fetchLiveは開始時点の世代のまま失敗し、その後のloadCache()実行中に
+        // clearAll()が走るケース。loadCache()自体は(まだ消去中/消去直前の)
+        // 前セッションのデータを返してしまう可能性があるため、それを呼び出し元へ
+        // 返してはならない。
+        val liveError = IllegalStateException("network down")
+
+        val result = fetchWithCacheFallback(
+            fetchLive = { throw liveError },
+            loadCache = {
+                CacheGeneration.bump()
+                "stale-cached-value"
+            },
+            saveCache = { fail("saveCache should not be called on failure") },
+        )
+
+        assertIs<CachedFetchResult.Failed>(result)
     }
 }
