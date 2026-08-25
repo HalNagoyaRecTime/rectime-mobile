@@ -486,6 +486,39 @@ class CalendarViewModelTest {
         assertFalse(viewModel.isOffline)
     }
 
+    @Test
+    fun fetchEventsClearsEventsWhenFailedForANonUnauthorizedReasonAndNoCacheIsAvailable() = runTest(testDispatcher) {
+        // 401以外(ログアウト・新規ログイン中のStaleCacheGenerationException等を含む)
+        // でも、有効なキャッシュが無いFailedでは前回のeventsを残してはならない
+        // (前ユーザー/前セッションのデータである可能性があるため)。
+        var callCount = 0
+        val viewModel = buildViewModel(
+            mockClient {
+                callCount++
+                if (callCount == 1) {
+                    respondJson(eventsJson)
+                } else {
+                    respondJson(
+                        """{"error":{"message":"Internal Server Error"}}""",
+                        HttpStatusCode.InternalServerError,
+                    )
+                }
+            },
+            cache = LocalCache(NeverPersistingKeyValueStore()),
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
+        assertFalse(viewModel.isOffline)
+    }
+
     // ---- nowMinute ----
 
     @Test

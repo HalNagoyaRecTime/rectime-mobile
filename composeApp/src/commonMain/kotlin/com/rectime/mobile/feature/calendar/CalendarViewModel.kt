@@ -111,11 +111,11 @@ class CalendarViewModel(
                             HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
                             else -> "通信に失敗しました"
                         }
-                        if (status == HttpStatusCode.Unauthorized) {
-                            // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
-                            // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
-                            _events.value = emptyList()
-                        }
+                        // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
+                        // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
+                        // 401以外(ログアウト・新規ログインによるStaleCacheGenerationException
+                        // 等を含む)でも、有効なキャッシュが無いFailedでは理由を問わずクリアする。
+                        _events.value = emptyList()
                         isOffline = false
                         result.error.printStackTrace()
                     }
