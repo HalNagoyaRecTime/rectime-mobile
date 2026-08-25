@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -44,21 +43,47 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.calendar.CalendarScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
-import com.rectime.mobile.ui.theme.AppTheme
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.RegularGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.regular.CalendarDays
 import com.rectime.mobile.feature.settings.SettingsScreen
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.regular.Bell
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Gear
+import com.rectime.mobile.ui.theme.AppTheme
+import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.painterResource
+import rectime_mobile.composeapp.generated.resources.Res
+import rectime_mobile.composeapp.generated.resources.ic_notification_fill
+import rectime_mobile.composeapp.generated.resources.ic_notification_outline
+import rectime_mobile.composeapp.generated.resources.ic_schedule_fill
+import rectime_mobile.composeapp.generated.resources.ic_schedule_outline
+import rectime_mobile.composeapp.generated.resources.ic_settings_fill
+import rectime_mobile.composeapp.generated.resources.ic_settings_outline
 
 // 3タブの幅を揃えたい（最長ラベルの「カレンダー」が収まる値にしている）
 private val NavItemContentWidth = 120.dp
 
+private val BarOuterMarginHorizontal = 16.dp
+private val BarOuterMarginVertical = 12.dp
+private val BarShadowElevation = 6.dp
+
+private const val IndicatorSpringDampingRatio = 0.8f
+private const val IndicatorSpringStiffness = 380f
+private val IndicatorShadowElevation = 4.dp
+private val IndicatorUnderlineHeight = 3.dp
+
+private val ItemContentPaddingHorizontal = 16.dp
+private val ItemContentPaddingTop = 10.dp
+private val ItemContentPaddingBottom = 6.dp
+private val ItemContentSpacing = 2.dp
+private val ItemIconSize = 20.dp
+private val ItemLabelFontSize = 11.sp
+
+private val BadgeOffsetX = 4.dp
+private val BadgeOffsetY = (-5).dp
+private val BadgeRingSize = 13.dp
+private val BadgeDotSize = 10.dp
+
 private data class NavigationItemConfig(
     val screen: Screen,
     val label: String,
-    val icon: ImageVector,
+    val outlineIcon: DrawableResource,
+    val filledIcon: DrawableResource,
     val showBadge: Boolean = false,
 )
 
@@ -71,9 +96,20 @@ fun BottomNavigationBar(
     modifier: Modifier = Modifier,
 ) {
     val items = listOf(
-    NavigationItemConfig(CalendarScreen, "カレンダー", RegularGroup.CalendarDays),
-    NavigationItemConfig(NotificationsScreen, "通知", RegularGroup.Bell, showBadge = true),
-    NavigationItemConfig(SettingsScreen(session = session, onLogout = onLogout), "設定", SolidGroup.Gear),
+    NavigationItemConfig(CalendarScreen, "カレンダー", Res.drawable.ic_schedule_outline, Res.drawable.ic_schedule_fill),
+    NavigationItemConfig(
+        NotificationsScreen,
+        "通知",
+        Res.drawable.ic_notification_outline,
+        Res.drawable.ic_notification_fill,
+        showBadge = true,
+    ),
+    NavigationItemConfig(
+        SettingsScreen(session = session, onLogout = onLogout),
+        "設定",
+        Res.drawable.ic_settings_outline,
+        Res.drawable.ic_settings_fill,
+    ),
 )
     val shape = RoundedCornerShape(AppTheme.radius.full)
     val density = LocalDensity.current
@@ -82,7 +118,7 @@ fun BottomNavigationBar(
     Box(
         modifier = modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = BarOuterMarginHorizontal, vertical = BarOuterMarginVertical)
             .fillMaxWidth(),
     ) {
         // 半透明背景の内側に影が透けて二重に暗く見えるのを防ぎたい
@@ -90,7 +126,7 @@ fun BottomNavigationBar(
             modifier = Modifier
                 .matchParentSize()
                 .shadow(
-                    elevation = 6.dp,
+                    elevation = BarShadowElevation,
                     shape = shape,
                     ambientColor = AppTheme.colors.dropShadowDark,
                     spotColor = AppTheme.colors.dropShadowDark,
@@ -105,7 +141,10 @@ fun BottomNavigationBar(
             // タブ切り替え時に強調表示をスライドさせたい
             val selectedBounds = itemBounds[currentScreen.key]
             if (selectedBounds != null) {
-                val animationSpec = spring<Dp>(dampingRatio = 0.8f, stiffness = 380f)
+                val animationSpec = spring<Dp>(
+                    dampingRatio = IndicatorSpringDampingRatio,
+                    stiffness = IndicatorSpringStiffness,
+                )
                 val indicatorX by animateDpAsState(
                     targetValue = with(density) { selectedBounds.left.toDp() },
                     animationSpec = animationSpec,
@@ -134,7 +173,8 @@ fun BottomNavigationBar(
                 }
                 BottomNavigationItem(
                     label = item.label,
-                    icon = item.icon,
+                    outlineIcon = item.outlineIcon,
+                    filledIcon = item.filledIcon,
                     selected = currentScreen.key == item.screen.key,
                     showBadge = item.showBadge,
                     onClick = { onSelectRoot(item.screen) },
@@ -159,7 +199,7 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .matchParentSize()
                 .shadow(
-                    elevation = 4.dp,
+                    elevation = IndicatorShadowElevation,
                     shape = pillShape,
                     ambientColor = AppTheme.colors.dropShadowDark,
                     spotColor = AppTheme.colors.dropShadowDark,
@@ -180,7 +220,7 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .height(3.dp)
+                    .height(IndicatorUnderlineHeight)
                     .background(AppTheme.colors.themeColorFirst),
             )
         }
@@ -190,7 +230,8 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
 @Composable
 private fun BottomNavigationItem(
     label: String,
-    icon: ImageVector,
+    outlineIcon: DrawableResource,
+    filledIcon: DrawableResource,
     selected: Boolean,
     showBadge: Boolean,
     onClick: () -> Unit,
@@ -206,33 +247,38 @@ private fun BottomNavigationItem(
         modifier = modifier,
         color = Color.Transparent,
         shape = pillShape,
-        contentPadding = PaddingValues(start = 16.dp, top = 10.dp, end = 16.dp, bottom = 6.dp),
+        contentPadding = PaddingValues(
+            start = ItemContentPaddingHorizontal,
+            top = ItemContentPaddingTop,
+            end = ItemContentPaddingHorizontal,
+            bottom = ItemContentPaddingBottom,
+        ),
     ) {
         Column(
             modifier = Modifier.width(NavItemContentWidth),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(ItemContentSpacing),
         ) {
             Box {
                 Icon(
-                    imageVector = icon,
+                    painter = painterResource(if (selected) filledIcon else outlineIcon),
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(ItemIconSize),
                 )
                 if (showBadge) {
                     // アイコンの線と点が重ならないようにしたい
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .offset(x = 4.dp, y = (-2).dp)
-                            .size(10.dp)
+                            .offset(x = BadgeOffsetX, y = BadgeOffsetY)
+                            .size(BadgeRingSize)
                             .background(badgeRingColor, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(7.dp)
+                                .size(BadgeDotSize)
                                 .background(badgeDotColor, CircleShape),
                         )
                     }
@@ -242,7 +288,7 @@ private fun BottomNavigationItem(
                 text = label,
                 color = contentColor,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                fontSize = 11.sp,
+                fontSize = ItemLabelFontSize,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
             )
