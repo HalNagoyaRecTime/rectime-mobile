@@ -198,6 +198,8 @@ private fun BottomNavigationItem(
 ) {
     val contentColor = if (selected) AppTheme.colors.themeColorFirst else AppTheme.colors.textNavigationInactive
     val pillShape = RoundedCornerShape(AppTheme.radius.full)
+    val badgeRingColor = AppTheme.colors.navigationDefaultBackground
+    val badgeDotColor = AppTheme.colors.themeColorFirst
 
     PressSurface(
         onClick = onClick,
@@ -219,19 +221,20 @@ private fun BottomNavigationItem(
                     modifier = Modifier.size(20.dp),
                 )
                 if (showBadge) {
-                    // アイコンと点が被らないよう、点の周囲を背景色でくり抜く
+                    // アイコンと点が被らないよう、半透明の背景色そのままの縁を点の周囲に敷く
+                    // （不透明色や二重合成にせず、単純に一度だけ重ねる）
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .offset(x = 4.dp, y = (-2).dp)
-                            .size(11.dp)
-                            .background(AppTheme.colors.navigationSurface, CircleShape),
+                            .size(10.dp)
+                            .background(badgeRingColor, CircleShape),
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(7.dp)
-                                .background(AppTheme.colors.themeColorFirst, CircleShape),
+                                .background(badgeDotColor, CircleShape),
                         )
                     }
                 }
