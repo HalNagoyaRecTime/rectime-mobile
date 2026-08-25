@@ -29,3 +29,6 @@ composeApp/google-services.json
 
 # Developer-specific Xcode signing and API settings.
 iosApp/Configuration/Config.xcconfig
+
+# Firebase iOS project configuration is provided locally or by CI.
+iosApp/iosApp/GoogleService-Info.plist

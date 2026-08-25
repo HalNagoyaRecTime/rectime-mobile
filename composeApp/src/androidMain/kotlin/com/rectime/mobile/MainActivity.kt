@@ -2,8 +2,6 @@ package com.rectime.mobile
 
 import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,11 +16,18 @@ import com.rectime.mobile.core.platform.initializePlatformContext
 import com.rectime.mobile.feature.auth.AuthDeepLinkHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.RectimeNotificationChannel
+import com.rectime.mobile.feature.notifications.setNotificationPermissionContext
+import com.rectime.mobile.feature.notifications.setNotificationPermissionRequester
 
 class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { }
+    ) { granted ->
+        notificationPermissionResult?.invoke(granted)
+        notificationPermissionResult = null
+    }
+
+    private var notificationPermissionResult: ((Boolean) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
@@ -40,10 +45,14 @@ class MainActivity : ComponentActivity() {
             ),
         )
         initializePlatformContext(this)
+        setNotificationPermissionContext(this)
+        setNotificationPermissionRequester { onResult ->
+            notificationPermissionResult = onResult
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         handleAuthCallback(intent)
         handleNotificationNavigation(intent)
         RectimeNotificationChannel.create(this)
-        requestNotificationPermission()
 
         setContent {
             App()
@@ -55,6 +64,13 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleAuthCallback(intent)
         handleNotificationNavigation(intent)
+    }
+
+    override fun onDestroy() {
+        setNotificationPermissionRequester(null)
+        setNotificationPermissionContext(null)
+        notificationPermissionResult = null
+        super.onDestroy()
     }
 
     private fun handleAuthCallback(intent: Intent?) {
@@ -72,13 +88,6 @@ class MainActivity : ComponentActivity() {
             extras.getString(key)?.let { key to it }
         }.toMap()
         NotificationNavigationHandler.handle(data)
-    }
-
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-
-        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }
 
