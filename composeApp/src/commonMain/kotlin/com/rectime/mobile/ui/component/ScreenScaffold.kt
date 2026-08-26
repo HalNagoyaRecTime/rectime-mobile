@@ -109,13 +109,22 @@ fun PushScreenScaffold(
             ),
             content = content,
         )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(AppTheme.layout.headerEdgeFade)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            AppTheme.colors.edgeFadeColor,
+                            AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+                        ),
+                    ),
+                ),
+        )
         PushHeader(
             title = title,
             onBack = onBack,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(horizontal = hPad)
-                .padding(top = spacing),
             onTrailingClick = onTrailingClick,
             trailing = trailing,
         )
