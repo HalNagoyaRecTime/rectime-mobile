@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 
+private val TrailingIconOffsetX = (-10).dp
+
 @Composable
 fun RootHeader(
     title: String,
@@ -68,7 +70,7 @@ fun RootHeader(
                         content = trailing,
                         color = Color.Transparent,
                         modifier = Modifier
-                            .offset(x = (-10).dp),
+                            .offset(x = TrailingIconOffsetX),
                     )
                 }
             }
