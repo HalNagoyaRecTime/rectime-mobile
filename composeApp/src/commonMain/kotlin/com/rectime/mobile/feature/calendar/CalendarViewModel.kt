@@ -6,45 +6,52 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
+import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalTime
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.format.char
 import kotlinx.datetime.toLocalDateTime
-import kotlinx.datetime.toLocalTime
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
+private const val EVENTS_CACHE_KEY = "calendar_events_v1"
+
 @OptIn(ExperimentalTime::class)
-class CalendarViewModel : ViewModel() {
+class CalendarViewModel(
+    private val client: HttpClient = createAppHttpClient(),
+    private val baseUrl: String = apiBaseUrl,
+    private val clock: Clock = Clock.System,
+    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    private val cache: LocalCache = LocalCache(),
+) : ViewModel() {
     val nowMinute: StateFlow<Int> = flow {
         while (true) {
-            emit(currentMinuteOfDay())
-            val second = Clock.System.now()
-                .toLocalDateTime(TimeZone.currentSystemDefault())
-                .second
-            delay(((60 - second) * 1000L).milliseconds)
+            val now = currentLocalDateTime()
+            emit(now.hour * 60 + now.minute)
+            delay(((60 - now.second) * 1000L).milliseconds)
         }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = currentMinuteOfDay(),
     )
-
-    private val client = createAppHttpClient()
 
     private val _events = mutableStateOf(listOf<TimelineEvent>())
     val events: State<List<TimelineEvent>> = _events
@@ -55,59 +62,91 @@ class CalendarViewModel : ViewModel() {
     var error by mutableStateOf<String?>(null)
         private set
 
-    val startTimeFormat = LocalTime.Format {
-        hour()
-        minute()
-    }
-
-    private val displayTimeFormat = LocalTime.Format {
-        hour()
-        char(':')
-        minute()
-    }
+    // trueのとき、_eventsは通信失敗時にローカルキャッシュから復元した前回取得分。
+    var isOffline by mutableStateOf(false)
+        private set
 
     fun fetchEvents() {
         viewModelScope.launch {
             try {
                 isLoading = true
                 error = null
-                val response = client.get(apiBaseUrl + "/api/v1/events")
-                val body: EventsResponse =
-                    response.body()
-                val timelineEvents = body.events.map {
-                    val startTime = LocalTime.parse(it.startTime, format = startTimeFormat)
-                    val endTime = LocalTime.parse(it.endTime, format = startTimeFormat)
-
-                    val startMinuteOfDay = startTime.hour * 60 + startTime.minute
-                    val endMinuteOfDay = endTime.hour * 60 + endTime.minute
-
-                    TimelineEvent(
-                        eventId = it.eventId,
-                        title = it.eventName,
-                        venue = it.venue,
-                        startMinuteOfDay = startMinuteOfDay,
-                        durationMinutes = endMinuteOfDay - startMinuteOfDay,
-                        lane = 0,
-                        laneCount = 1,
-                        startTimeLabel = displayTimeFormat.format(startTime),
-                        endTimeLabel = displayTimeFormat.format(endTime),
+                when (
+                    val result = fetchWithCacheFallback(
+                        fetchLive = {
+                            val response = client.get("$baseUrl/api/v1/events")
+                            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+                            response.body<EventsResponse>()
+                        },
+                        loadCache = { cache.load<EventsResponse>(EVENTS_CACHE_KEY) },
+                        saveCache = { cache.save(EVENTS_CACHE_KEY, it) },
                     )
+                ) {
+                    is CachedFetchResult.Fresh -> {
+                        _events.value = toTimelineEvents(result.value)
+                        isOffline = false
+                    }
 
+                    is CachedFetchResult.Cached -> {
+                        // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
+                        // errorはスナックバーで一瞬しか表示されないため、消えた後も未検証の
+                        // 古いイベントが表示され続けないよう_eventsもクリアする。
+                        if ((result.error as? HttpStatusException)?.status == HttpStatusCode.Unauthorized) {
+                            _events.value = emptyList()
+                            error = "ログイン情報の有効期限が切れました"
+                            isOffline = false
+                        } else {
+                            _events.value = toTimelineEvents(result.value)
+                            isOffline = true
+                            // 401以外の理由での フォールバックは「オフライン」として静かに
+                            // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
+                            // 可能性もある)を追えるようログには残す。
+                            result.error.printStackTrace()
+                        }
+                    }
+
+                    is CachedFetchResult.Failed -> {
+                        val status = (result.error as? HttpStatusException)?.status
+                        error = when (status) {
+                            HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
+                            else -> "通信に失敗しました"
+                        }
+                        if (status == HttpStatusCode.Unauthorized) {
+                            // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
+                            // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
+                            _events.value = emptyList()
+                        }
+                        isOffline = false
+                        result.error.printStackTrace()
+                    }
                 }
-                _events.value = timelineEvents
-
-            }catch (e: CancellationException){
+            } catch (e: CancellationException) {
                 throw e
-            }catch (e: Exception) {
+            } catch (e: Exception) {
                 error = "通信に失敗しました"
+                isOffline = false
                 e.printStackTrace()
             } finally {
                 isLoading = false
             }
-
         }
+    }
 
+    private fun toTimelineEvents(body: EventsResponse): List<TimelineEvent> {
+        val timelineEvents = body.events.mapNotNull {
+            val timelineEvent = it.toTimelineEvent()
 
+            // end <= start(不正データ・日跨ぎ)は0分に潰さず、原因が追えるようログを
+            // 出しつつ除外する。durationMinutes=0のカードはUI上の高さが0以下になり
+            // 実質見えなくなるだけで、原因調査ができなくなるため。
+            if (timelineEvent.durationMinutes <= 0) {
+                println("CalendarViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                return@mapNotNull null
+            }
+
+            timelineEvent
+        }
+        return assignLanes(timelineEvents)
     }
 
     override fun onCleared() {
@@ -115,11 +154,11 @@ class CalendarViewModel : ViewModel() {
         client.close()
     }
 
-}
+    private fun currentLocalDateTime(): LocalDateTime =
+        clock.now().toLocalDateTime(timeZone)
 
-
-@OptIn(ExperimentalTime::class)
-private fun currentMinuteOfDay(): Int {
-    val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-    return now.hour * 60 + now.minute
+    private fun currentMinuteOfDay(): Int {
+        val now = currentLocalDateTime()
+        return now.hour * 60 + now.minute
+    }
 }

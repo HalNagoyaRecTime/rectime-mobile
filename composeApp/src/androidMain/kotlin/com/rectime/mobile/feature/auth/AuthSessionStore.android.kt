@@ -1,17 +1,11 @@
 package com.rectime.mobile.feature.auth
 
 import android.content.Context
-
-private var authPlatformContext: Context? = null
-
-fun setAuthPlatformContext(context: Context) {
-    authPlatformContext = context.applicationContext
-    setExternalUrlContext(context)
-}
+import com.rectime.mobile.core.platform.getPlatformContext
 
 actual class AuthSessionStore {
     actual suspend fun load(): AuthSession? {
-        val context = authPlatformContext ?: return null
+        val context = getPlatformContext() ?: return null
         val value = context
             .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
             .getString("session", null)
@@ -20,7 +14,7 @@ actual class AuthSessionStore {
     }
 
     actual suspend fun save(session: AuthSession) {
-        val context = authPlatformContext ?: return
+        val context = getPlatformContext() ?: return
         context
             .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
             .edit()
@@ -29,7 +23,7 @@ actual class AuthSessionStore {
     }
 
     actual suspend fun clear() {
-        val context = authPlatformContext ?: return
+        val context = getPlatformContext() ?: return
         context
             .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
             .edit()
@@ -38,7 +32,7 @@ actual class AuthSessionStore {
     }
 
     actual suspend fun loadPendingAuth(): PendingAuth? {
-        val context = authPlatformContext ?: return null
+        val context = getPlatformContext() ?: return null
         val value = context
             .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
             .getString("pending_auth", null)
@@ -47,7 +41,7 @@ actual class AuthSessionStore {
     }
 
     actual suspend fun savePendingAuth(pending: PendingAuth) {
-        val context = authPlatformContext ?: return
+        val context = getPlatformContext() ?: return
         context
             .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
             .edit()
@@ -56,7 +50,7 @@ actual class AuthSessionStore {
     }
 
     actual suspend fun clearPendingAuth() {
-        val context = authPlatformContext ?: return
+        val context = getPlatformContext() ?: return
         context
             .getSharedPreferences("rectime_auth", Context.MODE_PRIVATE)
             .edit()

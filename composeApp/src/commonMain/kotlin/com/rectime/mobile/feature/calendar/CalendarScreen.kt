@@ -26,12 +26,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.schedule.CompetitionScheduleDetailScreen
+import com.rectime.mobile.ui.component.EventCard
+import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -52,10 +55,11 @@ object CalendarScreen : Screen {
 
         CalendarScreenUI(
             nowMinute = nowMinute,
-            onOpenEventDetail = { eventId -> navigationController.push(CompetitionScheduleDetailScreen(eventId)) },
+            onOpenEventDetail = { eventId -> navigationController.push(CompetitionDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
             error = viewModel.error,
+            isOffline = viewModel.isOffline,
         )
     }
 }
@@ -67,6 +71,7 @@ private fun CalendarScreenUI(
     events: List<TimelineEvent>,
     isLoading: Boolean,
     error: String?,
+    isOffline: Boolean,
 ) {
     val hourStart = 8
     val hourEnd = 22
@@ -92,6 +97,13 @@ private fun CalendarScreenUI(
                     color = AppTheme.colors.textSecondary,
                     modifier = Modifier.padding(start = hPad, top = 12.dp, bottom = 10.dp),
                 )
+
+                if (isOffline) {
+                    OfflineBanner(
+                        message = "オフライン: 最新のデータを取得できません。前回取得時の内容を表示しています。",
+                        modifier = Modifier.padding(horizontal = hPad, vertical = 4.dp),
+                    )
+                }
 
                 Row(modifier = Modifier.fillMaxWidth().padding(start = hPad)) {
                     Column(modifier = Modifier.width(56.dp)) {
@@ -134,38 +146,45 @@ private fun CalendarScreenUI(
                             val yOffset = hourHeight * (startMinutes / 60f)
                             val eventHeight = hourHeight * (event.durationMinutes / 60f)
 
-                        PressSurface(
-                            onClick = { onOpenEventDetail(event.eventId) },
-                            modifier = Modifier
-                                .width(laneWidth - 8.dp)
-                                .height(eventHeight - 6.dp)
-                                .padding(top = 4.dp)
+                            val cardModifier = Modifier
+                                .width(laneWidth - 0.dp)
+                                .height(eventHeight - 0.dp)
+                                .padding(0.dp)
                                 .align(Alignment.TopStart)
-                                .offset(x = xOffset + 4.dp, y = yOffset + 4.dp),
-                            color = AppTheme.colors.surfaceAccent,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp),
-                        ) {
-                            Column {
-                                Text(text = event.title, color = AppTheme.colors.textPrimary)
-                                Text(
-                                    text = "${event.startTimeLabel}〜${event.endTimeLabel}",
-                                    color = AppTheme.colors.textSecondary,
+                                .offset(x = xOffset + 0.dp, y = yOffset + 0.dp)
+
+                            if (event.overflowCount > 0) {
+                                // 「+N」は集約表示であり個別のイベント詳細を持たないため、
+                                // クリック可能なPressSurfaceは使わず非インタラクティブなBoxにする
+                                // (押せるのに何も起きない、というダミー導線を作らないため)。
+                                Box(
+                                    modifier = cardModifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(AppTheme.colors.surfaceMuted)
+                                        .padding(8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "+${event.overflowCount}",
+                                        color = AppTheme.colors.textSecondary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                val endMinuteOfDay = event.startMinuteOfDay + event.durationMinutes
+                                val isLive = nowMinute in event.startMinuteOfDay..endMinuteOfDay
+
+                                EventCard(
+                                    time = "${event.startTimeLabel}-${event.endTimeLabel}",
+                                    title = event.title,
+                                    court = event.venue,
+                                    isLive = isLive,
+                                    isParticipating = event.isParticipating,
+                                    onClick = { onOpenEventDetail(event.eventId) },
+                                    modifier = cardModifier
                                 )
-                                Text(text = event.venue, color = AppTheme.colors.textSecondary)
                             }
                         }
-                    }
-
-                    PressSurface(
-                        onClick = {/* 後で実装 */},
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp),
-                        color = AppTheme.colors.surfacePrimary,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    ) {
-                        Text(text = "+2", color = AppTheme.colors.textSecondary)
-                    }
 
                         if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
                             val nowOffset = hourHeight * ((nowMinute - hourStart * 60) / 60f)

@@ -22,12 +22,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ArrowsRotate
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
+import org.jetbrains.compose.resources.painterResource
+import rectime_mobile.composeapp.generated.resources.Res
+import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
 
 object NotificationsScreen : Screen {
     override val key: String = "notifications"
@@ -49,10 +52,10 @@ object NotificationsScreen : Screen {
                     )
                 } else {
                     Icon(
-                        imageVector = SolidGroup.ArrowsRotate,
+                        painter = painterResource(Res.drawable.ic_ic_refresh),
                         contentDescription = "更新",
-                        tint = AppTheme.colors.textPrimary,
-                        modifier = Modifier.size(18.dp),
+                        tint = AppTheme.colors.textNavigationInactive,
+                        modifier = Modifier.size(29.dp),
                     )
                 }
             },
@@ -73,10 +76,26 @@ object NotificationsScreen : Screen {
                 }
 
                 uiState.notifications.isEmpty() -> item {
-                    NotificationMessage(message = "通知はありません")
+                    Column {
+                        if (uiState.isOffline) {
+                            OfflineBanner(
+                                message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
+                                modifier = Modifier.padding(bottom = 8.dp),
+                            )
+                        }
+                        NotificationMessage(message = "通知はありません")
+                    }
                 }
 
                 else -> {
+                    if (uiState.isOffline) {
+                        item {
+                            OfflineBanner(
+                                message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        }
+                    }
                     uiState.error?.let { error ->
                         item {
                             Text(

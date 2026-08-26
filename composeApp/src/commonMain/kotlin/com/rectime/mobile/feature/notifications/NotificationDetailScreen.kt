@@ -22,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -70,14 +71,21 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                     }
 
                     uiState.notification != null -> {
-                        NotificationDetailContent(
-                            notification = requireNotNull(uiState.notification),
-                            onRelatedEventClick = { eventId ->
-                                navigationController.push(
-                                    CompetitionDetailScreen(eventId = eventId),
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (uiState.isOffline) {
+                                OfflineBanner(
+                                    message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
                                 )
-                            },
-                        )
+                            }
+                            NotificationDetailContent(
+                                notification = requireNotNull(uiState.notification),
+                                onRelatedEventClick = { eventId ->
+                                    navigationController.push(
+                                        CompetitionDetailScreen(eventId = eventId),
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -168,8 +176,10 @@ private fun NotificationRelatedEventLink(
     }
 }
 
-internal fun String.toNotificationDateTime(): String = runCatching {
-    val dateTime = Instant.parse(this).toLocalDateTime(TimeZone.currentSystemDefault())
+internal fun String.toNotificationDateTime(
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String = runCatching {
+    val dateTime = Instant.parse(this).toLocalDateTime(timeZone)
     "${dateTime.month.ordinal + 1}月${dateTime.day}日 " +
         "${dateTime.hour.toTwoDigits()}:${dateTime.minute.toTwoDigits()}"
 }.getOrElse { this }

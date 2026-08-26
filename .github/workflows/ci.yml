@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - develop-v2
+      - main
+  push:
+    branches:
+      - develop
+      - develop-v2
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  API_BASE_URL: https://api.example.invalid
+  RELEASE_API_BASE_URL: https://api.example.invalid
+
+jobs:
+  test-jvm:
+    name: Test (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Run commonTest on JVM target
+        run: ./gradlew :composeApp:jvmTest
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: jvm-test-report
+          path: composeApp/build/reports/tests/jvmTest
+          retention-days: 7
+
+  test-ios:
+    name: Test (iOS Simulator)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup iOS Config
+        run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
+
+      - name: Run commonTest on iOS simulator target
+        run: ./gradlew :composeApp:iosSimulatorArm64Test
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ios-test-report
+          path: composeApp/build/reports/tests/iosSimulatorArm64Test
+          retention-days: 7
