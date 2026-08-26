@@ -8,6 +8,7 @@ import androidx.compose.ui.unit.dp
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ArrowLeft
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronLeft
 
 @Composable
 fun PushHeader(
@@ -23,10 +24,10 @@ fun PushHeader(
         onLeadingClick = onBack,
         leading = {
             Icon(
-                imageVector = SolidGroup.ArrowLeft,
+                imageVector = SolidGroup.ChevronLeft,
                 contentDescription = "戻る",
-                tint = AppTheme.colors.textPrimary,
-                modifier = Modifier.size(18.dp),
+                tint = AppTheme.colors.textDetailsScreenHeader,
+                modifier = Modifier.size(25.dp),
             )
         },
         onTrailingClick = onTrailingClick,
