@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.calendar
+package com.rectime.mobile.feature.schedule
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache

@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.calendar
+package com.rectime.mobile.feature.schedule
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

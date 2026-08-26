@@ -1,13 +1,11 @@
-package com.rectime.mobile.feature.calendar
+package com.rectime.mobile.feature.schedule
 
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.format.char
 
 /**
- * @param overflowCount 0より大きい場合、これは実イベントではなく
- *   「表示しきれず集約された残りN件」を表す合成エントリであることを示す
- *   (assignLanesが同時重複数の上限を超えた際に生成する)。この場合
- *   title/venueは空文字列で、eventIdはクリック不可を示すダミー値になる。
+ * @param overflowCount 0より大きい場合、4レーン目の「+N」集約カードであることを示す
+ * @param overflowEvents 「+N」に集約された実際のイベント一覧（ポップアップ展開用）
  */
 data class TimelineEvent(
     val eventId: Int,
@@ -21,6 +19,7 @@ data class TimelineEvent(
     val endTimeLabel: String,
     val isParticipating: Boolean = false,
     val overflowCount: Int = 0,
+    val overflowEvents: List<TimelineEvent> = emptyList(),
 )
 
 private val apiTimeFormat = LocalTime.Format {
