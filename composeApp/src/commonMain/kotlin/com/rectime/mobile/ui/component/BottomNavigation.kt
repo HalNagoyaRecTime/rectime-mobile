@@ -29,9 +29,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -79,8 +84,8 @@ private val ItemLabelFontSize = 11.sp
 
 private val BadgeOffsetX = 4.dp
 private val BadgeOffsetY = (-5).dp
-private val BadgeRingSize = 13.dp
 private val BadgeDotSize = 10.dp
+private val BadgeCutoutGap = 1.5.dp
 
 private data class NavigationItemConfig(
     val screen: Screen,
@@ -254,7 +259,6 @@ private fun BottomNavigationItem(
 ) {
     val contentColor = if (selected) AppTheme.colors.themeColorFirst else AppTheme.colors.textNavigationInactive
     val pillShape = RoundedCornerShape(AppTheme.radius.full)
-    val badgeRingColor = AppTheme.colors.navigationDefaultBackground
     val badgeDotColor = AppTheme.colors.themeColorFirst
 
     PressSurface(
@@ -279,24 +283,39 @@ private fun BottomNavigationItem(
                     painter = painterResource(if (selected) filledIcon else outlineIcon),
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(ItemIconSize),
+                    modifier = Modifier
+                        .size(ItemIconSize)
+                        .then(
+                            if (showBadge) {
+                                // 背景色を上から塗るのではなくアイコン自体に穴を開けたい
+                                // （塗ると背景の不透明度と二重になってしまうため）
+                                Modifier
+                                    .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                                    .drawWithContent {
+                                        drawContent()
+                                        drawCircle(
+                                            color = Color.Black,
+                                            radius = (BadgeDotSize / 2 + BadgeCutoutGap).toPx(),
+                                            center = Offset(
+                                                x = size.width - (BadgeDotSize / 2).toPx() + BadgeOffsetX.toPx(),
+                                                y = (BadgeDotSize / 2).toPx() + BadgeOffsetY.toPx(),
+                                            ),
+                                            blendMode = BlendMode.Clear,
+                                        )
+                                    }
+                            } else {
+                                Modifier
+                            },
+                        ),
                 )
                 if (showBadge) {
-                    // アイコンの線と点が重ならないようにしたい
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .offset(x = BadgeOffsetX, y = BadgeOffsetY)
-                            .size(BadgeRingSize)
-                            .background(badgeRingColor, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(BadgeDotSize)
-                                .background(badgeDotColor, CircleShape),
-                        )
-                    }
+                            .size(BadgeDotSize)
+                            .background(badgeDotColor, CircleShape),
+                    )
                 }
             }
             Text(
