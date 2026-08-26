@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rectime.mobile.ui.modifier.outerShadow
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -332,248 +333,237 @@ fun EventCard(
         val hasOrangeBase = isLive || isParticipating
         val orangeColor = Color(0xFFFF4000)
 
-        Box(
+        PressSurface(
+            onClick = onClick,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { clip = false }
                 .then(
                     if (isLive) {
-                        Modifier.drawBehind {
-                            val rPx = (dim.cornerRadius + dim.borderExtend).toPx()
-                            val maxGlowPx = dim.glowRadius.toPx()
-                            val steps = 8
-
-                            for (i in 1..steps) {
-                                val spread = (i.toFloat() / steps) * maxGlowPx
-                                val strokeW = (maxGlowPx / steps) * 1.5f
-                                val alpha = (0.35f * (1f - (i.toFloat() / steps))).coerceIn(0f, 1f)
-
-                                drawRoundRect(
-                                    color = orangeColor.copy(alpha = alpha),
-                                    topLeft = Offset(-spread, -spread),
-                                    size = Size(size.width + spread * 2, size.height + spread * 2),
-                                    cornerRadius = CornerRadius(rPx + spread, rPx + spread),
-                                    style = Stroke(width = strokeW)
-                                )
-                            }
-                        }
+                        Modifier.outerShadow(
+                            shape = orangeShape,
+                            color = orangeColor,
+                            blurRadius = dim.glowRadius,
+                            offsetX = 0.dp,
+                            offsetY = 0.dp,
+                            spread = dim.glowRadius * 0.1f
+                        )
                     } else Modifier
-                )
+                ),
+            color = Color.Transparent,
+            shape = RoundedCornerShape(dim.cornerRadius),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
         ) {
-            PressSurface(
-                onClick = onClick,
-                modifier = Modifier.fillMaxSize(),
-                color = Color.Transparent,
-                shape = RoundedCornerShape(dim.cornerRadius),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        when {
+                            isLive -> Modifier.background(orangeColor, shape = orangeShape)
+                            isParticipating -> Modifier
+                                .padding(dim.borderExtend)
+                                .background(orangeColor, shape = orangeShape)
+                            else -> Modifier.padding(dim.borderExtend)
+                        }
+                    )
+                    .clip(orangeShape)
             ) {
+                if (isParticipating && variant != EventCardSizeVariant.Compact) {
+                    val badgeFontSize = when (variant) {
+                        EventCardSizeVariant.Large -> dim.largeBadgeFont
+                        EventCardSizeVariant.Medium -> dim.mediumBadgeFont
+                        else -> dim.smallBadgeFont
+                    }
+                    Box(
+                        modifier = Modifier.matchParentSize(),
+                        contentAlignment = Alignment.BottomEnd
+                    ) {
+                        Text(
+                            text = "出場",
+                            style = tightlySpacedTextStyle(
+                                fontSize = badgeFontSize,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = fontFamily
+                            ),
+                            modifier = Modifier
+                                .padding(
+                                    bottom = badgePad * 1.6f + if (isLive) dim.borderExtend * 0.5f else 0.dp,
+                                    end = badgePad + if (isLive) dim.borderExtend * 0.5f else 0.dp
+                                )
+                                .rotate(-45f)
+                        )
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(
-                            when {
-                                isLive -> Modifier.background(orangeColor, shape = orangeShape)
-                                isParticipating -> Modifier
-                                    .padding(dim.borderExtend)
-                                    .background(orangeColor, shape = orangeShape)
-                                else -> Modifier.padding(dim.borderExtend)
-                            }
+                            if (isLive) Modifier.padding(dim.borderExtend)
+                            else Modifier
                         )
-                        .clip(orangeShape)
+                        .outerShadow(
+                            shape = contentShape,
+                            color = Color.Black.copy(alpha = 0.15f),
+                            blurRadius = (1.5f * dim.u).dp,
+                            offsetX = 0.dp,
+                            offsetY = (0.5f * dim.u).dp
+                        )
                 ) {
-                    if (isParticipating && variant != EventCardSizeVariant.Compact) {
-                        val badgeFontSize = when (variant) {
-                            EventCardSizeVariant.Large -> dim.largeBadgeFont
-                            EventCardSizeVariant.Medium -> dim.mediumBadgeFont
-                            else -> dim.smallBadgeFont
-                        }
-                        Box(
-                            modifier = Modifier.matchParentSize(),
-                            contentAlignment = Alignment.BottomEnd
-                        ) {
-                            Text(
-                                text = "出場",
-                                style = tightlySpacedTextStyle(
-                                    fontSize = badgeFontSize,
-                                    fontWeight = FontWeight.Black,
-                                    fontFamily = fontFamily
-                                ),
-                                modifier = Modifier
-                                    .padding(bottom = badgePad * 1.6f + if (isLive) dim.borderExtend * 0.5f else 0.dp, end = badgePad + if (isLive) dim.borderExtend * 0.5f else 0.dp)
-                                    .rotate(-45f)
-                            )
-                        }
-                    }
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .then(
-                                if (isLive) {
-                                    Modifier.padding(dim.borderExtend)
-                                }
-                                else Modifier
-                            )
-                            .shadow(
-                                elevation = 5.dp,
-                                shape = contentShape,
-                                spotColor = Color.Black.copy(alpha = 0.9f),
-                                ambientColor = Color.Black.copy(alpha = 0.9f)
-                            )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(contentShape)
-                                .background(Color(0xFF2AB3BF))
-                                .drawWithCache {
-                                    val w = size.width
-                                    val h = size.height
+                            .clip(contentShape)
+                            .background(Color(0xFF2AB3BF))
+                            .drawWithCache {
+                                val w = size.width
+                                val h = size.height
 
-                                    val gradientBrush = Brush.linearGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = 0.30f),
-                                            Color(0xFF2AB3BF).copy(alpha = 0.30f)
-                                        ),
-                                        start = Offset(0f, 0f),
-                                        end = Offset(w, h)
-                                    )
+                                val gradientBrush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = 0.30f),
+                                        Color(0xFF2AB3BF).copy(alpha = 0.30f)
+                                    ),
+                                    start = Offset(0f, 0f),
+                                    end = Offset(w, h)
+                                )
 
-                                    val centerBaseX = w - dim.waveCenterOffset.toPx()
-                                    val slope = dim.waveSlope
-                                    val amplitude = dim.waveAmplitude.toPx()
-                                    val waveLength = dim.waveLength.toPx()
-                                    val strokeWidthPx = dim.borderStroke.toPx()
-                                    val cutPx = cutSize.toPx()
-                                    val centerY = h / 2f
+                                val centerBaseX = w - dim.waveCenterOffset.toPx()
+                                val slope = dim.waveSlope
+                                val amplitude = dim.waveAmplitude.toPx()
+                                val waveLength = dim.waveLength.toPx()
+                                val strokeWidthPx = dim.borderStroke.toPx()
+                                val cutPx = cutSize.toPx()
+                                val centerY = h / 2f
 
-                                    onDrawWithContent {
-                                        drawContent()
+                                onDrawWithContent {
+                                    drawContent()
 
-                                        if (isLive) {
-                                            val wavePath = Path()
-                                            var y = h
-                                            var first = true
+                                    if (isLive) {
+                                        val wavePath = Path()
+                                        var y = h
+                                        var first = true
 
-                                            while (y >= 0) {
-                                                val lineX = centerBaseX + slope * (y - centerY)
-                                                val phase = (y / waveLength) + (waveProgress * 2f * PI.toFloat())
-                                                val waveX = lineX + sin(phase) * amplitude
+                                        while (y >= 0) {
+                                            val lineX = centerBaseX + slope * (y - centerY)
+                                            val phase = (y / waveLength) + (waveProgress * 2f * PI.toFloat())
+                                            val waveX = lineX + sin(phase) * amplitude
 
-                                                if (first) {
-                                                    wavePath.moveTo(waveX, y)
-                                                    first = false
-                                                } else {
-                                                    wavePath.lineTo(waveX, y)
-                                                }
-                                                y -= 2f
+                                            if (first) {
+                                                wavePath.moveTo(waveX, y)
+                                                first = false
+                                            } else {
+                                                wavePath.lineTo(waveX, y)
                                             }
-
-                                            wavePath.lineTo(w, 0f)
-                                            wavePath.lineTo(w, h)
-                                            wavePath.close()
-
-                                            drawPath(wavePath, Color.White.copy(alpha = 0.25f))
-                                        } else {
-                                            drawRect(Color.White.copy(alpha = 0.15f))
+                                            y -= 2f
                                         }
 
-                                        drawRect(gradientBrush, blendMode = BlendMode.Multiply)
+                                        wavePath.lineTo(w, 0f)
+                                        wavePath.lineTo(w, h)
+                                        wavePath.close()
 
-                                        if (isLive) {
-                                            val outline = contentShape.createOutline(size, layoutDirection, this)
-                                            if (outline is Outline.Generic) {
-                                                drawPath(
-                                                    outline.path,
-                                                    Color.White.copy(alpha = 0.50f),
-                                                    style = Stroke(width = strokeWidthPx)
-                                                )
-                                            }
-                                        } else if (isParticipating && cutPx > 0f) {
-                                            val cutLinePath = Path().apply {
-                                                moveTo(w, (h - cutPx))
-                                                lineTo((w - cutPx), h)
-                                            }
+                                        drawPath(wavePath, Color.White.copy(alpha = 0.25f))
+                                    } else {
+                                        drawRect(Color.White.copy(alpha = 0.15f))
+                                    }
+
+                                    drawRect(gradientBrush, blendMode = BlendMode.Multiply)
+
+                                    if (isLive) {
+                                        val outline = contentShape.createOutline(size, layoutDirection, this)
+                                        if (outline is Outline.Generic) {
                                             drawPath(
-                                                cutLinePath,
+                                                outline.path,
                                                 Color.White.copy(alpha = 0.50f),
-                                                style = Stroke(
-                                                    width = strokeWidthPx,
-                                                    cap = StrokeCap.Round
-                                                )
+                                                style = Stroke(width = strokeWidthPx)
                                             )
                                         }
+                                    } else if (isParticipating && cutPx > 0f) {
+                                        val cutLinePath = Path().apply {
+                                            moveTo(w, (h - cutPx))
+                                            lineTo((w - cutPx), h)
+                                        }
+                                        drawPath(
+                                            cutLinePath,
+                                            Color.White.copy(alpha = 0.50f),
+                                            style = Stroke(
+                                                width = strokeWidthPx,
+                                                cap = StrokeCap.Round
+                                            )
+                                        )
                                     }
                                 }
-                                .padding(
-                                    horizontal = innerContentPadHorizontal,
-                                    vertical = innerContentPadVertical
-                                )
-                        ) {
-                            EventCardInnerContent(
-                                time = time,
-                                title = title,
-                                court = court,
-                                variant = variant,
-                                isLive = isLive,
-                                cutSize = cutSize,
-                                timeToTitleSpacing = timeToTitleSpacing,
-                                titleToCourtSpacing = titleToCourtSpacing,
-                                dim = dim,
-                                fontFamily = fontFamily
-                            )
-                        }
-                    }
-                    val armLength = when (variant) {
-                        EventCardSizeVariant.Large -> dim.largeArrowArm
-                        EventCardSizeVariant.Medium -> dim.mediumArrowArm
-                        EventCardSizeVariant.Small -> dim.smallArrowArm
-                        EventCardSizeVariant.Compact -> dim.compactArrowArm
-                    }
-                    val stroke = when (variant) {
-                        EventCardSizeVariant.Large -> dim.largeArrowStroke
-                        EventCardSizeVariant.Medium -> dim.mediumArrowStroke
-                        EventCardSizeVariant.Small -> dim.smallArrowStroke
-                        EventCardSizeVariant.Compact -> dim.compactArrowStroke
-                    }
-                    val offsetX = when (variant) {
-                        EventCardSizeVariant.Large -> dim.largeArrowOffsetX
-                        EventCardSizeVariant.Medium -> dim.mediumArrowOffsetX
-                        EventCardSizeVariant.Small -> dim.smallArrowOffsetX
-                        EventCardSizeVariant.Compact -> dim.compactArrowOffsetX
-                    }
-                    val offsetY = when (variant) {
-                        EventCardSizeVariant.Large -> dim.largeArrowOffsetY
-                        EventCardSizeVariant.Medium -> dim.mediumArrowOffsetY
-                        EventCardSizeVariant.Small -> dim.smallArrowOffsetY
-                        EventCardSizeVariant.Compact -> -1f.dp
-                    }
-
-                    val isCompact = variant == EventCardSizeVariant.Compact
-
-                    Box(
-                        modifier = Modifier
-                            .align(if (isCompact) Alignment.CenterEnd else Alignment.TopEnd)
-                            .offset(x = offsetX, y = offsetY)
-                            .size(armLength * 1.5f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val arm = armLength.toPx()
-                            val path = Path().apply {
-                                moveTo(0f, 0f)
-                                lineTo(arm, arm)
-                                lineTo(0f, arm * 2f)
                             }
-                            drawPath(
-                                path = path,
-                                color = Color.White,
-                                style = Stroke(
-                                    width = stroke.toPx(),
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
-                                )
+                            .padding(
+                                horizontal = innerContentPadHorizontal,
+                                vertical = innerContentPadVertical
                             )
+                    ) {
+                        EventCardInnerContent(
+                            time = time,
+                            title = title,
+                            court = court,
+                            variant = variant,
+                            isLive = isLive,
+                            cutSize = cutSize,
+                            timeToTitleSpacing = timeToTitleSpacing,
+                            titleToCourtSpacing = titleToCourtSpacing,
+                            dim = dim,
+                            fontFamily = fontFamily
+                        )
+                    }
+                }
+
+                val armLength = when (variant) {
+                    EventCardSizeVariant.Large -> dim.largeArrowArm
+                    EventCardSizeVariant.Medium -> dim.mediumArrowArm
+                    EventCardSizeVariant.Small -> dim.smallArrowArm
+                    EventCardSizeVariant.Compact -> dim.compactArrowArm
+                }
+                val stroke = when (variant) {
+                    EventCardSizeVariant.Large -> dim.largeArrowStroke
+                    EventCardSizeVariant.Medium -> dim.mediumArrowStroke
+                    EventCardSizeVariant.Small -> dim.smallArrowStroke
+                    EventCardSizeVariant.Compact -> dim.compactArrowStroke
+                }
+                val offsetX = when (variant) {
+                    EventCardSizeVariant.Large -> dim.largeArrowOffsetX
+                    EventCardSizeVariant.Medium -> dim.mediumArrowOffsetX
+                    EventCardSizeVariant.Small -> dim.smallArrowOffsetX
+                    EventCardSizeVariant.Compact -> dim.compactArrowOffsetX
+                }
+                val offsetY = when (variant) {
+                    EventCardSizeVariant.Large -> dim.largeArrowOffsetY
+                    EventCardSizeVariant.Medium -> dim.mediumArrowOffsetY
+                    EventCardSizeVariant.Small -> dim.smallArrowOffsetY
+                    EventCardSizeVariant.Compact -> -1f.dp
+                }
+
+                val isCompact = variant == EventCardSizeVariant.Compact
+
+                Box(
+                    modifier = Modifier
+                        .align(if (isCompact) Alignment.CenterEnd else Alignment.TopEnd)
+                        .offset(x = offsetX, y = offsetY)
+                        .size(armLength * 1.5f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val arm = armLength.toPx()
+                        val path = Path().apply {
+                            moveTo(0f, 0f)
+                            lineTo(arm, arm)
+                            lineTo(0f, arm * 2f)
                         }
+                        drawPath(
+                            path = path,
+                            color = Color.White,
+                            style = Stroke(
+                                width = stroke.toPx(),
+                                cap = StrokeCap.Round,
+                                join = StrokeJoin.Round
+                            )
+                        )
                     }
                 }
             }
