@@ -76,15 +76,15 @@ private val IndicatorShadowElevation = 4.dp
 private val IndicatorUnderlineHeight = 3.dp
 
 private val ItemContentPaddingHorizontal = 16.dp
-private val ItemContentPaddingTop = 10.dp
-private val ItemContentPaddingBottom = 6.dp
+private val ItemContentPaddingTop = 12.dp
+private val ItemContentPaddingBottom = 2.dp
 private val ItemContentSpacing = 2.dp
-private val ItemIconSize = 20.dp
+private val ItemIconSize = 24.dp
 private val ItemLabelFontSize = 11.sp
 
-private val BadgeOffsetX = 4.dp
+private val BadgeOffsetX = 2.dp
 private val BadgeOffsetY = (-5).dp
-private val BadgeDotSize = 10.dp
+private val BadgeDotSize = 13.dp
 private val BadgeCutoutGap = 1.5.dp
 
 private data class NavigationItemConfig(
@@ -101,13 +101,13 @@ fun BottomNavigationBar(
     onSelectRoot: (Screen) -> Unit,
     session: AuthSession,
     onLogout: () -> Unit,
-    hasUnreadNotifications: Boolean = false,
+    hasUnreadNotifications: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val items = listOf(
     NavigationItemConfig(
         CalendarScreen,
-        "カレンダー",
+        "スケジュール",
         Res.drawable.ic_schedule_outline,
         Res.drawable.ic_schedule_fill,
     ),
