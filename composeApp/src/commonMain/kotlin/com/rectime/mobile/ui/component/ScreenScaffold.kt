@@ -112,10 +112,6 @@ fun PushScreenScaffold(
         PushHeader(
             title = title,
             onBack = onBack,
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(horizontal = hPad)
-                .padding(top = spacing),
             onTrailingClick = onTrailingClick,
             trailing = trailing,
         )
