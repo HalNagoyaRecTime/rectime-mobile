@@ -5,6 +5,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -55,8 +56,10 @@ import rectime_mobile.composeapp.generated.resources.ic_schedule_outline
 import rectime_mobile.composeapp.generated.resources.ic_settings_fill
 import rectime_mobile.composeapp.generated.resources.ic_settings_outline
 
-// 3タブの幅を揃えたい（最長ラベルの「カレンダー」が収まる値にしている）
-private val NavItemContentWidth = 120.dp
+// バー幅に対する比率で幅を決め、かつ3タブの幅を揃えたい
+private const val NavItemContentWidthRatio = 0.33f
+private val NavItemContentMinWidth = 88.dp
+private val NavItemContentMaxWidth = 160.dp
 
 private val BarOuterMarginHorizontal = 16.dp
 private val BarOuterMarginVertical = 12.dp
@@ -95,14 +98,21 @@ fun BottomNavigationBar(
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isNotificationUpdated = true;
+
     val items = listOf(
-    NavigationItemConfig(CalendarScreen, "カレンダー", Res.drawable.ic_schedule_outline, Res.drawable.ic_schedule_fill),
+    NavigationItemConfig(
+        CalendarScreen,
+        "カレンダー",
+        Res.drawable.ic_schedule_outline,
+        Res.drawable.ic_schedule_fill,
+    ),
     NavigationItemConfig(
         NotificationsScreen,
         "通知",
         Res.drawable.ic_notification_outline,
         Res.drawable.ic_notification_fill,
-        showBadge = true,
+        showBadge = isNotificationUpdated,
     ),
     NavigationItemConfig(
         SettingsScreen(session = session, onLogout = onLogout),
@@ -132,12 +142,15 @@ fun BottomNavigationBar(
                     spotColor = AppTheme.colors.dropShadowDark,
                 ),
         )
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(AppTheme.colors.navigationDefaultBackground, shape)
                 .heightIn(min = AppTheme.layout.bottomTabMinHeight),
         ) {
+            val itemContentWidth = (maxWidth * NavItemContentWidthRatio)
+                .coerceIn(NavItemContentMinWidth, NavItemContentMaxWidth)
+
             // タブ切り替え時に強調表示をスライドさせたい
             val selectedBounds = itemBounds[currentScreen.key]
             if (selectedBounds != null) {
@@ -177,6 +190,7 @@ fun BottomNavigationBar(
                     filledIcon = item.filledIcon,
                     selected = currentScreen.key == item.screen.key,
                     showBadge = item.showBadge,
+                    contentWidth = itemContentWidth,
                     onClick = { onSelectRoot(item.screen) },
                     modifier = Modifier
                         .align(itemAlignment)
@@ -234,6 +248,7 @@ private fun BottomNavigationItem(
     filledIcon: DrawableResource,
     selected: Boolean,
     showBadge: Boolean,
+    contentWidth: Dp,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -255,7 +270,7 @@ private fun BottomNavigationItem(
         ),
     ) {
         Column(
-            modifier = Modifier.width(NavItemContentWidth),
+            modifier = Modifier.width(contentWidth),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ItemContentSpacing),
         ) {
