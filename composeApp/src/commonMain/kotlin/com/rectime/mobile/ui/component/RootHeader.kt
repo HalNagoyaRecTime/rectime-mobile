@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.unit.DpOffset
@@ -66,10 +66,12 @@ fun RootHeader(
                     AppIconButton(
                         onClick = onTrailingClick,
                         content = trailing,
+                        color = Color.Transparent,
+                        modifier = Modifier
+                            .offset(x = (-10).dp),
                     )
                 }
             }
         }
-
     }
 }
