@@ -101,10 +101,9 @@ fun BottomNavigationBar(
     onSelectRoot: (Screen) -> Unit,
     session: AuthSession,
     onLogout: () -> Unit,
+    hasUnreadNotifications: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val isNotificationUpdated = true;
-
     val items = listOf(
     NavigationItemConfig(
         CalendarScreen,
@@ -117,7 +116,7 @@ fun BottomNavigationBar(
         "通知",
         Res.drawable.ic_notification_outline,
         Res.drawable.ic_notification_fill,
-        showBadge = isNotificationUpdated,
+        showBadge = hasUnreadNotifications,
     ),
     NavigationItemConfig(
         SettingsScreen(session = session, onLogout = onLogout),
