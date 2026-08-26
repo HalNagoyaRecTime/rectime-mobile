@@ -6,16 +6,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.theme.AppTheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.unit.dp
+import com.rectime.mobile.ui.modifier.outerShadow
+
+private val HeaderUnderlineHeight = 3.dp  // BottomNavIndicatorの値を流用
+private val HeaderBottomRadius = 20.dp
 
 @Composable
 internal fun HeaderTitleBar(
@@ -26,15 +34,26 @@ internal fun HeaderTitleBar(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
+    val shape = RoundedCornerShape(bottomStart = HeaderBottomRadius, bottomEnd = HeaderBottomRadius)
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(color = AppTheme.colors.detailsScreenHeaderBackground),
+            .background(color = AppTheme.colors.detailsScreenHeaderBackground, shape = shape)
+            .clip(shape)
+            .outerShadow(
+                shape = RectangleShape,
+                color = AppTheme.colors.dropShadowDark,
+                blurRadius = 8.dp,
+                offsetX = 0.dp,
+                offsetY = 4.dp,
+            ),
     ){
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
+                .padding(bottom = 11.dp)
                 .height(AppTheme.layout.headerAction),
             contentAlignment = Alignment.Center,
         ) {
@@ -66,5 +85,13 @@ internal fun HeaderTitleBar(
                 )
             }
         }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(HeaderUnderlineHeight)
+                .background(AppTheme.colors.themeColorFirst),
+        )
     }
 }
