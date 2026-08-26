@@ -44,9 +44,11 @@ data class AppColorTokens(
     val textUnreadNotificationTitle: Color,
     val textUnreadNotificationBody: Color,
     val textUnreadNotificationTime: Color,
+    val unreadNotificationChevron: Color,
     val textReadNotificationTitle: Color,
     val textReadNotificationBody: Color,
     val textReadNotificationTime: Color,
+    val readNotificationChevron: Color,
     val notificationBackground: Color,
     // スケジュール画面
     val textScheduleTimeBar: Color,
@@ -118,9 +120,11 @@ private val defaultLight = AppColorTokens(
     textUnreadNotificationTitle = Color(0xFF000000),
     textUnreadNotificationBody = Color(0xFF666666),
     textUnreadNotificationTime = Color(0xFF000000),
+    unreadNotificationChevron = Color(0xFF666666),
     textReadNotificationTitle = Color(0xFF333333),
     textReadNotificationBody = Color(0xFF808080),
     textReadNotificationTime = Color(0xFFb3b3b3),
+    readNotificationChevron = Color(0xFF999999),
     notificationBackground = Color(0xFFf2f2f2),
     //スケジュール画面
     textScheduleTimeBar = Color(0xFF999999),
