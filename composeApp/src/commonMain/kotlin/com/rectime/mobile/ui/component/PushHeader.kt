@@ -10,7 +10,6 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronLeft
 
-private val BackIconOffsetX = 15.dp
 
 @Composable
 fun PushHeader(
@@ -29,9 +28,7 @@ fun PushHeader(
                 imageVector = SolidGroup.ChevronLeft,
                 contentDescription = "戻る",
                 tint = AppTheme.colors.textDetailsScreenHeader,
-                modifier = Modifier
-                    .size(25.dp)
-                    .offset(x = BackIconOffsetX),
+                modifier = Modifier.size(22.dp)
             )
         },
         onTrailingClick = onTrailingClick,

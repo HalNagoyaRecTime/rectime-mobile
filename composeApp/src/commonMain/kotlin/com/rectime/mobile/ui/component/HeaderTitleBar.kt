@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +25,7 @@ import com.rectime.mobile.ui.modifier.outerShadow
 
 private val HeaderUnderlineHeight = 3.dp  // BottomNavIndicatorの値を流用
 private val HeaderBottomRadius = 20.dp
+private val BackIconOffsetX = 15.dp
 
 @Composable
 internal fun HeaderTitleBar(
@@ -40,28 +42,28 @@ internal fun HeaderTitleBar(
         modifier = modifier
             .fillMaxWidth()
             .background(color = AppTheme.colors.detailsScreenHeaderBackground, shape = shape)
-            .clip(shape)
             .outerShadow(
-                shape = RectangleShape,
+                shape = shape,
                 color = AppTheme.colors.dropShadowDark,
                 blurRadius = 8.dp,
                 offsetX = 0.dp,
                 offsetY = 4.dp,
-            ),
+            )
+            .clip(shape),
     ){
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(bottom = 11.dp)
-                .height(AppTheme.layout.headerAction),
+                .padding(bottom = 7.dp)
+                .height(AppTheme.layout.headerDetailAction),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = title,
                 color = AppTheme.colors.textDetailsScreenHeader,
                 fontWeight = FontWeight.Medium,
-                fontSize = 25.sp,
+                fontSize = 21.sp,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -74,7 +76,9 @@ internal fun HeaderTitleBar(
                     onClick = onLeadingClick,
                     color = Color.Transparent,
                     content = leading,
-                    modifier = Modifier.align(Alignment.CenterStart),
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = BackIconOffsetX),
                 )
             }
             if (trailing != null || onTrailingClick != null) {
