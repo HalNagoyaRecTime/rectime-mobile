@@ -16,12 +16,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.shadow.Shadow
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.ui.modifier.outerShadow
 
 private val TrailingIconOffsetX = (-10).dp
 
@@ -37,13 +35,12 @@ fun RootHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(color = AppTheme.colors.headerBackground)
-                .dropShadow(
+                .outerShadow(
                     shape = RectangleShape,
-                    shadow = Shadow(
-                        radius = 8.dp,
-                        color = AppTheme.colors.dropShadowDark,
-                        offset = DpOffset(x = 0.dp, y = 4.dp)
-                    )
+                    color = AppTheme.colors.dropShadowDark,
+                    blurRadius = 8.dp,
+                    offsetX = 0.dp,
+                    offsetY = 4.dp,
                 ),
         ) {
             Row(
