@@ -21,11 +21,13 @@ data class NotificationsUiState(
     val error: String? = null,
     // trueのとき、notificationsは通信失敗時にローカルキャッシュから復元した前回取得分。
     val isOffline: Boolean = false,
+    val readIds: Set<Int> = emptySet(),
 )
 
 class NotificationsViewModel(
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),
+    private val readStore: NotificationReadStore = NotificationReadStore.shared,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NotificationsUiState(isLoading = true))
     val uiState: StateFlow<NotificationsUiState> = _uiState.asStateFlow()
@@ -34,6 +36,12 @@ class NotificationsViewModel(
 
     init {
         loadNotifications(isRefresh = false)
+        viewModelScope.launch {
+            readStore.restore()
+            readStore.readIds.collect { readIds ->
+                _uiState.value = _uiState.value.copy(readIds = readIds)
+            }
+        }
     }
 
     fun refresh() {
@@ -59,9 +67,12 @@ class NotificationsViewModel(
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
-                        _uiState.value = NotificationsUiState(
+                        _uiState.value = _uiState.value.copy(
                             notifications = result.value,
                             isLoading = false,
+                            isRefreshing = false,
+                            isOffline = false,
+                            error = null,
                         )
                     }
 
@@ -76,10 +87,12 @@ class NotificationsViewModel(
                                 error = result.error.toNotificationErrorMessage(),
                             )
                         } else {
-                            _uiState.value = NotificationsUiState(
+                            _uiState.value = _uiState.value.copy(
                                 notifications = result.value,
                                 isLoading = false,
+                                isRefreshing = false,
                                 isOffline = true,
+                                error = null,
                             )
                             // 401/404以外の理由でのフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
@@ -145,6 +158,7 @@ class NotificationDetailViewModel(
     private val notificationId: Int,
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),
+    private val readStore: NotificationReadStore = NotificationReadStore.shared,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NotificationDetailUiState())
     val uiState: StateFlow<NotificationDetailUiState> = _uiState.asStateFlow()
@@ -179,6 +193,7 @@ class NotificationDetailViewModel(
                             notification = result.value,
                             isLoading = false,
                         )
+                        readStore.markRead(notificationId)
                     }
 
                     is CachedFetchResult.Cached -> {
@@ -195,6 +210,7 @@ class NotificationDetailViewModel(
                                 isLoading = false,
                                 isOffline = true,
                             )
+                            readStore.markRead(notificationId)
                             // 401/404以外の理由でのフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
                             result.error.printStackTrace()
