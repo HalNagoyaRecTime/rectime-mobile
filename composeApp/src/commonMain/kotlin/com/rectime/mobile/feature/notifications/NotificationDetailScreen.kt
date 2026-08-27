@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.OfflineBanner
@@ -102,7 +102,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                                 isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
                                 onRelatedEventClick = { eventId ->
                                     navigationController.push(
-                                        CompetitionDetailScreen(eventId = eventId),
+                                        EventDetailScreen(eventId = eventId),
                                     )
                                 },
                             )

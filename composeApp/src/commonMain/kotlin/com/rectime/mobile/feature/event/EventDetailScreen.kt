@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.competition
+package com.rectime.mobile.feature.event
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,13 +20,13 @@ import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 
-data class CompetitionDetailScreen(val eventId: Int) : Screen {
-    override val key: String = "competition_detail_$eventId"
+data class EventDetailScreen(val eventId: Int) : Screen {
+    override val key: String = "event_detail_$eventId"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
 
-        val viewModel = viewModel(key = key) { CompetitionDetailViewModel(eventId) }
+        val viewModel = viewModel(key = key) { EventDetailViewModel(eventId) }
         val uiState by viewModel.uiState.collectAsState()
 
         PushScreenScaffold(

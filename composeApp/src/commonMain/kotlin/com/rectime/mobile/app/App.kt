@@ -21,7 +21,7 @@ import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
-import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
@@ -86,7 +86,7 @@ fun App() {
                     }
                     is NotificationNavigationTarget.EventDetail -> {
                         navigationController.reset(ScheduleScreen)
-                        navigationController.push(CompetitionDetailScreen(target.eventId))
+                        navigationController.push(EventDetailScreen(target.eventId))
                     }
                     is NotificationNavigationTarget.NotificationDetail -> {
                         navigationController.reset(ScheduleScreen)

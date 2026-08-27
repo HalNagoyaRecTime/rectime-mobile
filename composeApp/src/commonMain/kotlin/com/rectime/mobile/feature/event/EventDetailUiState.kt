@@ -1,9 +1,9 @@
-package com.rectime.mobile.feature.competition
+package com.rectime.mobile.feature.event
 
 import com.rectime.mobile.core.model.EventDetail
 import com.rectime.mobile.core.model.Gathering
 
-data class CompetitionDetailUiState(
+data class EventDetailUiState(
     val isLoading: Boolean = false,
     val eventDetail: EventDetail? = null,
     val gathering: Gathering? = null,

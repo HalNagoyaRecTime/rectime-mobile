@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.competition
+package com.rectime.mobile.feature.event
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
@@ -31,7 +31,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class CompetitionDetailViewModelTest {
+class EventDetailViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
 
@@ -121,7 +121,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -151,7 +151,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = jsonOk(responseBody),
             gatheringsHandler = jsonOk("[]"),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 2, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 2, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -167,7 +167,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = jsonOk("[]"),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -186,7 +186,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = statusOnly(HttpStatusCode.InternalServerError),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -203,7 +203,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = throwing(),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -222,7 +222,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = statusOnly(HttpStatusCode.NotFound),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 999, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 999, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -239,7 +239,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = statusOnly(HttpStatusCode.InternalServerError),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -256,7 +256,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = throwing(),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -275,7 +275,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = jsonOk(malformedBody),
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -292,7 +292,7 @@ class CompetitionDetailViewModelTest {
             eventsHandler = jsonOk(validEventBody),
             gatheringsHandler = jsonOk("""[{"gathering_id": 1}]"""),
         )
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -341,7 +341,7 @@ class CompetitionDetailViewModelTest {
         seedCache(eventId = 1, cache)
         val client = buildClient(eventsHandler = throwing(), gatheringsHandler = throwing())
 
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -361,7 +361,7 @@ class CompetitionDetailViewModelTest {
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
 
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -381,7 +381,7 @@ class CompetitionDetailViewModelTest {
             gatheringsHandler = jsonOk(validGatheringsBody),
         )
 
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -403,7 +403,7 @@ class CompetitionDetailViewModelTest {
             gatheringsHandler = statusOnly(HttpStatusCode.Unauthorized),
         )
 
-        val viewModel = CompetitionDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value

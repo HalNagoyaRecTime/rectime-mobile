@@ -51,7 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
 import com.rectime.mobile.ui.component.OfflineBanner
@@ -75,7 +75,7 @@ object ScheduleScreen : Screen {
 
         ScheduleScreenUI(
             nowMinute = nowMinute,
-            onOpenEventDetail = { eventId -> navigationController.push(CompetitionDetailScreen(eventId)) },
+            onOpenEventDetail = { eventId -> navigationController.push(EventDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
             error = viewModel.error,
