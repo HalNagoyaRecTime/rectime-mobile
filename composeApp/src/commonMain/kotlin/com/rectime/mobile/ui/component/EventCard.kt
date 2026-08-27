@@ -380,6 +380,7 @@ fun EventCard(
         val hasOrangeBase = isLive || isParticipating
         val themeColorFirst = AppTheme.colors.themeColorFirst
         val themeColorSecond = AppTheme.colors.themeColorSecond
+        val eventCardBoundaryLine = AppTheme.colors.eventCardBoundaryLine
 
         Box(
             modifier = Modifier
@@ -522,7 +523,7 @@ fun EventCard(
                                         if (outline is Outline.Generic) {
                                             drawPath(
                                                 outline.path,
-                                                Color.White.copy(alpha = 0.50f),
+                                                eventCardBoundaryLine,
                                                 style = Stroke(width = strokeWidthPx)
                                             )
                                         }
@@ -533,7 +534,7 @@ fun EventCard(
                                         }
                                         drawPath(
                                             cutLinePath,
-                                            Color.White.copy(alpha = 0.50f),
+                                            eventCardBoundaryLine,
                                             style = Stroke(
                                                 width = strokeWidthPx,
                                                 cap = StrokeCap.Round
@@ -647,6 +648,7 @@ private fun EventCardInnerContent(
         } else {
             0.dp
         }
+        val eventVenueBackground = AppTheme.colors.eventVenueBackground
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -681,7 +683,7 @@ private fun EventCardInnerContent(
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.15f))
+                            .background(eventVenueBackground)
                             .padding(
                                 horizontal = (2.3f * dim.u).dp,
                                 vertical = (0.1f * dim.u).dp
@@ -723,7 +725,7 @@ private fun EventCardInnerContent(
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.15f))
+                            .background(eventVenueBackground)
                             .padding(
                                 horizontal = (2f * dim.u).dp,
                                 vertical = (0.1f * dim.u).dp
