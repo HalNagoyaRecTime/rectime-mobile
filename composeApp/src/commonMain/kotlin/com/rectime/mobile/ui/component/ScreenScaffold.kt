@@ -109,6 +109,8 @@ fun PushScreenScaffold(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     horizontalPadding: Boolean = true,
+    contentTopPadding: Boolean = true,
+    headerEdgeFade: Boolean = true,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
@@ -117,6 +119,12 @@ fun PushScreenScaffold(
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
 
+    val topInset = if (contentTopPadding) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing
+    } else {
+        0.dp
+    }
+
     Box(modifier = modifier
         .fillMaxSize()
         .background(AppTheme.colors.commonBackground),
@@ -124,25 +132,27 @@ fun PushScreenScaffold(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
+                top = topInset,
                 start = if (horizontalPadding) hPad else 0.dp,
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
             content = content,
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(AppTheme.layout.headerEdgeFade)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            AppTheme.colors.edgeFadeColor,
-                            AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+        if (headerEdgeFade) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(AppTheme.layout.headerEdgeFade)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                AppTheme.colors.edgeFadeColor,
+                                AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+                            ),
                         ),
                     ),
-                ),
-        )
+            )
+        }
         PushHeader(
             title = title,
             onBack = onBack,

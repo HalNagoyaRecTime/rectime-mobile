@@ -87,7 +87,7 @@ class AuthViewModel(
                         // サーバーエラーも含む)で投げられるため、ステータスコードまで
                         // 見て判定する。401(refreshTokenId自体が無効・失効)の場合のみ
                         // セッションが本当に無効と判断し、セッション・キャッシュを
-                        // クリアする。他画面(Calendar/Competition等)のセッション切れ
+                        // クリアする。他画面(Calendar/Event等)のセッション切れ
                         // 判定も同様に401のみを見ている。
                         sessionStore.clear()
                         sessionStore.clearPendingAuth()

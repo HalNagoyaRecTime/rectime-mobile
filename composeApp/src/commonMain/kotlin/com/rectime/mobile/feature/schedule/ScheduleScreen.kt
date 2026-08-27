@@ -3,7 +3,6 @@ package com.rectime.mobile.feature.schedule
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -19,10 +18,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -46,12 +43,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.ui.component.AppModal
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
 import com.rectime.mobile.ui.component.OfflineBanner
@@ -75,7 +72,7 @@ object ScheduleScreen : Screen {
 
         ScheduleScreenUI(
             nowMinute = nowMinute,
-            onOpenEventDetail = { eventId -> navigationController.push(CompetitionDetailScreen(eventId)) },
+            onOpenEventDetail = { eventId -> navigationController.push(EventDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
             error = viewModel.error,
@@ -452,46 +449,33 @@ private fun ScheduleScreenUI(
         }
 
         selectedOverflowEvents?.let { hiddenEvents ->
-            Dialog(onDismissRequest = { selectedOverflowEvents = null }) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(AppTheme.colors.commonBackground)
-                        .padding(16.dp)
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = "その他のイベント (${hiddenEvents.size}件)",
-                            color = AppTheme.colors.textDetailsScreenTitle,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
+            AppModal(onDismiss = { selectedOverflowEvents = null }) {
+                Text(
+                    text = "その他のイベント (${hiddenEvents.size}件)",
+                    color = AppTheme.colors.textDetailsScreenTitle,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
 
-                        hiddenEvents.forEach { event ->
-                            val endMin = event.startMinuteOfDay + event.durationMinutes
-                            val isLive = nowMinute in event.startMinuteOfDay..endMin
+                hiddenEvents.forEach { event ->
+                    val endMin = event.startMinuteOfDay + event.durationMinutes
+                    val isLive = nowMinute in event.startMinuteOfDay..endMin
 
-                            EventCard(
-                                time = "${event.startTimeLabel}-${event.endTimeLabel}",
-                                title = event.title,
-                                court = event.venue,
-                                isLive = isLive,
-                                isParticipating = event.isParticipating,
-                                onClick = {
-                                    selectedOverflowEvents = null
-                                    onOpenEventDetail(event.eventId)
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(60.dp)
-                            )
-                        }
-                    }
+                    EventCard(
+                        time = "${event.startTimeLabel}-${event.endTimeLabel}",
+                        title = event.title,
+                        court = event.venue,
+                        isLive = isLive,
+                        isParticipating = event.isParticipating,
+                        onClick = {
+                            selectedOverflowEvents = null
+                            onOpenEventDetail(event.eventId)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp)
+                    )
                 }
             }
         }
