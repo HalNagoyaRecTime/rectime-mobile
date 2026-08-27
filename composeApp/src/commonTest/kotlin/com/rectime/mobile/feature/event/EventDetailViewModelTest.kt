@@ -131,7 +131,7 @@ class EventDetailViewModelTest {
         assertEquals("100m走", state.eventDetail?.eventName)
         assertEquals("第1グラウンド", state.eventDetail?.venue)
         assertEquals("スパイク禁止", state.eventDetail?.ruleText)
-        assertEquals("第1集合場所", state.gathering?.gatheringSpotName)
+        assertEquals("第1集合場所", state.gatherings.singleOrNull()?.gatheringSpotName)
     }
 
     @Test
@@ -175,7 +175,7 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     // ---- 部分的な失敗(gatheringsだけ失敗しても、eventDetailは表示される) ----
@@ -194,7 +194,7 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     @Test
@@ -211,7 +211,7 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     // ---- events側の異常系(gatheringsは呼ばれない想定) ----
@@ -228,9 +228,9 @@ class EventDetailViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
-        assertEquals("競技が見つかりません", state.error)
+        assertEquals("イベントが見つかりません", state.error)
         assertNull(state.eventDetail)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     @Test
@@ -245,9 +245,9 @@ class EventDetailViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
-        assertEquals("競技情報の取得に失敗しました", state.error)
+        assertEquals("イベント情報の取得に失敗しました", state.error)
         assertNull(state.eventDetail)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     @Test
@@ -262,9 +262,9 @@ class EventDetailViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
-        assertEquals("競技情報の取得に失敗しました", state.error)
+        assertEquals("イベント情報の取得に失敗しました", state.error)
         assertNull(state.eventDetail)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     @Test
@@ -281,9 +281,9 @@ class EventDetailViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
-        assertEquals("競技情報の取得に失敗しました", state.error)
+        assertEquals("イベント情報の取得に失敗しました", state.error)
         assertNull(state.eventDetail)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     @Test
@@ -300,7 +300,7 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
     }
 
     // ---- オフラインキャッシュフォールバック ----
@@ -349,7 +349,7 @@ class EventDetailViewModelTest {
         assertNull(state.error)
         assertTrue(state.isOffline)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertEquals("第1集合場所", state.gathering?.gatheringSpotName)
+        assertEquals("第1集合場所", state.gatherings.singleOrNull()?.gatheringSpotName)
     }
 
     @Test
@@ -368,7 +368,7 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertEquals("ログイン情報の有効期限が切れました", state.error)
         assertNull(state.eventDetail)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
         assertFalse(state.isOffline)
     }
 
@@ -386,9 +386,9 @@ class EventDetailViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
-        assertEquals("競技が見つかりません", state.error)
+        assertEquals("イベントが見つかりません", state.error)
         assertNull(state.eventDetail)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
         assertFalse(state.isOffline)
     }
 
@@ -410,7 +410,7 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertNull(state.gathering)
+        assertTrue(state.gatherings.isEmpty())
         assertFalse(state.isOffline)
     }
 

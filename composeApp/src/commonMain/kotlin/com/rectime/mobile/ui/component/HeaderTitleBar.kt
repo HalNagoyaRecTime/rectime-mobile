@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -20,12 +23,20 @@ import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.theme.AppTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.ui.modifier.outerShadow
 
 private val HeaderUnderlineHeight = 3.dp  // BottomNavIndicatorの値を流用
 private val HeaderBottomRadius = 20.dp
 private val BackIconOffsetX = 15.dp
+private val HeaderContentBottomPadding = 7.dp
+
+@Composable
+internal fun headerTitleBarHeight(): Dp =
+    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+        AppTheme.layout.headerDetailAction +
+        HeaderContentBottomPadding
 
 @Composable
 internal fun HeaderTitleBar(
@@ -55,7 +66,7 @@ internal fun HeaderTitleBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(bottom = 7.dp)
+                .padding(bottom = HeaderContentBottomPadding)
                 .height(AppTheme.layout.headerDetailAction),
             contentAlignment = Alignment.Center,
         ) {

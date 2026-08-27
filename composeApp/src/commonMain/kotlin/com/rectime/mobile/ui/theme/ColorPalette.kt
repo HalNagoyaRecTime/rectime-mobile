@@ -72,6 +72,7 @@ data class AppColorTokens(
     val textDetailsScreenBody: Color,
     val textRelationEvent: Color,
     val detailsScreenHeaderBackground: Color,
+    val detailsScreenListBackground: Color,
     // モーダル画面
     val modalBackground: Color,
     val textMapModal: Color,
@@ -149,6 +150,7 @@ private val defaultLight = AppColorTokens(
     textDetailsScreenBody = Color(0xFF333333),
     textRelationEvent = Color(0xFF808080),
     detailsScreenHeaderBackground = Color(0xCCFFFFFF),
+    detailsScreenListBackground = Color(0xFFf2f2f2),
     //モーダル画面
     modalBackground = Color(0x4D000000),
     textMapModal = Color(0xFF808080),

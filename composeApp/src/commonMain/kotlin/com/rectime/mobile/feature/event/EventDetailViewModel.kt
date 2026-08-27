@@ -8,6 +8,7 @@ import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.core.network.GatheringMemberResponse
 import com.rectime.mobile.core.network.GatheringResponse
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
@@ -17,6 +18,9 @@ import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,12 +29,14 @@ import io.ktor.client.HttpClient
 
 class EventDetailViewModel(
     private val eventId: Int,
+    private val currentUserId: Int? = null,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
 
     private val eventCacheKey = "event_detail_v1_$eventId"
     private val gatheringCacheKey = "event_gathering_v1_$eventId"
+    private val attendingGatheringCacheKey = "event_attending_gathering_v1_$eventId"
 
     private val _uiState = MutableStateFlow(EventDetailUiState(isLoading = true))
     val uiState: StateFlow<EventDetailUiState> = _uiState.asStateFlow()
@@ -59,11 +65,12 @@ class EventDetailViewModel(
                         // イベント自体は最新でも、呼び出し情報(gathering)は別APIの
                         // 個別キャッシュにフォールバックしている可能性があるため、
                         // その結果に応じてisOfflineを立てる。
-                        val (gathering, gatheringIsOffline) = fetchGathering()
+                        val (gatherings, gatheringIsOffline) = fetchGatherings()
                         _uiState.value = EventDetailUiState(
                             isLoading = false,
                             eventDetail = result.value.toModel(),
-                            gathering = gathering,
+                            gatherings = gatherings,
+                            attendingGatheringId = resolveAttendingGatheringId(gatherings),
                             isOffline = gatheringIsOffline,
                         )
                     }
@@ -75,7 +82,7 @@ class EventDetailViewModel(
                         when (status) {
                             HttpStatusCode.NotFound -> _uiState.value = EventDetailUiState(
                                 isLoading = false,
-                                error = "競技が見つかりません",
+                                error = "イベントが見つかりません",
                             )
                             HttpStatusCode.Unauthorized -> _uiState.value = EventDetailUiState(
                                 isLoading = false,
@@ -87,7 +94,8 @@ class EventDetailViewModel(
                                 _uiState.value = EventDetailUiState(
                                     isLoading = false,
                                     eventDetail = result.value.toModel(),
-                                    gathering = fetchGatheringFromCacheOnly(),
+                                    gatherings = fetchGatheringsFromCacheOnly(),
+                                    attendingGatheringId = loadAttendingGatheringIdFromCache(),
                                     isOffline = true,
                                 )
                                 // 401/404以外の理由でのフォールバックは「オフライン」として
@@ -102,9 +110,9 @@ class EventDetailViewModel(
                         _uiState.value = EventDetailUiState(
                             isLoading = false,
                             error = when ((result.error as? HttpStatusException)?.status) {
-                                HttpStatusCode.NotFound -> "競技が見つかりません"
+                                HttpStatusCode.NotFound -> "イベントが見つかりません"
                                 HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
-                                else -> "競技情報の取得に失敗しました"
+                                else -> "イベント情報の取得に失敗しました"
                             },
                         )
                     }
@@ -115,13 +123,13 @@ class EventDetailViewModel(
                 e.printStackTrace()
                 _uiState.value = EventDetailUiState(
                     isLoading = false,
-                    error = "競技情報の取得に失敗しました",
+                    error = "イベント情報の取得に失敗しました",
                 )
             }
         }
     }
 
-    private suspend fun fetchGathering(): Pair<Gathering?, Boolean> {
+    private suspend fun fetchGatherings(): Pair<List<Gathering>, Boolean> {
         val result = fetchWithCacheFallback(
             fetchLive = {
                 val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId/gatherings")
@@ -132,33 +140,89 @@ class EventDetailViewModel(
             saveCache = { cache.save(gatheringCacheKey, it) },
         )
         return when (result) {
-            is CachedFetchResult.Fresh -> result.value.firstOrNull()?.toModel() to false
+            is CachedFetchResult.Fresh -> result.value.toSortedModels() to false
             is CachedFetchResult.Cached -> {
                 // 削除済み(404)・セッション切れ(401)の古いキャッシュを、単なる
                 // オフライン表示として出し続けないようにする。
                 val status = (result.error as? HttpStatusException)?.status
                 if (status == HttpStatusCode.NotFound || status == HttpStatusCode.Unauthorized) {
-                    null to false
+                    emptyList<Gathering>() to false
                 } else {
                     result.error.printStackTrace()
-                    result.value.firstOrNull()?.toModel() to true
+                    result.value.toSortedModels() to true
                 }
             }
             is CachedFetchResult.Failed -> {
                 result.error.printStackTrace()
-                null to false
+                emptyList<Gathering>() to false
             }
         }
     }
 
-    private suspend fun fetchGatheringFromCacheOnly(): Gathering? {
+    private suspend fun fetchGatheringsFromCacheOnly(): List<Gathering> {
         // LocalCache.load()はJSONデコード失敗のみを吸収し、KeyValueStore自体の
         // 読み込み失敗までは保護しない。ここで例外を伝播させると、既に復元できた
         // event側のオフライン表示ごと汎用エラーに上書きされてしまうため、
         // 呼び出し側でも防御する。
-        return runCatching {
-            cache.load<List<GatheringResponse>>(gatheringCacheKey)?.firstOrNull()?.toModel()
-        }.getOrNull()
+        return try {
+            cache.load<List<GatheringResponse>>(gatheringCacheKey)?.toSortedModels().orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private suspend fun resolveAttendingGatheringId(gatherings: List<Gathering>): Int? {
+        val userId = currentUserId ?: return null
+        if (gatherings.isEmpty()) return null
+
+        val results = coroutineScope {
+            gatherings
+                .map { gathering ->
+                    async { gathering.gatheringId to isAttending(gathering.gatheringId, userId) }
+                }
+                .awaitAll()
+        }
+
+        // 1件でも取得できていないと「出場しない」と「取得できていない」を区別できず、
+        // 出場する集合を未出場として描いてしまうため、前回の結果を使う。
+        if (results.any { (_, attending) -> attending == null }) {
+            return loadAttendingGatheringIdFromCache()
+        }
+
+        val attendingGatheringId = results.firstOrNull { (_, attending) -> attending == true }?.first
+        try {
+            cache.save(attendingGatheringCacheKey, attendingGatheringId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return attendingGatheringId
+    }
+
+    private suspend fun isAttending(gatheringId: Int, userId: Int): Boolean? {
+        return try {
+            val response = httpClient.get("$apiBaseUrl/api/v1/gatherings/$gatheringId/members")
+            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+            response.body<List<GatheringMemberResponse>>().any { it.userId == userId }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    private suspend fun loadAttendingGatheringIdFromCache(): Int? {
+        return try {
+            cache.load<Int?>(attendingGatheringCacheKey)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
     }
 
     override fun onCleared() {
@@ -166,3 +230,6 @@ class EventDetailViewModel(
         httpClient.close()
     }
 }
+
+private fun List<GatheringResponse>.toSortedModels(): List<Gathering> =
+    map { it.toModel() }.sortedBy { it.round }
