@@ -251,6 +251,7 @@ class NotificationDetailViewModel(
     override fun onCleared() {
         super.onCleared()
         gateway.close()
+        myEventsGateway.close()
     }
 }
 
