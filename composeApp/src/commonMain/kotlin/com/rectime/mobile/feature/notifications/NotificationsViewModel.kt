@@ -150,6 +150,7 @@ internal suspend fun fetchAllNotifications(
 data class NotificationDetailUiState(
     val notification: UserNotification? = null,
     val isLoading: Boolean = true,
+    val isParticipatingInRelatedEvent: Boolean = false,
     val error: String? = null,
     val isOffline: Boolean = false,
 )
@@ -159,6 +160,7 @@ class NotificationDetailViewModel(
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),
     private val readStore: NotificationReadStore = NotificationReadStore.shared,
+    private val myEventsGateway: MyEventsGateway = MyEventsApi(),
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NotificationDetailUiState())
     val uiState: StateFlow<NotificationDetailUiState> = _uiState.asStateFlow()
@@ -189,9 +191,11 @@ class NotificationDetailViewModel(
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
+                        val isParticipating = fetchIsParticipating(result.value)
                         _uiState.value = NotificationDetailUiState(
                             notification = result.value,
                             isLoading = false,
+                            isParticipatingInRelatedEvent = isParticipating,
                         )
                         readStore.markRead(notificationId)
                     }
@@ -205,10 +209,12 @@ class NotificationDetailViewModel(
                                 error = result.error.toNotificationErrorMessage(),
                             )
                         } else {
+                            val isParticipating = fetchIsParticipating(result.value)
                             _uiState.value = NotificationDetailUiState(
                                 notification = result.value,
                                 isLoading = false,
                                 isOffline = true,
+                                isParticipatingInRelatedEvent = isParticipating,
                             )
                             readStore.markRead(notificationId)
                             // 401/404以外の理由でのフォールバックは「オフライン」として
@@ -234,6 +240,12 @@ class NotificationDetailViewModel(
                 )
             }
         }
+    }
+
+    private suspend fun fetchIsParticipating(notification: UserNotification): Boolean {
+        val eventId = notification.relatedEvent?.id ?: return false
+        val myEventIds = runCatching { myEventsGateway.getMyEventIds() }.getOrDefault(emptySet())
+        return eventId in myEventIds
     }
 
     override fun onCleared() {
