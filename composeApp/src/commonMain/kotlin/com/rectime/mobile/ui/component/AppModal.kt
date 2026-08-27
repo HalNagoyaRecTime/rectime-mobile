@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -23,12 +24,15 @@ private const val DefaultModalWidthRatio = 0.9f
 private val ModalCornerRadius = 16.dp
 private val ModalPadding = 16.dp
 private val ModalContentSpacing = 10.dp
+private const val DefaultDimAmount = 0.3f // ← OS標準の暗幕(Androidのみ)をこの濃さに変更する（実際はOSデフォルト値に引っ張られ0.5f前後になる）
 
 @Composable
 fun AppModal(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     widthRatio: Float = DefaultModalWidthRatio,
+    // Dp単体からPaddingValuesに変更。省略時は今まで通り四方16dp（MapModal等の既存呼び出しは無変更で動く）
+    contentPadding: PaddingValues = PaddingValues(ModalPadding),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // 既定のダイアログ幅だと画面幅いっぱいまで広げられないため、幅の制御はwidthRatioに委ねる
@@ -36,6 +40,9 @@ fun AppModal(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
+        // OS標準の暗幕(Androidのみ実際に効く。iOS/Desktopは何もしない)の濃さを調整する
+        ModalScrimController(dimAmount = DefaultDimAmount)
+
         // ダイアログのウィンドウが画面幅いっぱいになるため、カードの中央寄せは自分で行う
         Box(
             modifier = Modifier.fillMaxWidth(),
@@ -46,7 +53,7 @@ fun AppModal(
                     .fillMaxWidth(widthRatio)
                     .clip(RoundedCornerShape(ModalCornerRadius))
                     .background(AppTheme.colors.commonBackground)
-                    .padding(ModalPadding),
+                    .padding(contentPadding),
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(ModalContentSpacing),
