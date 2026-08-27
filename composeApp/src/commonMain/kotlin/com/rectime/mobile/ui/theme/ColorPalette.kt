@@ -38,8 +38,7 @@ data class AppColorTokens(
     val headerBackground: Color,
     val edgeFadeColor: Color,
     // ドロップシャドウ
-    val dropShadowDark: Color,
-    val dropShadowLight: Color,
+    val dropShadow: Color,
     // 通知一覧画面
     val textUnreadNotificationTitle: Color,
     val textUnreadNotificationBody: Color,
@@ -56,6 +55,7 @@ data class AppColorTokens(
     val scheduleTimeBarBackground: Color,
     val pastAreaBackground: Color,
     val eventCardOverlay: Color,
+    val eventCardWave: Color,
     val eventCardBoundaryLine: Color,
     val eventOverflowBackground: Color,
     val eventVenueBackground: Color,
@@ -116,8 +116,7 @@ private val defaultLight = AppColorTokens(
     headerBackground = Color(0xB3FFFFFF),
     edgeFadeColor = Color(0xFFe6e6e6),
     //ドロップシャドウ
-    dropShadowDark = Color(0x1A000000),
-    dropShadowLight = Color(0x26000000),
+    dropShadow = Color(0x1A000000),
     //通知一覧画面
     textUnreadNotificationTitle = Color(0xFF000000),
     textUnreadNotificationBody = Color(0xFF666666),
@@ -133,7 +132,8 @@ private val defaultLight = AppColorTokens(
     textScheduleTimeLine = Color(0xFFb3b3b3),
     scheduleTimeBarBackground = Color(0xCCFFFFFF),
     pastAreaBackground = Color(0x33000000),
-    eventCardOverlay = Color(0x40FFFFFF),
+    eventCardOverlay = Color(0x26FFFFFF),
+    eventCardWave = Color(0x40FFFFFF),
     eventCardBoundaryLine = Color(0x80FFFFFF),
     eventOverflowBackground = Color(0xFFB3B3B3),
     eventVenueBackground = Color(0x26000000),

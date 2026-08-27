@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.modifier.outerShadow
+import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.notoSansJpFontFamily
 import kotlin.math.PI
 import kotlin.math.sin
@@ -377,7 +378,11 @@ fun EventCard(
         val contentShape = EventCardCutShape(dim.cornerRadius, cutSize)
 
         val hasOrangeBase = isLive || isParticipating
-        val orangeColor = Color(0xFFFF4000)
+        val themeColorFirst = AppTheme.colors.themeColorFirst
+        val themeColorSecond = AppTheme.colors.themeColorSecond
+        val eventCardBoundaryLine = AppTheme.colors.eventCardBoundaryLine
+        val eventCardWave = AppTheme.colors.eventCardWave
+        val eventCardOverlay = AppTheme.colors.eventCardOverlay
 
         Box(
             modifier = Modifier
@@ -387,7 +392,7 @@ fun EventCard(
                     if (isLive) {
                         Modifier.outerShadow(
                             shape = orangeShape,
-                            color = orangeColor,
+                            color = themeColorFirst,
                             blurRadius = dim.glowRadius,
                             offsetX = 0.dp,
                             offsetY = 0.dp,
@@ -401,10 +406,10 @@ fun EventCard(
                     .fillMaxSize()
                     .then(
                         when {
-                            isLive -> Modifier.background(orangeColor, shape = orangeShape)
+                            isLive -> Modifier.background(themeColorFirst, shape = orangeShape)
                             isParticipating -> Modifier
                                 .padding(dim.borderExtend)
-                                .background(orangeColor, shape = orangeShape)
+                                .background(themeColorFirst, shape = orangeShape)
                             else -> Modifier.padding(dim.borderExtend)
                         }
                     )
@@ -460,7 +465,7 @@ fun EventCard(
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(contentShape)
-                            .background(Color(0xFF2AB3BF))
+                            .background(themeColorSecond)
                             .drawWithCache {
                                 val w = size.width
                                 val h = size.height
@@ -468,7 +473,7 @@ fun EventCard(
                                 val gradientBrush = Brush.linearGradient(
                                     colors = listOf(
                                         Color.White.copy(alpha = 0.30f),
-                                        Color(0xFF2AB3BF).copy(alpha = 0.30f)
+                                        themeColorSecond.copy(alpha = 0.30f)
                                     ),
                                     start = Offset(0f, 0f),
                                     end = Offset(w, h)
@@ -508,9 +513,9 @@ fun EventCard(
                                         wavePath.lineTo(w, h)
                                         wavePath.close()
 
-                                        drawPath(wavePath, Color.White.copy(alpha = 0.25f))
+                                        drawPath(wavePath, eventCardWave)
                                     } else {
-                                        drawRect(Color.White.copy(alpha = 0.15f))
+                                        drawRect(eventCardOverlay)
                                     }
 
                                     drawRect(gradientBrush, blendMode = BlendMode.Multiply)
@@ -520,7 +525,7 @@ fun EventCard(
                                         if (outline is Outline.Generic) {
                                             drawPath(
                                                 outline.path,
-                                                Color.White.copy(alpha = 0.50f),
+                                                eventCardBoundaryLine,
                                                 style = Stroke(width = strokeWidthPx)
                                             )
                                         }
@@ -531,7 +536,7 @@ fun EventCard(
                                         }
                                         drawPath(
                                             cutLinePath,
-                                            Color.White.copy(alpha = 0.50f),
+                                            eventCardBoundaryLine,
                                             style = Stroke(
                                                 width = strokeWidthPx,
                                                 cap = StrokeCap.Round
@@ -645,6 +650,7 @@ private fun EventCardInnerContent(
         } else {
             0.dp
         }
+        val eventVenueBackground = AppTheme.colors.eventVenueBackground
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -679,7 +685,7 @@ private fun EventCardInnerContent(
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.15f))
+                            .background(eventVenueBackground)
                             .padding(
                                 horizontal = (2.3f * dim.u).dp,
                                 vertical = (0.1f * dim.u).dp
@@ -721,7 +727,7 @@ private fun EventCardInnerContent(
                     Box(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(Color.Black.copy(alpha = 0.15f))
+                            .background(eventVenueBackground)
                             .padding(
                                 horizontal = (2f * dim.u).dp,
                                 vertical = (0.1f * dim.u).dp

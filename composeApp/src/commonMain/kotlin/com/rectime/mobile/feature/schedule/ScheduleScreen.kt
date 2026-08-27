@@ -247,7 +247,7 @@ private fun ScheduleScreenUI(
                                             )
                                             .outerShadow(
                                                 shape = RoundedCornerShape(dim.cornerRadius),
-                                                color = AppTheme.colors.dropShadowDark,
+                                                color = AppTheme.colors.dropShadow,
                                                 blurRadius = 4.dp,
                                                 offsetY = 2.dp
                                             )
@@ -275,7 +275,7 @@ private fun ScheduleScreenUI(
                                             )
                                             .outerShadow(
                                                 shape = shadowSpec.shape,
-                                                color = AppTheme.colors.dropShadowDark,
+                                                color = AppTheme.colors.dropShadow,
                                                 blurRadius = 4.dp,
                                                 offsetY = 2.dp
                                             )
@@ -291,7 +291,7 @@ private fun ScheduleScreenUI(
                             .height(totalTimelineHeight)
                             .outerShadow(
                                 shape = RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp),
-                                color = AppTheme.colors.dropShadowDark,
+                                color = AppTheme.colors.dropShadow,
                                 blurRadius = 8.dp,
                                 offsetX = 2.dp,
                                 offsetY = 0.dp

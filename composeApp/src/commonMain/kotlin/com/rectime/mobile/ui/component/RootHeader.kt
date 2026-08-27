@@ -37,7 +37,7 @@ fun RootHeader(
                 .background(color = AppTheme.colors.headerBackground)
                 .outerShadow(
                     shape = RectangleShape,
-                    color = AppTheme.colors.dropShadowDark,
+                    color = AppTheme.colors.dropShadow,
                     blurRadius = 8.dp,
                     offsetX = 0.dp,
                     offsetY = 4.dp,
