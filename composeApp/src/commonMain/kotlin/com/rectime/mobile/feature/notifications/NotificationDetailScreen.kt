@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
@@ -102,28 +104,32 @@ private fun NotificationDetailContent(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(15.dp),
     ) {
         Text(
             text = notification.title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
             color = AppTheme.colors.textPrimary,
+            modifier = Modifier.padding(top = 16.dp),
         )
         Text(
             text = notification.scheduledAt.toNotificationDateTime(),
             style = MaterialTheme.typography.labelLarge,
             color = AppTheme.colors.textSecondary,
+            //modifier = Modifier.padding(top = (-5).dp),
         )
+        AppDivider()
         Text(
             text = notification.body,
             style = MaterialTheme.typography.bodyLarge,
             color = AppTheme.colors.textPrimary,
         )
+        AppDivider()
 
         notification.relatedEvent?.let { event ->
             Text(
-                text = "関連競技",
+                text = "関連イベント",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = AppTheme.colors.textSecondary,
