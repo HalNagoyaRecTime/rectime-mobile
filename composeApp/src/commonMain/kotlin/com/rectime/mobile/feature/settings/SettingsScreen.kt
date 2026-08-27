@@ -27,6 +27,7 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.modifier.outerShadow
+import com.rectime.mobile.ui.component.AppDivider
 
 // 画面全体の横幅を絞るための追加マージン。
 // RootScreenScaffoldが既にscreenHorizontalPaddingを適用しているので、これはその「上乗せ分」。
@@ -66,7 +67,7 @@ class SettingsScreen(
                     modifier = Modifier
                         .padding(
                             top = AppTheme.spacing.xxl,
-                            bottom = AppTheme.spacing.xxl,
+                            bottom = AppTheme.spacing.lg,
                             start = ExtraHorizontalMargin,
                             end = ExtraHorizontalMargin,
                         )
@@ -82,9 +83,7 @@ class SettingsScreen(
             }
 
             item {
-                HorizontalDivider(
-                    color = AppTheme.colors.commonSeparatorLine,
-                    thickness = 1.dp,
+                AppDivider(
                     modifier = Modifier.padding(horizontal = ExtraHorizontalMargin),
                 )
             }
