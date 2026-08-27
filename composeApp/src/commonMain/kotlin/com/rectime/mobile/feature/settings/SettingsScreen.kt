@@ -24,6 +24,9 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
+import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
+import com.rectime.mobile.feature.legal.LegalDocumentLinks
+import com.rectime.mobile.ui.modifier.outerShadow
 
 // 画面全体の横幅を絞るための追加マージン。
 // RootScreenScaffoldが既にscreenHorizontalPaddingを適用しているので、これはその「上乗せ分」。
@@ -39,6 +42,7 @@ class SettingsScreen(
     override fun Content(navigationController: NavigationController) {
         RootScreenScaffold(
             title = "設定",
+            modifier = Modifier.background(AppTheme.colors.settingBackground)
         ) {
             item {
                 UserInfoCard(
@@ -94,6 +98,20 @@ class SettingsScreen(
                     ),
                 )
             }
+            item {
+                LegalDocumentLinks(
+                    modifier = Modifier.padding(top = AppTheme.spacing.xxl),
+                )
+            }
+
+            item {
+                AccountDeletionSection(
+                    modifier = Modifier.padding(
+                        start = ExtraHorizontalMargin,
+                        end = ExtraHorizontalMargin,
+                    ),
+                )
+            }
         }
     }
 }
@@ -112,6 +130,14 @@ private fun UserInfoCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .fillMaxWidth()
+            .outerShadow(                                   // ← 追加
+                shape = RoundedCornerShape(AppTheme.radius.card),
+                color = AppTheme.colors.dropShadowDark,      // RootHeaderと同じ影の色トークンを流用
+                blurRadius = 8.dp,
+                offsetX = 0.dp,
+                offsetY = 4.dp,
+            )
             .background(
                 color = AppTheme.colors.commonBackground,
                 shape = RoundedCornerShape(AppTheme.radius.card),
@@ -191,5 +217,7 @@ private fun ContactSection(modifier: Modifier = Modifier) {
             fontSize = 12.sp,
             color = AppTheme.colors.textCopyRight,
         )
+
     }
+
 }
