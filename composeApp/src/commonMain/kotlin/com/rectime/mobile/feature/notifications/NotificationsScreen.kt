@@ -199,7 +199,7 @@ private fun NotificationCard(
             .padding(vertical = AppTheme.spacing.xs)
             .outerShadow(
                 shape = cardShape,
-                color = AppTheme.colors.dropShadowDark,
+                color = AppTheme.colors.dropShadow,
                 blurRadius = CardShadowBlur,
                 offsetX = 0.dp,
                 offsetY = CardShadowOffsetY,

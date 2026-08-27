@@ -38,8 +38,7 @@ data class AppColorTokens(
     val headerBackground: Color,
     val edgeFadeColor: Color,
     // ドロップシャドウ
-    val dropShadowDark: Color,
-    val dropShadowLight: Color,
+    val dropShadow: Color,
     // 通知一覧画面
     val textUnreadNotificationTitle: Color,
     val textUnreadNotificationBody: Color,
@@ -115,8 +114,7 @@ private val defaultLight = AppColorTokens(
     headerBackground = Color(0xB3FFFFFF),
     edgeFadeColor = Color(0xFFe6e6e6),
     //ドロップシャドウ
-    dropShadowDark = Color(0x1A000000),
-    dropShadowLight = Color(0x26000000),
+    dropShadow = Color(0x1A000000),
     //通知一覧画面
     textUnreadNotificationTitle = Color(0xFF000000),
     textUnreadNotificationBody = Color(0xFF666666),

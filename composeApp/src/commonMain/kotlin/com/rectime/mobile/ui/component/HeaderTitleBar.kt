@@ -44,7 +44,7 @@ internal fun HeaderTitleBar(
             .background(color = AppTheme.colors.detailsScreenHeaderBackground, shape = shape)
             .outerShadow(
                 shape = shape,
-                color = AppTheme.colors.dropShadowDark,
+                color = AppTheme.colors.dropShadow,
                 blurRadius = 8.dp,
                 offsetX = 0.dp,
                 offsetY = 4.dp,

@@ -161,8 +161,8 @@ fun BottomNavigationBar(
                     .shadow(
                         elevation = BarShadowElevation,
                         shape = shape,
-                        ambientColor = AppTheme.colors.dropShadowDark,
-                        spotColor = AppTheme.colors.dropShadowDark,
+                        ambientColor = AppTheme.colors.dropShadow,
+                        spotColor = AppTheme.colors.dropShadow,
                     ),
             )
             Box(
@@ -237,8 +237,8 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
                 .shadow(
                     elevation = IndicatorShadowElevation,
                     shape = pillShape,
-                    ambientColor = AppTheme.colors.dropShadowDark,
-                    spotColor = AppTheme.colors.dropShadowDark,
+                    ambientColor = AppTheme.colors.dropShadow,
+                    spotColor = AppTheme.colors.dropShadow,
                 ),
         )
         Box(
