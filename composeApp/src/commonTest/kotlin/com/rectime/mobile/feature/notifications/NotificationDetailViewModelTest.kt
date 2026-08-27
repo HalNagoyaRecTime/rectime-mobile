@@ -243,6 +243,12 @@ class NotificationDetailViewModelTest {
         }
     }
 
+    private class FakeMyEventsGateway(
+        private val idsProvider: suspend () -> Set<Int> = { emptySet() },
+    ) : MyEventsGateway {
+        override suspend fun getMyEventIds(): Set<Int> = idsProvider()
+    }
+
     // ---- 既読 ----
 
     @Test
@@ -293,5 +299,101 @@ class NotificationDetailViewModelTest {
         override suspend fun clear() {
             values.clear()
         }
+    }
+
+    // ---- 参加イベント判定 ----
+
+    @Test
+    fun isParticipatingIsTrueWhenRelatedEventIsInMyEvents() = runTest(testDispatcher) {
+        val relatedEvent = NotificationRelatedEvent(
+            id = 7,
+            name = "玉入れ",
+            venue = "体育館",
+            startTime = "2026-07-31T09:15:00+09:00",
+            endTime = "2026-07-31T09:45:00+09:00",
+        )
+        val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
+        val myEventsGateway = FakeMyEventsGateway { setOf(7, 9) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun isParticipatingIsFalseWhenRelatedEventIsNotInMyEvents() = runTest(testDispatcher) {
+        val relatedEvent = NotificationRelatedEvent(
+            id = 7,
+            name = "玉入れ",
+            venue = "体育館",
+            startTime = "2026-07-31T09:15:00+09:00",
+            endTime = "2026-07-31T09:45:00+09:00",
+        )
+        val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
+        val myEventsGateway = FakeMyEventsGateway { setOf(1, 2) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun isParticipatingIsFalseWhenNotificationHasNoRelatedEvent() = runTest(testDispatcher) {
+        val gateway = FakeGateway { notification(it) }  // relatedEvent = null (デフォルト)
+        val myEventsGateway = FakeMyEventsGateway { setOf(7) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun isParticipatingFallsBackToFalseWhenMyEventsGatewayFails() = runTest(testDispatcher) {
+        val relatedEvent = NotificationRelatedEvent(
+            id = 7,
+            name = "玉入れ",
+            venue = "体育館",
+            startTime = "2026-07-31T09:15:00+09:00",
+            endTime = "2026-07-31T09:45:00+09:00",
+        )
+        val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
+        val myEventsGateway = FakeMyEventsGateway { throw NotificationApiException(statusCode = 500) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        // 通知自体は正常に表示され、エラーにはならない
+        assertEquals(15, state.notification?.id)
+        assertNull(state.error)
+        // 参加判定だけfalseにフォールバック
+        assertFalse(state.isParticipatingInRelatedEvent)
     }
 }
