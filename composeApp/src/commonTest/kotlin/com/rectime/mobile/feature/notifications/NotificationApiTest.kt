@@ -237,8 +237,8 @@ class NotificationApiTest {
                     "event_id": 7,
                     "event_name": "玉入れ",
                     "venue": "体育館",
-                    "start_time": "2026-07-31T09:15:00+09:00",
-                    "end_time": "2026-07-31T09:45:00+09:00"
+                    "start_time": "0915",
+                    "end_time": "0945"
                   }
                 }
               ],
