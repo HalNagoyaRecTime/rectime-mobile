@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +31,7 @@ import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.component.AppDivider
+import com.rectime.mobile.ui.component.LogoutConfirmationModal
 
 // 画面全体の横幅を絞るための追加マージン。
 // RootScreenScaffoldが既にscreenHorizontalPaddingを適用しているので、これはその「上乗せ分」。
@@ -41,6 +45,8 @@ class SettingsScreen(
 
     @Composable
     override fun Content(navigationController: NavigationController) {
+        var showLogoutConfirmation by remember { mutableStateOf(false) }
+
         RootScreenScaffold(
             title = "設定",
             modifier = Modifier.background(AppTheme.colors.settingBackground)
@@ -56,7 +62,7 @@ class SettingsScreen(
 
             item {
                 Button(
-                    onClick = onLogout,
+                    onClick = { showLogoutConfirmation = true }, // ← onLogoutを直接呼ばず、まずモーダルを開く
                     shape = RoundedCornerShape(AppTheme.radius.full),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AppTheme.colors.themeColorFirst,
@@ -111,6 +117,16 @@ class SettingsScreen(
                     ),
                 )
             }
+        }
+
+        if (showLogoutConfirmation) {
+            LogoutConfirmationModal(
+                onConfirm = {
+                    showLogoutConfirmation = false
+                    onLogout()
+                },
+                onDismiss = { showLogoutConfirmation = false },
+            )
         }
     }
 }
