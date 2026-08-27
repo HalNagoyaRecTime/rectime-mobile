@@ -33,12 +33,12 @@ import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.recmap
 
-// 横長のマップを少しでも大きく見せるため、既定より広いカードにする
-private const val MapModalWidthRatio = 0.95f
+// 横長のマップをできるだけ大きく見せるため、画面幅いっぱいに近いカードにする
+private const val MapModalWidthRatio = 0.96f
 private val CloseButtonSize = 32.dp
 private val CloseIconSize = 18.dp
 private val MapCornerRadius = 12.dp
-private val HintFontSize = 15.sp
+private val HintFontSize = 14.sp
 private const val MapAspectRatio = 804f / 581f
 private const val MinScale = 1f
 private const val MaxScale = 5f
