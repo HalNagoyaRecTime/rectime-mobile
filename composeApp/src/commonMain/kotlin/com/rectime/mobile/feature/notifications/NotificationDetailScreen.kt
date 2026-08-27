@@ -39,6 +39,19 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.Instant
 
+private val LoadingIndicatorPadding = 24.dp
+private val ErrorContentPadding = 32.dp
+private val ErrorContentSpacing = 12.dp
+private val NotificationContentHorizontalPadding = 10.dp
+private val NotificationContentVerticalPadding = 12.dp
+private val NotificationContentSpacing = 12.dp
+private val NotificationTitleTopPadding = 16.dp
+private val NotificationDateTimeOffsetY = (-8).dp
+private val NotificationBodyLineHeight = 30.sp
+private val RelatedEventSpacing = 6.dp
+private val RelatedEventTitleTopPadding = 8.dp
+private val EventCardHeight = 80.dp
+
 data class NotificationDetailScreen(val id: Int) : Screen {
     override val key: String = "notification_detail_$id"
 
@@ -55,7 +68,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                 when {
                     uiState.isLoading -> {
                         CircularProgressIndicator(
-                            modifier = Modifier.padding(vertical = 24.dp),
+                            modifier = Modifier.padding(vertical = LoadingIndicatorPadding),
                         )
                     }
 
@@ -63,9 +76,9 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 32.dp),
+                                .padding(vertical = ErrorContentPadding),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(ErrorContentSpacing),
                         ) {
                             Text(
                                 text = requireNotNull(uiState.error),
@@ -78,7 +91,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                     }
 
                     uiState.notification != null -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(ErrorContentSpacing)) {
                             if (uiState.isOffline) {
                                 OfflineBanner(
                                     message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
@@ -110,21 +123,21 @@ private fun NotificationDetailContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(15.dp),
+            .padding(horizontal = NotificationContentHorizontalPadding, vertical = NotificationContentVerticalPadding),
+        verticalArrangement = Arrangement.spacedBy(NotificationContentSpacing),
     ) {
         Text(
             text = notification.title,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.ExtraBold,
             color = AppTheme.colors.textDetailsScreenTitle,
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.padding(top = NotificationTitleTopPadding),
         )
         Text(
             text = notification.scheduledAt.toNotificationDateTime(),
             style = MaterialTheme.typography.labelLarge,
             color = AppTheme.colors.textDetailsScreenTime,
-            modifier = Modifier.offset(y = (-8).dp),
+            modifier = Modifier.offset(y = NotificationDateTimeOffsetY),
         )
         AppDivider()
         Text(
@@ -132,23 +145,25 @@ private fun NotificationDetailContent(
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Medium,
             color = AppTheme.colors.textDetailsScreenBody,
-            lineHeight = 30.sp,
+            lineHeight = NotificationBodyLineHeight,
         )
         AppDivider()
 
         notification.relatedEvent?.let { event ->
-            Text(
-                text = "関連イベント",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                color = AppTheme.colors.textRelationEvent,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            NotificationRelatedEventLink(
-                event = event,
-                isParticipating = isParticipatingInRelatedEvent,
-                onClick = { onRelatedEventClick(event.id) },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(RelatedEventSpacing)) {
+                Text(
+                    text = "関連イベント",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = AppTheme.colors.textRelationEvent,
+                    modifier = Modifier.padding(top = RelatedEventTitleTopPadding),
+                )
+                NotificationRelatedEventLink(
+                    event = event,
+                    isParticipating = isParticipatingInRelatedEvent,
+                    onClick = { onRelatedEventClick(event.id) },
+                )
+            }
         }
     }
 }
