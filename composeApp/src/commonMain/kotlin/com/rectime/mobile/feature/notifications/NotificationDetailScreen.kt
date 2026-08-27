@@ -195,7 +195,7 @@ internal fun String.toNotificationDateTime(
 ): String = runCatching {
     val dateTime = Instant.parse(this.toIsoDateTime()).toLocalDateTime(timeZone)
     "${dateTime.year}/${(dateTime.month.ordinal + 1).toTwoDigits()}/${dateTime.day.toTwoDigits()} " +
-            "${dateTime.hour.toTwoDigits()}:${dateTime.minute.toTwoDigits()}"
+            "${dateTime.hour}:${dateTime.minute.toTwoDigits()}"
 }.getOrElse { this }
 
 private fun Int.toTwoDigits(): String = toString().padStart(2, '0')
