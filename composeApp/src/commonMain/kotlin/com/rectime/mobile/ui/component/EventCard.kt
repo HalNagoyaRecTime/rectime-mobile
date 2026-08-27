@@ -381,6 +381,8 @@ fun EventCard(
         val themeColorFirst = AppTheme.colors.themeColorFirst
         val themeColorSecond = AppTheme.colors.themeColorSecond
         val eventCardBoundaryLine = AppTheme.colors.eventCardBoundaryLine
+        val eventCardWave = AppTheme.colors.eventCardWave
+        val eventCardOverlay = AppTheme.colors.eventCardOverlay
 
         Box(
             modifier = Modifier
@@ -511,9 +513,9 @@ fun EventCard(
                                         wavePath.lineTo(w, h)
                                         wavePath.close()
 
-                                        drawPath(wavePath, Color.White.copy(alpha = 0.25f))
+                                        drawPath(wavePath, eventCardWave)
                                     } else {
-                                        drawRect(Color.White.copy(alpha = 0.15f))
+                                        drawRect(eventCardOverlay)
                                     }
 
                                     drawRect(gradientBrush, blendMode = BlendMode.Multiply)
