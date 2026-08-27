@@ -98,29 +98,29 @@ class NotificationDateTimeTest {
     fun emptyTimeStringReturnsFalse() {
         assertFalse(isEventLive("", "", now = LocalDateTime(2026, 1, 1, 17, 30)))
     }
-}
 
-// ---- toShortFormattedTime: 正常系 ----
+    // ---- toShortFormattedTime: 正常系 ----
 
-@Test
-fun shortFormattedTimeDropsLeadingZeroFromHour() {
-    assertEquals("6:00", "0600".toShortFormattedTime())
-}
+    @Test
+    fun shortFormattedTimeDropsLeadingZeroFromHour() {
+        assertEquals("6:00", "0600".toShortFormattedTime())
+    }
 
-@Test
-fun shortFormattedTimeKeepsTwoDigitHourAsIs() {
-    assertEquals("17:00", "1700".toShortFormattedTime())
-}
+    @Test
+    fun shortFormattedTimeKeepsTwoDigitHourAsIs() {
+        assertEquals("17:00", "1700".toShortFormattedTime())
+    }
 
-@Test
-fun shortFormattedTimeKeepsMinutePadded() {
-    assertEquals("9:05", "0905".toShortFormattedTime())
-}
+    @Test
+    fun shortFormattedTimeKeepsMinutePadded() {
+        assertEquals("9:05", "0905".toShortFormattedTime())
+    }
 
-// ---- toShortFormattedTime: 異常系 ----
+    // ---- toShortFormattedTime: 異常系 ----
 
-@Test
-fun shortFormattedTimeReturnsPlaceholderForInvalidInput() {
-    assertEquals("--:--", "".toShortFormattedTime())
-    assertEquals("--:--", "900".toShortFormattedTime())
+    @Test
+    fun shortFormattedTimeReturnsPlaceholderForInvalidInput() {
+        assertEquals("--:--", "".toShortFormattedTime())
+        assertEquals("--:--", "900".toShortFormattedTime())
+    }
 }
