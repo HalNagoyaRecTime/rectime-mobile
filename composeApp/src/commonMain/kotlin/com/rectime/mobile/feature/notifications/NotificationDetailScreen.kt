@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.competition.CompetitionDetailScreen
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
@@ -175,7 +176,7 @@ private fun NotificationRelatedEventLink(
     onClick: () -> Unit,
 ) {
     EventCard(
-        time = "${event.startTime.toTimeOnly()}-${event.endTime.toTimeOnly()}",
+        time = "${event.startTime.toFormattedTime()}-${event.endTime.toFormattedTime()}",
         title = event.name,
         court = event.venue,
         isLive = isEventLive(event.startTime, event.endTime),
@@ -199,13 +200,6 @@ internal fun String.toNotificationDateTime(
 }.getOrElse { this }
 
 private fun Int.toTwoDigits(): String = toString().padStart(2, '0')
-
-internal fun String.toTimeOnly(
-    timeZone: TimeZone = TimeZone.currentSystemDefault(),
-): String = runCatching {
-    val dateTime = Instant.parse(this.toIsoDateTime()).toLocalDateTime(timeZone)
-    "${dateTime.hour}:${dateTime.minute.toTwoDigits()}"
-}.getOrElse { this }
 
 internal fun isEventLive(
     startTime: String,
