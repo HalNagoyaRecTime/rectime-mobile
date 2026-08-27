@@ -25,8 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.core.util.toFormattedTime
-import com.rectime.mobile.feature.competition.CompetitionDetailScreen
+import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.OfflineBanner
@@ -103,7 +102,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                                 isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
                                 onRelatedEventClick = { eventId ->
                                     navigationController.push(
-                                        CompetitionDetailScreen(eventId = eventId),
+                                        EventDetailScreen(eventId = eventId),
                                     )
                                 },
                             )
@@ -176,7 +175,7 @@ private fun NotificationRelatedEventLink(
     onClick: () -> Unit,
 ) {
     EventCard(
-        time = "${event.startTime.toFormattedTime()}-${event.endTime.toFormattedTime()}",
+        time = "${event.startTime.toTimeOnly()}-${event.endTime.toTimeOnly()}",
         title = event.name,
         court = event.venue,
         isLive = isEventLive(event.startTime, event.endTime),
@@ -200,6 +199,13 @@ internal fun String.toNotificationDateTime(
 }.getOrElse { this }
 
 private fun Int.toTwoDigits(): String = toString().padStart(2, '0')
+
+internal fun String.toTimeOnly(
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String = runCatching {
+    val dateTime = Instant.parse(this.toIsoDateTime()).toLocalDateTime(timeZone)
+    "${dateTime.hour}:${dateTime.minute.toTwoDigits()}"
+}.getOrElse { this }
 
 internal fun isEventLive(
     startTime: String,
