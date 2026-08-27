@@ -6,8 +6,6 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +37,6 @@ private val CloseButtonSize = 32.dp
 private val CloseIconSize = 18.dp
 private val MapCornerRadius = 12.dp
 private val HintFontSize = 14.sp
-private const val MapAspectRatio = 804f / 581f
 private const val MinScale = 1f
 private const val MaxScale = 5f
 
@@ -88,7 +85,6 @@ private fun ZoomableMap() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(MapAspectRatio)
             .clip(RoundedCornerShape(MapCornerRadius))
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
@@ -106,7 +102,7 @@ private fun ZoomableMap() {
             contentDescription = "会場マップ",
             contentScale = ContentScale.Fit,
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .graphicsLayer {
                     scaleX = scale
                     scaleY = scale
