@@ -90,7 +90,6 @@ class LaneAssignmentTest {
 
     @Test
     fun freedLaneIsReusedByALaterNonOverlappingEventInTheSameGroup() {
-        // A: 0-60, B: 30-90 (Aと重複), C: 70-120 (Bと重複するがAとは重複しないためAのレーン0を再利用)
         val events = listOf(
             event(1, 0, 60),
             event(2, 30, 60),
@@ -128,8 +127,6 @@ class LaneAssignmentTest {
 
     @Test
     fun overlappingEventsExceedingThreeAreCollapsedIntoLaneThreeOverflow() {
-        // 5件が同一時間帯(600-660)で重複する場合:
-        // レーン0, 1, 2の3件は通常表示され、残りの2件がレーン3の「+2」集約カードにまとめられる
         val events = (1..5).map { event(it, 600, 60) }
 
         val result = assignLanes(events)
@@ -145,46 +142,69 @@ class LaneAssignmentTest {
         assertEquals(1, overflow.size)
         val overflowEntry = overflow.single()
         assertEquals(2, overflowEntry.overflowCount)
-        assertTrue(overflowEntry.eventId < 0, "集約エントリは負のIDを持つ")
+        assertTrue(overflowEntry.eventId < 0)
         assertEquals(3, overflowEntry.lane)
         assertEquals(MAX_VISIBLE_LANES, overflowEntry.laneCount)
         assertEquals(600, overflowEntry.startMinuteOfDay)
         assertEquals(60, overflowEntry.durationMinutes)
 
-        // 省かれたイベント（4, 5）の実体が overflowEvents に保持されていることを検証
         assertEquals(setOf(4, 5), overflowEntry.overflowEvents.map { it.eventId }.toSet())
     }
 
     @Test
-    fun overflowEntryRetainsAllHiddenEventDetailsForDetailView() {
+    fun overlappingOverflowEventsWithDifferentDurationsAreMergedIntoOneSpanningEntry() {
+        // 1, 2, 3: 通常表示 (600-720)
+        // 4 (620-680), 5 (650-710): 溢れ対象で互いに重複
+        // -> 4と5がマージされ、開始最小(620)〜終了最大(710)でduration=90の1つの「+2」カードになる
         val events = listOf(
-            event(1, 600, 60),
-            event(2, 600, 60),
-            event(3, 600, 60),
-            event(4, 600, 60),
-            event(5, 600, 60),
+            event(1, 600, 120),
+            event(2, 600, 120),
+            event(3, 600, 120),
+            event(4, 620, 60),  // 620-680
+            event(5, 650, 60),  // 650-710
         )
 
         val result = assignLanes(events)
-        val overflowEntry = result.single { it.overflowCount > 0 }
 
-        assertEquals(2, overflowEntry.overflowEvents.size)
-        assertEquals("event-4", overflowEntry.overflowEvents[0].title)
-        assertEquals("venue-4", overflowEntry.overflowEvents[0].venue)
-        assertEquals("event-5", overflowEntry.overflowEvents[1].title)
-        assertEquals("venue-5", overflowEntry.overflowEvents[1].venue)
+        val overflow = result.filter { it.overflowCount > 0 }
+        assertEquals(1, overflow.size)
+
+        val overflowEntry = overflow.single()
+        assertEquals(2, overflowEntry.overflowCount)
+        assertEquals(620, overflowEntry.startMinuteOfDay)
+        assertEquals(90, overflowEntry.durationMinutes) // 620 から 710 まで
+        assertEquals(listOf(4, 5), overflowEntry.overflowEvents.map { it.eventId })
     }
 
     @Test
-    fun overflowDoesNotAffectASeparateNonOverlappingGroup() {
-        val events = (1..5).map { event(it, 600, 60) } + event(6, 800, 30)
+    fun disjointOverflowEventsInSameClusterFormDistinctOverflowEntries() {
+        // 1, 2, 3 が 0-500 まで全体を占有
+        // 4, 5 が前半 (20-60) で溢れる
+        // 6, 7 が後半 (200-240) で溢れる（時間的に離れているため2つのカードに分かれる）
+        val events = listOf(
+            event(1, 0, 500),
+            event(2, 0, 500),
+            event(3, 0, 500),
+            event(4, 20, 40),   // 20-60
+            event(5, 30, 30),   // 30-60
+            event(6, 200, 40),  // 200-240
+            event(7, 210, 30),  // 210-240
+        )
 
         val result = assignLanes(events)
 
-        val separate = result.single { it.eventId == 6 }
-        assertEquals(0, separate.lane)
-        assertEquals(1, separate.laneCount)
-        assertEquals(0, separate.overflowCount)
+        val overflows = result.filter { it.overflowCount > 0 }.sortedBy { it.startMinuteOfDay }
+        assertEquals(2, overflows.size)
+
+        assertEquals(2, overflows[0].overflowCount)
+        assertEquals(20, overflows[0].startMinuteOfDay)
+        assertEquals(40, overflows[0].durationMinutes)
+        assertEquals(listOf(4, 5), overflows[0].overflowEvents.map { it.eventId })
+
+        assertEquals(2, overflows[1].overflowCount)
+        assertEquals(200, overflows[1].startMinuteOfDay)
+        assertEquals(40, overflows[1].durationMinutes)
+        assertEquals(listOf(6, 7), overflows[1].overflowEvents.map { it.eventId })
     }
 
     @Test
