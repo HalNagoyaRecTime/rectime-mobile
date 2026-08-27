@@ -260,3 +260,152 @@ class NotificationApiTest {
         """.trimIndent()
     }
 }
+
+class MyEventsApiTest {
+
+    @Test
+    fun getMyEventIdsSendsAuthenticatedRequestAndReturnsIds() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val client = mockClient { request ->
+            capturedRequest = request
+            respond(
+                content = myEventsJson,
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders,
+            )
+        }
+        val api = MyEventsApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        val ids = api.getMyEventIds()
+
+        val request = requireNotNull(capturedRequest)
+        assertEquals("https://api.example.com/api/v1/me/events", request.url.toString())
+        assertEquals("Bearer access-token", request.headers[HttpHeaders.Authorization])
+        assertEquals("mobile", request.headers["X-Client-Type"])
+        assertEquals(setOf(5, 7), ids)
+    }
+
+    @Test
+    fun getMyEventIdsReturnsEmptySetWhenNoEvents() = runTest {
+        val client = mockClient {
+            respond(
+                content = """{"events":[]}""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders,
+            )
+        }
+        val api = MyEventsApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        val ids = api.getMyEventIds()
+
+        assertTrue(ids.isEmpty())
+    }
+
+    @Test
+    fun getMyEventIdsExposesBackendStatusOnUnauthorized() = runTest {
+        val client = mockClient {
+            respond(
+                content = """{"error":"unauthorized"}""",
+                status = HttpStatusCode.Unauthorized,
+                headers = jsonHeaders,
+            )
+        }
+        val api = MyEventsApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        val error = assertFailsWith<NotificationApiException> {
+            api.getMyEventIds()
+        }
+        assertEquals(401, error.statusCode)
+    }
+
+    @Test
+    fun getMyEventIdsExposesBackendStatusOnServerError() = runTest {
+        val client = mockClient {
+            respond(
+                content = """{"error":"internal server error"}""",
+                status = HttpStatusCode.InternalServerError,
+                headers = jsonHeaders,
+            )
+        }
+        val api = MyEventsApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
+        )
+
+        val error = assertFailsWith<NotificationApiException> {
+            api.getMyEventIds()
+        }
+        assertEquals(500, error.statusCode)
+    }
+
+    @Test
+    fun requestFailsBeforeNetworkWhenSessionTokenIsMissing() = runTest {
+        val client = mockClient {
+            error("Network request must not be sent")
+        }
+        val api = MyEventsApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { null },
+        )
+
+        val error = assertFailsWith<NotificationApiException> {
+            api.getMyEventIds()
+        }
+        assertEquals(401, error.statusCode)
+    }
+
+    @Test
+    fun requestFailsBeforeNetworkWhenSessionTokenIsBlank() = runTest {
+        val client = mockClient {
+            error("Network request must not be sent")
+        }
+        val api = MyEventsApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "   " },
+        )
+
+        val error = assertFailsWith<NotificationApiException> {
+            api.getMyEventIds()
+        }
+        assertEquals(401, error.statusCode)
+    }
+
+    private fun mockClient(
+        handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
+    ): HttpClient = HttpClient(MockEngine) {
+        engine {
+            addHandler(handler)
+        }
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true })
+        }
+    }
+
+    private companion object {
+        val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
+
+        val myEventsJson = """
+            {
+              "events": [
+                { "event_id": 5 },
+                { "event_id": 7 }
+              ]
+            }
+        """.trimIndent()
+    }
+}

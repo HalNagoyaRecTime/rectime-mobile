@@ -11,11 +11,11 @@ class NotificationDateTimeTest {
     @Test
     fun instantIsFormattedInGivenTimeZone() {
         assertEquals(
-            "7月31日 09:05",
+            "2026/07/31 9:05",
             "2026-07-31T09:05:00Z".toNotificationDateTime(TimeZone.UTC),
         )
         assertEquals(
-            "7月31日 18:05",
+            "2026/07/31 18:05",
             "2026-07-31T09:05:00Z".toNotificationDateTime(TimeZone.of("Asia/Tokyo")),
         )
     }
@@ -23,7 +23,7 @@ class NotificationDateTimeTest {
     @Test
     fun offsetInPayloadIsConvertedToGivenTimeZone() {
         assertEquals(
-            "7月31日 00:00",
+            "2026/07/31 0:00",
             "2026-07-31T09:00:00+09:00".toNotificationDateTime(TimeZone.UTC),
         )
     }
@@ -31,15 +31,15 @@ class NotificationDateTimeTest {
     @Test
     fun dateRollsOverAtTimeZoneBoundary() {
         assertEquals(
-            "8月1日 00:30",
+            "2026/08/01 0:30",
             "2026-07-31T15:30:00Z".toNotificationDateTime(TimeZone.of("Asia/Tokyo")),
         )
     }
 
     @Test
-    fun singleDigitHourAndMinuteArePadded() {
+    fun minuteIsPaddedButHourIsNot() {
         assertEquals(
-            "1月5日 00:07",
+            "2026/01/05 0:07",
             "2026-01-05T00:07:00Z".toNotificationDateTime(TimeZone.UTC),
         )
     }
