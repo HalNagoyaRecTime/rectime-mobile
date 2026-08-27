@@ -146,7 +146,7 @@ private val defaultLight = AppColorTokens(
     //詳細画面
     textDetailsScreenHeader = Color(0xFF666666),
     textDetailsScreenTitle = Color(0xFF000000),
-    textDetailsScreenTime = Color(0xFF999999),
+    textDetailsScreenTime = Color(0xFF333333),
     textDetailsScreenBody = Color(0xFF333333),
     textRelationEvent = Color(0xFF808080),
     detailsScreenHeaderBackground = Color(0xCCFFFFFF),
