@@ -57,6 +57,7 @@ data class AppColorTokens(
     val pastAreaBackground: Color,
     val eventCardOverlay: Color,
     val eventCardBoundaryLine: Color,
+    val eventOverflowBackground: Color,
     val eventVenueBackground: Color,
     // 設定画面
     val userInformationHeader: Color,
@@ -133,6 +134,7 @@ private val defaultLight = AppColorTokens(
     pastAreaBackground = Color(0x33000000),
     eventCardOverlay = Color(0x40FFFFFF),
     eventCardBoundaryLine = Color(0x80FFFFFF),
+    eventOverflowBackground = Color(0xFFB3B3B3),
     eventVenueBackground = Color(0x26000000),
     //設定画面
     userInformationHeader = Color(0xFF808080),

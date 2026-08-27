@@ -20,7 +20,7 @@ import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
-import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.competition.CompetitionDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
@@ -82,14 +82,14 @@ fun App() {
             LaunchedEffect(notificationNavigationTarget) {
                 when (val target = notificationNavigationTarget) {
                     NotificationNavigationTarget.Home -> {
-                        navigationController.reset(CalendarScreen)
+                        navigationController.reset(ScheduleScreen)
                     }
                     is NotificationNavigationTarget.EventDetail -> {
-                        navigationController.reset(CalendarScreen)
+                        navigationController.reset(ScheduleScreen)
                         navigationController.push(CompetitionDetailScreen(target.eventId))
                     }
                     is NotificationNavigationTarget.NotificationDetail -> {
-                        navigationController.reset(CalendarScreen)
+                        navigationController.reset(ScheduleScreen)
                         navigationController.push(NotificationDetailScreen(target.notificationId))
                     }
                     null -> Unit

@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.calendar
+package com.rectime.mobile.feature.schedule
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
@@ -40,7 +40,7 @@ private const val LOAD_FAILED_MESSAGE = "通信に失敗しました"
 private const val SESSION_EXPIRED_MESSAGE = "ログイン情報の有効期限が切れました"
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
-class CalendarViewModelTest {
+class ScheduleViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
 
@@ -573,7 +573,7 @@ class CalendarViewModelTest {
         clock: Clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z")),
         timeZone: TimeZone = TimeZone.UTC,
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
-    ) = CalendarViewModel(
+    ) = ScheduleViewModel(
         client = client,
         baseUrl = "https://api.example.com",
         clock = clock,

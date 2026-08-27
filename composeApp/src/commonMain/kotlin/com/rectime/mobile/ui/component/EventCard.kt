@@ -8,6 +8,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -61,6 +64,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.modifier.outerShadow
+import com.rectime.mobile.ui.theme.notoSansJpFontFamily
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -211,6 +215,52 @@ enum class EventCardSizeVariant {
     Large    // 大: フル表示
 }
 
+fun resolveEventCardVariant(
+    width: Dp,
+    height: Dp,
+    dim: EventCardDimensions
+): EventCardSizeVariant {
+    return when {
+        height < dim.compactHeightThreshold -> EventCardSizeVariant.Compact
+        height < dim.smallHeightThreshold -> EventCardSizeVariant.Small
+        height < dim.mediumHeightThreshold || width < dim.mediumWidthThreshold -> EventCardSizeVariant.Medium
+        else -> EventCardSizeVariant.Large
+    }
+}
+
+data class EventCardShadowSpec(
+    val width: Dp,
+    val height: Dp,
+    val offsetX: Dp,
+    val offsetY: Dp,
+    val shape: Shape
+)
+
+fun resolveEventCardShadowSpec(
+    assignedWidth: Dp,
+    assignedHeight: Dp,
+    isLive: Boolean,
+    isParticipating: Boolean,
+    dim: EventCardDimensions
+): EventCardShadowSpec {
+    val padOffset = if (isLive) 0.dp else dim.borderExtend
+    val actualWidth = if (isLive) assignedWidth else assignedWidth - (dim.borderExtend * 2)
+    val actualHeight = if (isLive) assignedHeight else assignedHeight - (dim.borderExtend * 2)
+
+    val shape = when {
+        isLive -> RoundedCornerShape(dim.cornerRadius + dim.borderExtend)
+        else -> RoundedCornerShape(dim.cornerRadius)
+    }
+
+    return EventCardShadowSpec(
+        width = actualWidth,
+        height = actualHeight,
+        offsetX = padOffset,
+        offsetY = padOffset,
+        shape = shape
+    )
+}
+
 @Composable
 fun EventCard(
     time: String,
@@ -219,8 +269,7 @@ fun EventCard(
     isLive: Boolean,
     isParticipating: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    fontFamily: FontFamily? = null,
+    modifier: Modifier = Modifier
 ) {
     val windowInfo = LocalWindowInfo.current
     val density = LocalDensity.current
@@ -240,17 +289,14 @@ fun EventCard(
         label = "waveProgress"
     )
 
+    val interactionSource = remember { MutableInteractionSource() }
+
     BoxWithConstraints(modifier = modifier) {
 
         val currentHeight = maxHeight
         val currentWidth = maxWidth
 
-        val variant = when {
-            currentHeight < dim.compactHeightThreshold -> EventCardSizeVariant.Compact
-            currentHeight < dim.smallHeightThreshold -> EventCardSizeVariant.Small
-            currentHeight < dim.mediumHeightThreshold || currentWidth < dim.mediumWidthThreshold -> EventCardSizeVariant.Medium
-            else -> EventCardSizeVariant.Large
-        }
+        val variant = resolveEventCardVariant(currentWidth, currentHeight, dim)
 
         val timeToTitleSpacing: Dp
         val titleToCourtSpacing: Dp
@@ -333,8 +379,7 @@ fun EventCard(
         val hasOrangeBase = isLive || isParticipating
         val orangeColor = Color(0xFFFF4000)
 
-        PressSurface(
-            onClick = onClick,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { clip = false }
@@ -349,10 +394,7 @@ fun EventCard(
                             spread = dim.glowRadius * 0.1f
                         )
                     } else Modifier
-                ),
-            color = Color.Transparent,
-            shape = RoundedCornerShape(dim.cornerRadius),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                )
         ) {
             Box(
                 modifier = Modifier
@@ -367,6 +409,10 @@ fun EventCard(
                         }
                     )
                     .clip(orangeShape)
+                    .clickable(
+                        interactionSource = interactionSource,
+                        onClick = onClick
+                    )
             ) {
                 if (isParticipating && variant != EventCardSizeVariant.Compact) {
                     val badgeFontSize = when (variant) {
@@ -383,7 +429,7 @@ fun EventCard(
                             style = tightlySpacedTextStyle(
                                 fontSize = badgeFontSize,
                                 fontWeight = FontWeight.Black,
-                                fontFamily = fontFamily
+                                fontFamily = notoSansJpFontFamily()
                             ),
                             modifier = Modifier
                                 .padding(
@@ -509,7 +555,7 @@ fun EventCard(
                             timeToTitleSpacing = timeToTitleSpacing,
                             titleToCourtSpacing = titleToCourtSpacing,
                             dim = dim,
-                            fontFamily = fontFamily
+                            fontFamily = notoSansJpFontFamily()
                         )
                     }
                 }
