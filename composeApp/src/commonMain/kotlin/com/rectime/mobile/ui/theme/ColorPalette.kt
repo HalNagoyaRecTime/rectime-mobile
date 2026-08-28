@@ -123,7 +123,7 @@ private val defaultLight = AppColorTokens(
     //ドロップシャドウ
     dropShadow = Color(0x1A000000),
     //ログイン画面
-    textAppLogo = Color(0xFF000000),
+    textAppLogo = Color(0xFF333333),
     loginButtonBackground = Color(0xFF333333),
     textLoginButton = Color(0xFFFFFFFF),
     textLoginError = Color(0xFFFF0000),

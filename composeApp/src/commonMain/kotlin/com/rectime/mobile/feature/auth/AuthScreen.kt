@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -77,10 +78,9 @@ private fun AuthLoginScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 AppLogoMark()
 
-                Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
-
                 Text(
-                    text = "RECTIME",
+                    text = "RE:CREATION",
+                    modifier = Modifier.offset(y=(-20).dp),
                     fontSize = 34.sp,
                     fontWeight = FontWeight.Black,
                     color = AppTheme.colors.textAppLogo,
