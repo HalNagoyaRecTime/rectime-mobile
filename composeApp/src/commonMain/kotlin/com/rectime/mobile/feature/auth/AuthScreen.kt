@@ -75,33 +75,18 @@ private fun AuthLoginScreen(
                 .weight(1f),
             contentAlignment = Alignment.Center,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                AppLogoMark()
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AppLogoSection(modifier = Modifier.offset(y = (-20).dp))
 
-                Text(
-                    text = "RE:CREATION",
-                    modifier = Modifier.offset(y=(-20).dp),
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Black,
-                    color = AppTheme.colors.textAppLogo,
-                )
+                Spacer(modifier = Modifier.height(AppTheme.spacing.xxl))
 
-                Spacer(modifier = Modifier.height(AppTheme.spacing.xxxl))
-
-                MicrosoftSignInButton(
+                SignInSection(
                     isLoading = state.isLoading,
-                    onClick = onLogin,
+                    error = state.error,
+                    onLogin = onLogin,
                 )
-
-                state.error?.let { error ->
-                    Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
-                    Text(
-                        text = error,
-                        fontSize = 13.sp,
-                        color = AppTheme.colors.textLoginError,
-                        textAlign = TextAlign.Center,
-                    )
-                }
             }
         }
 
@@ -114,6 +99,52 @@ private fun AuthLoginScreen(
             fontSize = 12.sp,
             color = AppTheme.colors.textCopyRight,
             modifier = Modifier.padding(bottom = AppTheme.spacing.xxl),
+        )
+    }
+}
+
+@Composable
+private fun AppLogoSection(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        AppLogoMark()
+
+        Text(
+            text = "RE:CREATION",
+            modifier = Modifier.offset(y=(-20).dp),
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Black,
+            color = AppTheme.colors.textAppLogo,
+        )
+    }
+}
+
+@Composable
+private fun SignInSection(
+    isLoading: Boolean,
+    error: String?,
+    onLogin: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        MicrosoftSignInButton(
+            isLoading = isLoading,
+            onClick = onLogin,
+        )
+
+        // エラーの有無でブロックの高さが変わると中央寄せの位置がずれるため、常に1行ぶん確保しておく。
+        Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+
+        Text(
+            text = error.orEmpty(),
+            fontSize = 13.sp,
+            color = AppTheme.colors.textLoginError,
+            textAlign = TextAlign.Center,
         )
     }
 }
