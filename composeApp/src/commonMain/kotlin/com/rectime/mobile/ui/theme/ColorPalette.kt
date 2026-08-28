@@ -39,6 +39,11 @@ data class AppColorTokens(
     val edgeFadeColor: Color,
     // ドロップシャドウ
     val dropShadow: Color,
+    // ログイン画面
+    val textAppLogo: Color,
+    val loginButtonBackground: Color,
+    val textLoginButton: Color,
+    val textLoginError: Color,
     // 通知一覧画面
     val textUnreadNotificationTitle: Color,
     val textUnreadNotificationBody: Color,
@@ -117,6 +122,11 @@ private val defaultLight = AppColorTokens(
     edgeFadeColor = Color(0xFFe6e6e6),
     //ドロップシャドウ
     dropShadow = Color(0x1A000000),
+    //ログイン画面
+    textAppLogo = Color(0xFF000000),
+    loginButtonBackground = Color(0xFF333333),
+    textLoginButton = Color(0xFFFFFFFF),
+    textLoginError = Color(0xFFFF0000),
     //通知一覧画面
     textUnreadNotificationTitle = Color(0xFF000000),
     textUnreadNotificationBody = Color(0xFF666666),

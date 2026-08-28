@@ -1,8 +1,7 @@
 package com.rectime.mobile.feature.auth
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,12 +15,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.Canvas
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,11 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
+import com.rectime.mobile.ui.component.AppLogoMark
 import com.rectime.mobile.ui.theme.AppTheme
-import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.rectime_logo
 
 @Composable
 fun AuthGate(
@@ -65,126 +59,90 @@ private fun AuthLoginScreen(
     state: AuthUiState,
     onLogin: () -> Unit,
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(AppTheme.colors.commonBackground)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 28.dp, vertical = 40.dp),
-        contentAlignment = Alignment.Center,
+            .padding(horizontal = AppTheme.layout.screenHorizontalPadding),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .widthIn(max = 420.dp)
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .weight(1f),
+            contentAlignment = Alignment.Center,
         ) {
-            AppMark()
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                AppLogoMark()
 
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
+                Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
+
                 Text(
-                    text = "RecTime",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppTheme.colors.textPrimary,
+                    text = "RECTIME",
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Black,
+                    color = AppTheme.colors.textAppLogo,
                 )
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(AppTheme.spacing.xxxl))
 
-            MicrosoftLoginButton(
-                isLoading = state.isLoading,
-                onClick = onLogin,
-            )
-
-            Text(
-                text = "学校指定のMicrosoftアカウントでログインしてください。",
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTheme.colors.textSecondary,
-                textAlign = TextAlign.Center,
-            )
-
-            LegalDocumentLinks()
-
-            if (state.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = AppTheme.colors.textPrimary,
+                MicrosoftSignInButton(
+                    isLoading = state.isLoading,
+                    onClick = onLogin,
                 )
-            }
 
-            if (state.message.isNotBlank()) {
-                Text(
-                    text = state.message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppTheme.colors.textSecondary,
-                    textAlign = TextAlign.Center,
-                )
-            }
-
-            state.error?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                )
+                state.error?.let { error ->
+                    Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
+                    Text(
+                        text = error,
+                        fontSize = 13.sp,
+                        color = AppTheme.colors.textLoginError,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
         }
+
+        LegalDocumentLinks()
+
+        Spacer(modifier = Modifier.height(AppTheme.spacing.md))
+
+        Text(
+            text = "© 2026 著作権者名",
+            fontSize = 12.sp,
+            color = AppTheme.colors.textCopyRight,
+            modifier = Modifier.padding(bottom = AppTheme.spacing.xxl),
+        )
     }
 }
 
 @Composable
-private fun AppMark() {
-    androidx.compose.foundation.Image(
-        painter = org.jetbrains.compose.resources.painterResource(Res.drawable.rectime_logo),
-        contentDescription = null,
-        modifier = Modifier.size(84.dp, 60.dp),
-    )
-}
-
-@Composable
-private fun MicrosoftLoginButton(
+private fun MicrosoftSignInButton(
     isLoading: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(AppTheme.radius.xs)
 
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
+            .height(48.dp)
             .alpha(if (isLoading) 0.72f else 1f)
             .clip(shape)
-            .background(AppTheme.colors.navigationSurface)
-            .border(
-                border = BorderStroke(1.dp, AppTheme.colors.borderStrong),
-                shape = shape,
-            )
+            .background(AppTheme.colors.loginButtonBackground)
             .clickable(enabled = !isLoading, onClick = onClick)
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = AppTheme.spacing.xl),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MicrosoftLogo(modifier = Modifier.size(18.dp))
-        Spacer(modifier = Modifier.size(12.dp))
+        Spacer(modifier = Modifier.size(AppTheme.spacing.md))
         Text(
-            text = if (isLoading) {
-                "ログイン中..."
-            } else {
-                "Microsoft アカウントでログイン"
-            },
+            text = if (isLoading) "サインイン中..." else "Microsoft アカウントでサインイン",
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = AppTheme.colors.textPrimary,
-            textAlign = TextAlign.Center,
+            fontWeight = FontWeight.Medium,
+            color = AppTheme.colors.textLoginButton,
         )
     }
 }

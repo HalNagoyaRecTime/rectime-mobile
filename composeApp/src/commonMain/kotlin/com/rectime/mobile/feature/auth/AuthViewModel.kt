@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-private const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
+private const val AUTH_FAILED_MESSAGE = "ログインに失敗しました"
 
 // リリースビルドでは内部エラーを露出させず、デバッグビルドでのみ原因を添える。
 private fun authFailed(reason: String?): String =
