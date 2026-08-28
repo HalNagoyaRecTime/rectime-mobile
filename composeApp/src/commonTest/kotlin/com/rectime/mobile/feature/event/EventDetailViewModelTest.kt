@@ -104,7 +104,7 @@ class EventDetailViewModelTest {
     private fun statusOnly(status: HttpStatusCode): MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData =
         {
             respond(
-                content = """{"error":"error"}""",
+                content = """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"error"}}""",
                 status = status,
                 headers = headersOf(HttpHeaders.ContentType, "application/json"),
             )

@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
@@ -93,19 +94,20 @@ class FirebaseTokenApiTest {
     fun registerExposesBackendFailureWithoutLeakingItIntoMessage() = runTest {
         val client = mockAppHttpClient {
             respond(
-                content = """{"error":"unauthorized"}""",
+                content = """{"error":{"code":"UNAUTHORIZED","message":"Authentication required"}}""",
                 status = HttpStatusCode.Unauthorized,
                 headers = jsonHeaders,
             )
         }
         val api = FirebaseTokenApi(client = client, baseUrl = apiBaseUrl)
 
-        val error = assertFailsWith<FirebaseTokenRegistrationException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.register(fcmToken = "firebase-token", accessToken = "expired-token")
         }
 
-        assertEquals(401, error.statusCode)
-        assertEquals("""{"error":"unauthorized"}""", error.responseBody)
+        assertEquals(HttpStatusCode.Unauthorized, error.status)
+        assertEquals("UNAUTHORIZED", error.code)
+        assertEquals("Authentication required", error.message)
         assertFalse(error.message.orEmpty().contains("expired-token"))
         assertFalse(error.message.orEmpty().contains("firebase-token"))
     }

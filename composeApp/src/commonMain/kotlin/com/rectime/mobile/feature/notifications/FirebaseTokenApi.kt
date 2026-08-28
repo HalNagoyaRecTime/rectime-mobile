@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.network.mobileAuthHeaders
 import io.ktor.client.HttpClient
@@ -40,13 +41,8 @@ class FirebaseTokenApi(
                 ),
             )
         }
-        val responseBody = response.bodyAsText()
-
         if (response.status.value !in 200..299) {
-            throw FirebaseTokenRegistrationException(
-                statusCode = response.status.value,
-                responseBody = responseBody,
-            )
+            throw apiErrorException(response.status, response.bodyAsText())
         }
     }
 
@@ -60,10 +56,5 @@ internal data class RegisterFirebaseTokenRequest(
     val fcmToken: String,
     val platform: String,
 )
-
-class FirebaseTokenRegistrationException(
-    val statusCode: Int,
-    val responseBody: String,
-) : IllegalStateException("Firebase token registration failed: HTTP $statusCode")
 
 private const val ANDROID_PLATFORM = "android"

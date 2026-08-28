@@ -11,11 +11,13 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.util.nowMinuteStateFlow
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
@@ -59,7 +61,9 @@ class ScheduleViewModel(
                     val result = fetchWithCacheFallback(
                         fetchLive = {
                             val response = client.get("$baseUrl/api/v1/events")
-                            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+                            if (!response.status.isSuccess()) {
+                                throw apiErrorException(response.status, response.bodyAsText())
+                            }
                             response.body<EventsResponse>()
                         },
                         loadCache = { cache.load<EventsResponse>(EVENTS_CACHE_KEY) },
