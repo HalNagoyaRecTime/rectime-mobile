@@ -74,7 +74,7 @@ class NotificationsViewModel(
                     is CachedFetchResult.Cached -> {
                         // セッション切れ・取得失敗(404)はオフライン表示で隠さず、エラーを優先する。
                         val errorCode = (result.error as? HttpStatusException)?.code
-                        if (errorCode == "UNAUTHORIZED" || errorCode == "NOTIFICATION_NOT_FOUND") {
+                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 isRefreshing = false,
@@ -197,7 +197,7 @@ class NotificationDetailViewModel(
                     is CachedFetchResult.Cached -> {
                         // 削除済み(404)の古いキャッシュを誤表示し続けないようにする。
                         val errorCode = (result.error as? HttpStatusException)?.code
-                        if (errorCode == "UNAUTHORIZED" || errorCode == "NOTIFICATION_NOT_FOUND") {
+                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
                             _uiState.value = NotificationDetailUiState(
                                 isLoading = false,
                                 error = result.error.toNotificationErrorMessage(),
@@ -252,7 +252,10 @@ class NotificationDetailViewModel(
 private fun Exception.toNotificationErrorMessage(): String = when {
     this is HttpStatusException && code == "UNAUTHORIZED" ->
         "ログイン情報の有効期限が切れました"
-    this is HttpStatusException && code == "NOTIFICATION_NOT_FOUND" ->
+    this is HttpStatusException && code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND") ->
         "通知が見つかりません"
     else -> "通知の取得に失敗しました"
 }
+
+private fun String?.isNotificationNotFoundOrUnauthorized(): Boolean =
+    this == "UNAUTHORIZED" || this == "NOTIFICATION_NOT_FOUND" || this == "NOT_FOUND"

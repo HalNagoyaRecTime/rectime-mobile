@@ -44,6 +44,29 @@ class ApiErrorParserTest {
     }
 
     @Test
+    fun preservesUnauthorizedStatusWhenLegacyResponseCannotBeParsed() {
+        val error = apiErrorException(
+            status = HttpStatusCode.Unauthorized,
+            body = "{\"error\":\"Unauthorized\"}",
+            fallbackMessage = "Request failed",
+        )
+
+        assertEquals("UNAUTHORIZED", error.code)
+        assertEquals("Request failed", error.message)
+    }
+
+    @Test
+    fun preservesNotFoundStatusWhenErrorResponseIsMalformed() {
+        val error = apiErrorException(
+            status = HttpStatusCode.NotFound,
+            body = "not json",
+        )
+
+        assertEquals("NOT_FOUND", error.code)
+        assertEquals("HTTP 404", error.message)
+    }
+
+    @Test
     fun rejectsIncompleteCommonErrorResponse() {
         val error = apiErrorException(
             status = HttpStatusCode.InternalServerError,
