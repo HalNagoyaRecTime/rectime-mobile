@@ -100,7 +100,7 @@ private fun ZoomableMap() {
         Image(
             painter = painterResource(Res.drawable.recmap),
             contentDescription = "会場マップ",
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.FillWidth,
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer {
