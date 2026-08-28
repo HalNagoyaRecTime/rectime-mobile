@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.calendar
+package com.rectime.mobile.feature.schedule
 
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json

@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
-import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.ui.theme.AppTheme
@@ -111,7 +111,7 @@ fun BottomNavigationBar(
 ) {
     val items = listOf(
     NavigationItemConfig(
-        CalendarScreen,
+        ScheduleScreen,
         "スケジュール",
         Res.drawable.ic_schedule_outline,
         Res.drawable.ic_schedule_fill,
@@ -161,8 +161,8 @@ fun BottomNavigationBar(
                     .shadow(
                         elevation = BarShadowElevation,
                         shape = shape,
-                        ambientColor = AppTheme.colors.dropShadowDark,
-                        spotColor = AppTheme.colors.dropShadowDark,
+                        ambientColor = AppTheme.colors.dropShadow,
+                        spotColor = AppTheme.colors.dropShadow,
                     ),
             )
             Box(
@@ -237,8 +237,8 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
                 .shadow(
                     elevation = IndicatorShadowElevation,
                     shape = pillShape,
-                    ambientColor = AppTheme.colors.dropShadowDark,
-                    spotColor = AppTheme.colors.dropShadowDark,
+                    ambientColor = AppTheme.colors.dropShadow,
+                    spotColor = AppTheme.colors.dropShadow,
                 ),
         )
         Box(

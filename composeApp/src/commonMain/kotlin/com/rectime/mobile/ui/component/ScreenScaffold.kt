@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarHost
@@ -34,7 +36,10 @@ private val SnackbarBottomOffset = (-60).dp // ボトムナビゲーションと
 fun RootScreenScaffold(
     title: String,
     modifier: Modifier = Modifier,
+    lazyListState: LazyListState = rememberLazyListState(),
     horizontalPadding: Boolean = true,
+    contentTopPadding: Boolean = true,
+    contentBottomPadding: Boolean = true,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
@@ -43,12 +48,25 @@ fun RootScreenScaffold(
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
 
+    val topInset = if (contentTopPadding) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing
+    } else {
+        0.dp
+    }
+
+    val bottomInset = if (contentBottomPadding) {
+        AppTheme.layout.rootBottomNavigationInset
+    } else {
+        0.dp
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
+            state = lazyListState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
-                bottom = AppTheme.layout.rootBottomNavigationInset,
+                top = topInset,
+                bottom = bottomInset,
                 start = if (horizontalPadding) hPad else 0.dp,
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
@@ -91,6 +109,8 @@ fun PushScreenScaffold(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     horizontalPadding: Boolean = true,
+    contentTopPadding: Boolean = true,
+    headerEdgeFade: Boolean = true,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
@@ -99,29 +119,40 @@ fun PushScreenScaffold(
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
 
-    Box(modifier = modifier.fillMaxSize()) {
+    val topInset = if (contentTopPadding) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing
+    } else {
+        0.dp
+    }
+
+    Box(modifier = modifier
+        .fillMaxSize()
+        .background(AppTheme.colors.commonBackground),
+    ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing,
+                top = topInset,
                 start = if (horizontalPadding) hPad else 0.dp,
                 end = if (horizontalPadding) hPad else 0.dp,
             ),
             content = content,
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(AppTheme.layout.headerEdgeFade)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            AppTheme.colors.edgeFadeColor,
-                            AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+        if (headerEdgeFade) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(AppTheme.layout.headerEdgeFade)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                AppTheme.colors.edgeFadeColor,
+                                AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+                            ),
                         ),
                     ),
-                ),
-        )
+            )
+        }
         PushHeader(
             title = title,
             onBack = onBack,

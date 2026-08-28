@@ -1,4 +1,4 @@
-package com.rectime.mobile.feature.calendar
+package com.rectime.mobile.feature.schedule
 
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -31,10 +31,10 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
-private const val EVENTS_CACHE_KEY = "calendar_events_v1"
+private const val EVENTS_CACHE_KEY = "schedule_events_v1"
 
 @OptIn(ExperimentalTime::class)
-class CalendarViewModel(
+class ScheduleViewModel(
     private val client: HttpClient = createAppHttpClient(),
     private val baseUrl: String = apiBaseUrl,
     private val clock: Clock = Clock.System,
@@ -140,7 +140,7 @@ class CalendarViewModel(
             // 出しつつ除外する。durationMinutes=0のカードはUI上の高さが0以下になり
             // 実質見えなくなるだけで、原因調査ができなくなるため。
             if (timelineEvent.durationMinutes <= 0) {
-                println("CalendarViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                println("ScheduleViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
                 return@mapNotNull null
             }
 
