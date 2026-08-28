@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
@@ -34,6 +35,7 @@ import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
@@ -175,7 +177,7 @@ private fun NotificationRelatedEventLink(
     onClick: () -> Unit,
 ) {
     EventCard(
-        time = "${event.startTime.toTimeOnly()}-${event.endTime.toTimeOnly()}",
+        time = "${event.startTime.toShortFormattedTime()}-${event.endTime.toShortFormattedTime()}",
         title = event.name,
         court = event.venue,
         isLive = isEventLive(event.startTime, event.endTime),
@@ -186,6 +188,7 @@ private fun NotificationRelatedEventLink(
             .height(80.dp),
     )
 }
+
 private fun String.toIsoDateTime(): String =
     this.replace(" ", "T")
         .let { if (it.contains("+") || it.endsWith("Z")) it else "${it}Z" }
@@ -198,21 +201,28 @@ internal fun String.toNotificationDateTime(
             "${dateTime.hour}:${dateTime.minute.toTwoDigits()}"
 }.getOrElse { this }
 
+internal fun String.toShortFormattedTime(): String {
+    val formatted = toFormattedTime()
+    if (formatted == "--:--") return formatted
+    val hour = formatted.substring(0, 2).toIntOrNull() ?: return formatted
+    val minute = formatted.substring(3, 5)
+    return "$hour:$minute"
+}
+
 private fun Int.toTwoDigits(): String = toString().padStart(2, '0')
 
-internal fun String.toTimeOnly(
-    timeZone: TimeZone = TimeZone.currentSystemDefault(),
-): String = runCatching {
-    val dateTime = Instant.parse(this.toIsoDateTime()).toLocalDateTime(timeZone)
-    "${dateTime.hour}:${dateTime.minute.toTwoDigits()}"
-}.getOrElse { this }
+internal fun String.toMinuteOfDay(): Int {
+    val hour = substring(0, 2).toIntOrNull() ?: return 0
+    val minute = substring(2, 4).toIntOrNull() ?: return 0
+    return hour * 60 + minute
+}
 
 internal fun isEventLive(
     startTime: String,
     endTime: String,
-    now: Instant = Clock.System.now(),
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    now: LocalDateTime = Clock.System.now().toLocalDateTime(timeZone),
 ): Boolean = runCatching {
-    val start = Instant.parse(startTime.toIsoDateTime())
-    val end = Instant.parse(endTime.toIsoDateTime())
-    now in start..end
+    val nowMinute = now.hour * 60 + now.minute
+    nowMinute in startTime.toMinuteOfDay()..endTime.toMinuteOfDay()
 }.getOrElse { false }
