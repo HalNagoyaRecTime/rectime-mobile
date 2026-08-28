@@ -10,6 +10,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -17,6 +19,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
@@ -39,11 +43,13 @@ internal fun AccountDeletionSection(
 
     Column(
         modifier = modifier
+            .fillMaxWidth()
             .semantics {
                 if (state.isOpening) {
                     stateDescription = "削除手続きページを開いています"
                 }
             },
+        horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         TextButton(
@@ -52,8 +58,8 @@ internal fun AccountDeletionSection(
         ) {
             Text(
                 text = "アカウント削除手続き",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                color = AppTheme.colors.themeColorFirst,
             )
         }
 
