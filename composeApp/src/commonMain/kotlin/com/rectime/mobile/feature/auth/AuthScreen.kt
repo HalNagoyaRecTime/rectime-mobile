@@ -138,12 +138,24 @@ private fun MicrosoftSignInButton(
     ) {
         MicrosoftLogo(modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.size(AppTheme.spacing.md))
-        Text(
-            text = if (isLoading) "サインイン中..." else "Microsoft アカウントでサインイン",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = AppTheme.colors.textLoginButton,
-        )
+        Box(contentAlignment = Alignment.Center) {
+            // 「サインイン中...」に切り替わってもボタン幅が変わらないよう、既定の文言で幅を確保しておく。
+            Text(
+                text = "Microsoft アカウントでサインイン",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = AppTheme.colors.textLoginButton,
+                modifier = Modifier.alpha(if (isLoading) 0f else 1f),
+            )
+            if (isLoading) {
+                Text(
+                    text = "サインイン中...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = AppTheme.colors.textLoginButton,
+                )
+            }
+        }
     }
 }
 
