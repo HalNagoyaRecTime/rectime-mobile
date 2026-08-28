@@ -148,7 +148,7 @@ private fun UserInfoCard(
             .fillMaxWidth()
             .outerShadow(                                   // ← 追加
                 shape = RoundedCornerShape(AppTheme.radius.card),
-                color = AppTheme.colors.dropShadowDark,      // RootHeaderと同じ影の色トークンを流用
+                color = AppTheme.colors.dropShadow,      // RootHeaderと同じ影の色トークンを流用
                 blurRadius = 8.dp,
                 offsetX = 0.dp,
                 offsetY = 4.dp,
