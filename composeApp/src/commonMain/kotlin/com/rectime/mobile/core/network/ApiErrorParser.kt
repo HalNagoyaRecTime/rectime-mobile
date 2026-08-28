@@ -33,12 +33,12 @@ fun apiErrorException(
 }
 
 /**
- * Preserve the small amount of semantic information that is available even
- * when an endpoint has not returned the common error body yet.
+ * 共通エラーレスポンスをまだ返せないエンドポイントに対しても、
+ * HTTPステータスから取得できる最低限の意味情報を保持する。
  *
- * Feature-specific 404 meanings are filled in by the caller (for example,
- * the notifications UI treats NOT_FOUND as a missing notification), while
- * the parser remains independent of any feature.
+ * 404の機能固有の意味付けは呼び出し側で行う。例えば通知画面では、
+ * NOT_FOUNDを通知が存在しない場合として扱う。これによりパーサーは
+ * 特定機能に依存しない。
  */
 private fun defaultApiErrorCode(status: HttpStatusCode): String = when (status) {
     HttpStatusCode.Unauthorized -> "UNAUTHORIZED"
