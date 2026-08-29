@@ -1,12 +1,17 @@
 package com.rectime.mobile.regression
 
+import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
+import com.rectime.mobile.core.config.apiBaseUrl as configuredApiBaseUrl
+import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.calendar.CalendarApi
+import com.rectime.mobile.feature.calendar.CalendarApiException
 import com.rectime.mobile.feature.competition.CompetitionDetailApi
+import com.rectime.mobile.feature.competition.CompetitionDetailApiException
 import com.rectime.mobile.feature.notifications.NotificationApi
+import com.rectime.mobile.feature.notifications.NotificationApiException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
-import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -15,23 +20,32 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
+import kotlin.test.AfterTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 
 class MobileBackendApiRegressionTest {
+    @AfterTest
+    fun tearDown() {
+        SessionTokenHolder.accessToken = null
+    }
+
     @Test
     fun authenticatedSessionCanUseCalendarCompetitionAndNotificationApis() = runTest {
-        val requestedPaths = mutableListOf<String>()
-        val client = authenticatedMockClient(requestedPaths)
+        SessionTokenHolder.accessToken = accessToken
+        val requests = mutableListOf<CapturedRequest>()
+        val client = authenticatedMockClient(requests)
         val calendarApi = CalendarApi(client, apiBaseUrl)
         val competitionApi = CompetitionDetailApi(client, apiBaseUrl)
         val notificationApi = NotificationApi(client, apiBaseUrl) { accessToken }
 
-        val calendarEvent = calendarApi.getEvents().single()
+        val calendarEvent = calendarApi.getEvents().events.single()
         val competition = competitionApi.getEvent(calendarEvent.eventId)
         val notificationPage = notificationApi.getNotifications(limit = 20, offset = 0)
         val notification = notificationApi.getNotification(notificationPage.notifications.single().id)
 
-        assertEquals("玉入れ", calendarEvent.title)
+        assertEquals("玉入れ", calendarEvent.eventName)
         assertEquals("体育館", competition.venue)
         assertEquals("競技開始のお知らせ", notification.title)
         assertEquals(
@@ -41,16 +55,63 @@ class MobileBackendApiRegressionTest {
                 "/api/v1/me/notifications",
                 "/api/v1/me/notifications/12",
             ),
-            requestedPaths,
+            requests.map(CapturedRequest::path),
         )
+        requests.forEach { request ->
+            assertEquals(
+                listOf("Bearer $accessToken"),
+                request.authorizationHeaders,
+                "Authorization header mismatch: ${request.path}",
+            )
+            assertEquals(
+                listOf("mobile"),
+                request.clientTypeHeaders,
+                "X-Client-Type header mismatch: ${request.path}",
+            )
+        }
     }
 
-    private fun authenticatedMockClient(requestedPaths: MutableList<String>) = HttpClient(MockEngine) {
+    @Test
+    fun mapsUnauthorizedCalendarResponseToApiException() = runTest {
+        val api = CalendarApi(errorClient(HttpStatusCode.Unauthorized, "expired"), apiBaseUrl)
+
+        val error = assertFailsWith<CalendarApiException> { api.getEvents() }
+
+        assertEquals(401, error.statusCode)
+    }
+
+    @Test
+    fun mapsMissingCompetitionResponseToApiException() = runTest {
+        val api = CompetitionDetailApi(errorClient(HttpStatusCode.NotFound, "not found"), apiBaseUrl)
+
+        val error = assertFailsWith<CompetitionDetailApiException> { api.getEvent(999) }
+
+        assertEquals(404, error.statusCode)
+    }
+
+    @Test
+    fun keepsServerResponseOutOfNotificationErrorMessage() = runTest {
+        val responseBody = "sensitive backend response"
+        val api = NotificationApi(
+            errorClient(HttpStatusCode.InternalServerError, responseBody),
+            apiBaseUrl,
+        ) { accessToken }
+
+        val error = assertFailsWith<NotificationApiException> { api.getNotifications() }
+
+        assertEquals(500, error.statusCode)
+        assertEquals(responseBody, error.responseBody)
+        assertFalse(error.message.orEmpty().contains(responseBody))
+    }
+
+    private fun authenticatedMockClient(requests: MutableList<CapturedRequest>) = HttpClient(MockEngine) {
         engine {
             addHandler { request ->
-                assertEquals("Bearer $accessToken", request.headers[HttpHeaders.Authorization])
-                assertEquals("mobile", request.headers[clientTypeHeader])
-                requestedPaths += request.url.encodedPath
+                requests += CapturedRequest(
+                    path = request.url.encodedPath,
+                    authorizationHeaders = request.headers.getAll(HttpHeaders.Authorization).orEmpty(),
+                    clientTypeHeaders = request.headers.getAll(clientTypeHeader).orEmpty(),
+                )
 
                 val body = when (request.url.encodedPath) {
                     "/api/v1/events" -> eventsJson
@@ -65,21 +126,30 @@ class MobileBackendApiRegressionTest {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
         }
-        install(TestMobileAuthHeaders)
+        install(MobileAuthHeadersPlugin)
     }
 
+    private fun errorClient(status: HttpStatusCode, body: String) = HttpClient(MockEngine) {
+        engine {
+            addHandler { respond(body, status, jsonHeaders) }
+        }
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true })
+        }
+        install(MobileAuthHeadersPlugin)
+    }
+
+    private data class CapturedRequest(
+        val path: String,
+        val authorizationHeaders: List<String>,
+        val clientTypeHeaders: List<String>,
+    )
+
     private companion object {
-        const val apiBaseUrl = "https://api.example.test"
+        val apiBaseUrl = configuredApiBaseUrl
         const val accessToken = "regression-access-token"
         const val clientTypeHeader = "X-Client-Type"
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
-
-        val TestMobileAuthHeaders = createClientPlugin("TestMobileAuthHeaders") {
-            onRequest { request, _ ->
-                request.headers.append(HttpHeaders.Authorization, "Bearer $accessToken")
-                request.headers.append(clientTypeHeader, "mobile")
-            }
-        }
 
         val eventsJson = """
             {
@@ -88,8 +158,8 @@ class MobileBackendApiRegressionTest {
                 "event_name": "玉入れ",
                 "rule_text": "制限時間内に玉を入れる",
                 "venue": "体育館",
-                "start_time": "0915",
-                "end_time": "0945",
+                "start_time": "09:15",
+                "end_time": "09:45",
                 "created_at": "2026-08-01T00:00:00Z",
                 "updated_at": "2026-08-01T00:00:00Z"
               }],
@@ -104,8 +174,8 @@ class MobileBackendApiRegressionTest {
               "event_id": 7,
               "event_name": "玉入れ",
               "venue": "体育館",
-              "start_time": "0915",
-              "end_time": "0945",
+              "start_time": "09:15",
+              "end_time": "09:45",
               "rule_text": "制限時間内に玉を入れる"
             }
         """.trimIndent()

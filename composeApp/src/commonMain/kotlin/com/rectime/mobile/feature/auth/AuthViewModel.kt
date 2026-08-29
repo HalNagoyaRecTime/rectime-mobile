@@ -140,36 +140,45 @@ class AuthViewModel(
             _uiState.update {
                 it.copy(isLoading = true, error = null, message = "Opening Microsoft login...")
             }
+            var pendingForAttempt: PendingAuth? = null
             try {
                 val codeVerifier = generateBase64UrlRandom(32)
                 val codeChallenge = generateCodeChallenge(codeVerifier)
                 val state = generateBase64UrlRandom(32)
+                val pending = PendingAuth(state = state, codeVerifier = codeVerifier)
                 val authUrl = api.requestAuthUrl(state, codeChallenge)
+
+                // Microsoftで認証済みの場合も即時コールバックを処理できるよう、
+                // ブラウザーへ制御を渡す前に今回のPKCE情報を保存する。
+                sessionStore.savePendingAuth(pending)
+                pendingForAttempt = pending
+                _uiState.update { it.copy(pendingAuth = pending) }
                 val opened = openUrl(authUrl)
                 if (!opened) {
+                    clearPendingAuthForAttempt(pending)
                     _uiState.update {
                         it.copy(
                             isLoading = false,
+                            pendingAuth = null,
                             error = debugAuthMessage("ブラウザを開けませんでした", isDebugBuild),
                             message = "",
                         )
                     }
                     return@launch
                 }
-                val pending = PendingAuth(state = state, codeVerifier = codeVerifier)
-                sessionStore.savePendingAuth(pending)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        pendingAuth = pending,
                         message = "Continue login in your browser",
                     )
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                _uiState.update {
-                    it.copy(
+                pendingForAttempt?.let { clearPendingAuthForAttempt(it) }
+                _uiState.update { current ->
+                    current.copy(
                         isLoading = false,
+                        pendingAuth = current.pendingAuth.takeUnless { it == pendingForAttempt },
                         error = authErrorMessage(error, isDebugBuild),
                         message = "",
                     )
@@ -180,7 +189,9 @@ class AuthViewModel(
 
     fun handleCallbackUrl(url: String) {
         viewModelScope.launch {
-            val pending = _uiState.value.pendingAuth
+            // コールドスタート時はセッション復元より先にディープリンクが届くことがあるため、
+            // 画面状態が未復元なら永続化済みPKCE情報を直接参照する。
+            val pending = _uiState.value.pendingAuth ?: sessionStore.loadPendingAuth()
             if (pending == null) {
                 _uiState.update {
                     it.copy(error = debugAuthMessage("認証待ち情報がありません", isDebugBuild))
@@ -341,6 +352,12 @@ class AuthViewModel(
         sessionStore.clearPendingAuth()
         cache.clearAll()
         _uiState.value = AuthUiState(error = message)
+    }
+
+    private suspend fun clearPendingAuthForAttempt(pending: PendingAuth) {
+        if (sessionStore.loadPendingAuth() == pending) {
+            sessionStore.clearPendingAuth()
+        }
     }
 
     override fun onCleared() {

@@ -407,6 +407,31 @@ class AuthViewModelTest {
         assertNull(store.pendingAuth)
     }
 
+    @Test
+    fun startLoginKeepsPreviousPendingAuthWhenAuthUrlRequestFails() = runTest(testDispatcher) {
+        val previous = PendingAuth("previous-state", "previous-verifier")
+        val store = FakeAuthSessionStorage(pendingAuth = previous)
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"error":{"message":"network unavailable"}}""",
+                        status = HttpStatusCode.ServiceUnavailable,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.startLogin()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(previous, store.pendingAuth)
+        assertEquals(previous, viewModel.uiState.value.pendingAuth)
+    }
+
     // ---- handleCallbackUrl 正常系 ----
 
     @Test
@@ -432,6 +457,30 @@ class AuthViewModelTest {
         assertEquals("access-token", state.session?.accessToken)
         assertEquals("Login successful", state.message)
         assertEquals("access-token", store.session?.accessToken)
+        assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun handleCallbackUrlLoadsPendingAuthFromStorageBeforeRestoreCompletes() = runTest(testDispatcher) {
+        val pending = PendingAuth("state-abc", "verifier-123")
+        val store = FakeAuthSessionStorage(
+            pendingAuth = pending,
+            emptyPendingLoads = 1,
+        )
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(content = sessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
+                },
+            ),
+            store = store,
+        )
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+        assertNull(viewModel.uiState.value.error)
         assertNull(store.pendingAuth)
     }
 
@@ -883,6 +932,7 @@ class AuthViewModelTest {
         var pendingAuth: PendingAuth? = null,
         var clearFails: Boolean = false,
         var clearPendingAuthFails: Boolean = false,
+        private var emptyPendingLoads: Int = 0,
     ) : AuthSessionStorage {
         var clearPendingAuthCalls = 0
             private set
@@ -899,7 +949,13 @@ class AuthViewModelTest {
             return true
         }
 
-        override suspend fun loadPendingAuth(): PendingAuth? = pendingAuth
+        override suspend fun loadPendingAuth(): PendingAuth? {
+            if (emptyPendingLoads > 0) {
+                emptyPendingLoads--
+                return null
+            }
+            return pendingAuth
+        }
 
         override suspend fun savePendingAuth(pending: PendingAuth) {
             pendingAuth = pending
