@@ -15,8 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
 
-private const val NOTIFICATIONS_CACHE_KEY = "notifications_v1"
-
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
     val isLoading: Boolean = false,
@@ -28,8 +26,7 @@ data class NotificationsUiState(
 )
 
 class NotificationsViewModel(
-    private val gateway: NotificationGateway = NotificationApi(),
-    private val cache: LocalCache = LocalCache(),
+    private val feedStore: NotificationFeedStore = NotificationFeedStore.shared,
     private val readStore: NotificationReadStore = NotificationReadStore.shared,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NotificationsUiState(isLoading = true))
@@ -62,13 +59,7 @@ class NotificationsViewModel(
         )
         loadJob = viewModelScope.launch {
             try {
-                when (
-                    val result = fetchWithCacheFallback(
-                        fetchLive = { fetchAllNotifications(gateway) },
-                        loadCache = { cache.load<List<UserNotification>>(NOTIFICATIONS_CACHE_KEY) },
-                        saveCache = { cache.save(NOTIFICATIONS_CACHE_KEY, it) },
-                    )
-                ) {
+                when (val result = feedStore.load(force = isRefresh)) {
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = _uiState.value.copy(
                             notifications = result.value,
@@ -124,11 +115,6 @@ class NotificationsViewModel(
                 )
             }
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        gateway.close()
     }
 }
 

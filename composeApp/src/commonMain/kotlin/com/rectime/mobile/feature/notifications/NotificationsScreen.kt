@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.modifier.outerShadow
@@ -107,35 +106,10 @@ object NotificationsScreen : Screen {
                 }
 
                 uiState.notifications.isEmpty() -> item {
-                    Column {
-                        if (uiState.isOffline) {
-                            OfflineBanner(
-                                message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
-                                modifier = Modifier.padding(bottom = 8.dp),
-                            )
-                        }
-                        NotificationMessage(message = "通知はありません")
-                    }
+                    NotificationMessage(message = "通知はありません")
                 }
 
                 else -> {
-                    if (uiState.isOffline) {
-                        item {
-                            OfflineBanner(
-                                message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
-                                modifier = Modifier.padding(vertical = 8.dp),
-                            )
-                        }
-                    }
-                    uiState.error?.let { error ->
-                        item {
-                            Text(
-                                text = error,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(vertical = 8.dp),
-                            )
-                        }
-                    }
                     items(
                         count = uiState.notifications.size,
                         key = { index -> uiState.notifications[index].id },

@@ -46,7 +46,6 @@ import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.MapModal
-import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.component.headerTitleBarHeight
 import com.rectime.mobile.ui.theme.AppTheme
@@ -129,7 +128,6 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                 event = event,
                                 gatherings = uiState.gatherings,
                                 attendingGatheringId = uiState.attendingGatheringId,
-                                isOffline = uiState.isOffline,
                                 onOpenMap = { isMapVisible = true },
                             )
                         }
@@ -149,7 +147,6 @@ private fun EventDetailContent(
     event: EventDetail,
     gatherings: List<Gathering>,
     attendingGatheringId: Int?,
-    isOffline: Boolean,
     onOpenMap: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -164,12 +161,6 @@ private fun EventDetailContent(
                 ),
             verticalArrangement = Arrangement.spacedBy(SectionSpacing),
         ) {
-            if (isOffline) {
-                OfflineBanner(
-                    message = "オフライン: 最新のイベント情報を取得できません。前回取得時の内容を表示しています。",
-                )
-            }
-
             DetailSection(heading = "実施場所", onInfoClick = onOpenMap) {
                 DetailBodyText(
                     text = event.venue,
