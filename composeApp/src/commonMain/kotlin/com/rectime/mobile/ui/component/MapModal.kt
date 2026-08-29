@@ -28,9 +28,6 @@ import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Xmark
-import org.jetbrains.compose.resources.painterResource
-import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.recmap
 
 // 横長のマップをできるだけ大きく見せるため、画面幅いっぱいに近いカードにする
 private const val MapModalWidthRatio = 0.96f
@@ -101,13 +98,9 @@ private fun ZoomableMap() {
                 }
             },
     ) {
-        val bundledMap = painterResource(Res.drawable.recmap)
         AsyncImage(
             model = venueMapImageUrl(),
             contentDescription = "会場マップ",
-            placeholder = bundledMap,
-            error = bundledMap,
-            fallback = bundledMap,
             contentScale = ContentScale.FillWidth,
             modifier = Modifier
                 .fillMaxWidth()
