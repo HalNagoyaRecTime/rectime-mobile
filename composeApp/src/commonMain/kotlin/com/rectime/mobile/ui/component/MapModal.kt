@@ -1,6 +1,5 @@
 package com.rectime.mobile.ui.component
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,6 +23,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Xmark
@@ -39,6 +40,9 @@ private val MapCornerRadius = 12.dp
 private val HintFontSize = 14.sp
 private const val MinScale = 1f
 private const val MaxScale = 5f
+
+internal fun venueMapImageUrl(baseUrl: String = apiBaseUrl): String =
+    "${baseUrl.trimEnd('/')}/map/recmap.png"
 
 @Composable
 fun MapModal(onDismiss: () -> Unit) {
@@ -97,9 +101,13 @@ private fun ZoomableMap() {
                 }
             },
     ) {
-        Image(
-            painter = painterResource(Res.drawable.recmap),
+        val bundledMap = painterResource(Res.drawable.recmap)
+        AsyncImage(
+            model = venueMapImageUrl(),
             contentDescription = "会場マップ",
+            placeholder = bundledMap,
+            error = bundledMap,
+            fallback = bundledMap,
             contentScale = ContentScale.FillWidth,
             modifier = Modifier
                 .fillMaxWidth()
