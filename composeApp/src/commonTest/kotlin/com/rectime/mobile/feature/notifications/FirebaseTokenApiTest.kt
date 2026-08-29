@@ -93,8 +93,8 @@ class FirebaseTokenApiTest {
     fun registerExposesBackendFailureWithoutLeakingItIntoMessage() = runTest {
         val client = mockAppHttpClient {
             respond(
-                content = """{"error":"unauthorized"}""",
-                status = HttpStatusCode.Unauthorized,
+                content = """{"error":"service unavailable"}""",
+                status = HttpStatusCode.ServiceUnavailable,
                 headers = jsonHeaders,
             )
         }
@@ -104,8 +104,8 @@ class FirebaseTokenApiTest {
             api.register(fcmToken = "firebase-token", accessToken = "expired-token")
         }
 
-        assertEquals(401, error.statusCode)
-        assertEquals("""{"error":"unauthorized"}""", error.responseBody)
+        assertEquals(503, error.statusCode)
+        assertEquals("""{"error":"service unavailable"}""", error.responseBody)
         assertFalse(error.message.orEmpty().contains("expired-token"))
         assertFalse(error.message.orEmpty().contains("firebase-token"))
     }

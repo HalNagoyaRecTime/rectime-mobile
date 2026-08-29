@@ -2,6 +2,7 @@ package com.rectime.mobile.core.network
 
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.feature.auth.SessionTokenHolder
+import com.rectime.mobile.feature.auth.AuthSessionInvalidationHandler
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
@@ -27,6 +28,28 @@ internal val MobileAuthHeadersPlugin = createClientPlugin("MobileAuthHeaders") {
             request.headers.append(name, value)
         }
     }
+    onResponse { response ->
+        val url = response.call.request.url.toString()
+        val requestToken = response.call.request.headers[HttpHeaders.Authorization]
+            ?.takeIf { it.startsWith("Bearer ") }
+            ?.removePrefix("Bearer ")
+            ?.takeIf(String::isNotBlank)
+        // 認証APIの401はAuthViewModel自身で分類する。リソースAPIの401だけを
+        // refresh要求として通知し、通知時点のTokenも競合判定用に渡す。
+        if (response.status.value == 401 && requestToken != null && !isAuthApiPath(url)) {
+            AuthSessionInvalidationHandler.notifyUnauthorized(requestToken)
+        }
+    }
+}
+
+internal fun isAuthApiPath(url: String): Boolean =
+    isAuthApiPath(url, apiBaseUrl)
+
+internal fun isAuthApiPath(url: String, baseUrl: String): Boolean {
+    if (!isApiUrl(url, baseUrl)) return false
+    val normalizedBaseUrl = baseUrl.trimEnd('/')
+    val path = url.substringBefore('?').removePrefix(normalizedBaseUrl)
+    return path.startsWith("/api/v1/auth/")
 }
 
 fun createAppHttpClient(): HttpClient = createHttpClient().config {

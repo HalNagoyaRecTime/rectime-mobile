@@ -173,10 +173,7 @@ class AuthViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
         assertNull(state.session)
-        assertTrue(
-            state.error.orEmpty().startsWith("Session expired. Please login again."),
-            state.error.orEmpty(),
-        )
+        assertEquals(AUTH_EXPIRED_MESSAGE, state.error)
         assertNull(store.session)
         assertNull(store.pendingAuth)
         assertNull(cache.load<String>("some_cached_key"))
@@ -215,6 +212,28 @@ class AuthViewModelTest {
         assertEquals(storedSession, state.session)
         assertNull(state.error)
         assertEquals(storedSession, store.session)
+        assertEquals("cached-value", cache.load<String>("some_cached_key"))
+    }
+
+    @Test
+    fun restoreSessionKeepsSessionPendingAuthAndCacheWhenMeFailsOffline() = runTest(testDispatcher) {
+        val pending = PendingAuth("state-abc", "verifier-123")
+        val store = FakeAuthSessionStorage(session = storedSession, pendingAuth = pending)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { throw RuntimeException("network down") }),
+            store = store,
+            cache = cache,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(storedSession, state.session)
+        assertEquals(pending, state.pendingAuth)
+        assertEquals("Offline", state.message)
+        assertNull(state.error)
         assertEquals("cached-value", cache.load<String>("some_cached_key"))
     }
 
@@ -511,7 +530,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun handleCallbackUrlKeepsPendingAuthWhenTokenExchangeFails() = runTest(testDispatcher) {
+    fun handleCallbackUrlClearsPendingAuthWhenTokenExchangeIsRejected() = runTest(testDispatcher) {
         val pending = PendingAuth("state-abc", "verifier-123")
         val store = FakeAuthSessionStorage(pendingAuth = pending)
         val viewModel = buildViewModel(
@@ -535,8 +554,83 @@ class AuthViewModelTest {
         assertEquals(false, state.isLoading)
         assertTrue(state.error.orEmpty().startsWith(AUTH_FAILED_MESSAGE), state.error.orEmpty())
         assertNull(state.session)
-        assertEquals(pending, state.pendingAuth)
-        assertEquals(pending, store.pendingAuth)
+        assertNull(state.pendingAuth)
+        assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun resourceUnauthorizedRefreshesSessionOnlyOnceForTheRejectedToken() = runTest(testDispatcher) {
+        var refreshCount = 0
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    when {
+                        request.url.encodedPath.endsWith("/auth/me") -> respond(
+                            content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                        request.url.encodedPath.endsWith("/auth/refresh") -> {
+                            refreshCount++
+                            respond(
+                                content = """{"access_token":"new-access-token","expires_in":7200}""",
+                                status = HttpStatusCode.OK,
+                                headers = jsonHeaders,
+                            )
+                        }
+                        else -> error("Unexpected request: ${request.url}")
+                    }
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+        viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, refreshCount)
+        assertEquals("new-access-token", viewModel.uiState.value.session?.accessToken)
+        assertEquals("new-access-token", store.session?.accessToken)
+    }
+
+    @Test
+    fun resourceUnauthorizedClearsSessionOnlyWhenRefreshIsRejected() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/me")) {
+                        respond(
+                            content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        respond(
+                            content = """{"error":{"message":"refresh token revoked"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+        assertNull(store.session)
+        assertNull(cache.load<String>("some_cached_key"))
     }
 
     // ---- logout ----
