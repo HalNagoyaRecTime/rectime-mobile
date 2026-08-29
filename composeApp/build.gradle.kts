@@ -67,6 +67,7 @@ kotlin {
             implementation(libs.compose.icon.collections.fontawesome)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
+            implementation(libs.coil.network.cache.control)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
