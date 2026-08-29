@@ -29,7 +29,6 @@ import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
-import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
@@ -93,22 +92,15 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                     }
 
                     uiState.notification != null -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(ErrorContentSpacing)) {
-                            if (uiState.isOffline) {
-                                OfflineBanner(
-                                    message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
+                        NotificationDetailContent(
+                            notification = requireNotNull(uiState.notification),
+                            isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
+                            onRelatedEventClick = { eventId ->
+                                navigationController.push(
+                                    EventDetailScreen(eventId = eventId),
                                 )
-                            }
-                            NotificationDetailContent(
-                                notification = requireNotNull(uiState.notification),
-                                isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
-                                onRelatedEventClick = { eventId ->
-                                    navigationController.push(
-                                        EventDetailScreen(eventId = eventId),
-                                    )
-                                },
-                            )
-                        }
+                            },
+                        )
                     }
                 }
             }

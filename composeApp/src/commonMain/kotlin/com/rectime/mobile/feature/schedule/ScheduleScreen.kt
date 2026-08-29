@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -51,7 +50,6 @@ import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppModal
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
-import com.rectime.mobile.ui.component.OfflineBanner
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.component.resolveEventCardShadowSpec
 import com.rectime.mobile.ui.modifier.outerShadow
@@ -76,7 +74,6 @@ object ScheduleScreen : Screen {
             events = events,
             isLoading = viewModel.isLoading,
             error = viewModel.error,
-            isOffline = viewModel.isOffline,
         )
     }
 }
@@ -88,7 +85,6 @@ private fun ScheduleScreenUI(
     events: List<TimelineEvent>,
     isLoading: Boolean,
     error: String?,
-    isOffline: Boolean,
 ) {
     val timelineTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction + 20.dp
     val timelineBottomPadding = 120.dp
@@ -150,16 +146,6 @@ private fun ScheduleScreenUI(
             snackbarHostState = snackbarHostState,
         ) {
             item {
-                if (isOffline) {
-                    OfflineBanner(
-                        message = "オフライン: 最新のデータを取得できません。前回取得時の内容を表示しています。",
-                        modifier = Modifier
-                            .statusBarsPadding()
-                            .padding(top = 56.dp)
-                            .padding(horizontal = AppTheme.layout.screenHorizontalPadding, vertical = 4.dp),
-                    )
-                }
-
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
