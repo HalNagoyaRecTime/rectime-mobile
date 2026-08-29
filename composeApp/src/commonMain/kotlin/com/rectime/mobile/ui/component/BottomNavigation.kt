@@ -106,7 +106,7 @@ fun BottomNavigationBar(
     onSelectRoot: (Screen) -> Unit,
     session: AuthSession,
     onLogout: () -> Unit,
-    hasUnreadNotifications: Boolean = true,
+    hasUnreadNotifications: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val items = listOf(

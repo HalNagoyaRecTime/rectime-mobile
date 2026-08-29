@@ -26,6 +26,7 @@ fun RootLayer(
     navigationController: NavigationController,
     session: AuthSession,
     onLogout: () -> Unit,
+    hasUnreadNotifications: Boolean,
 ) {
     val rootScreen = state.rootScreen ?: return
 
@@ -57,6 +58,7 @@ fun RootLayer(
             },
             session = session,
             onLogout = onLogout,
+            hasUnreadNotifications = hasUnreadNotifications,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),
