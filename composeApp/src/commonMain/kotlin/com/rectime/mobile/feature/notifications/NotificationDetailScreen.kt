@@ -34,6 +34,7 @@ import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -60,6 +61,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel(key = key) { NotificationDetailViewModel(id) }
         val uiState by viewModel.uiState.collectAsState()
+        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
 
         PushScreenScaffold(
             title = "通知詳細",
@@ -95,6 +97,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                         NotificationDetailContent(
                             notification = requireNotNull(uiState.notification),
                             isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
+                            nowMinute = nowMinute,
                             onRelatedEventClick = { eventId ->
                                 navigationController.push(
                                     EventDetailScreen(eventId = eventId),
@@ -112,6 +115,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
 private fun NotificationDetailContent(
     notification: UserNotification,
     isParticipatingInRelatedEvent: Boolean,
+    nowMinute: Int,
     onRelatedEventClick: (Int) -> Unit,
 ) {
     Column(
@@ -155,6 +159,7 @@ private fun NotificationDetailContent(
                 NotificationRelatedEventLink(
                     event = event,
                     isParticipating = isParticipatingInRelatedEvent,
+                    nowMinute = nowMinute,
                     onClick = { onRelatedEventClick(event.id) },
                 )
             }
@@ -166,18 +171,19 @@ private fun NotificationDetailContent(
 private fun NotificationRelatedEventLink(
     event: NotificationRelatedEvent,
     isParticipating: Boolean,
+    nowMinute: Int,
     onClick: () -> Unit,
 ) {
     EventCard(
         time = "${event.startTime.toShortFormattedTime()}-${event.endTime.toShortFormattedTime()}",
         title = event.name,
         court = event.venue,
-        isLive = isEventLive(event.startTime, event.endTime),
+        isLive = isEventLiveAt(event.startTime, event.endTime, nowMinute),
         isParticipating = isParticipating,
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(80.dp),
+            .height(EventCardHeight),
     )
 }
 
@@ -204,17 +210,11 @@ internal fun String.toShortFormattedTime(): String {
 private fun Int.toTwoDigits(): String = toString().padStart(2, '0')
 
 internal fun String.toMinuteOfDay(): Int {
+    if (length < 4) return 0
     val hour = substring(0, 2).toIntOrNull() ?: return 0
     val minute = substring(2, 4).toIntOrNull() ?: return 0
     return hour * 60 + minute
 }
 
-internal fun isEventLive(
-    startTime: String,
-    endTime: String,
-    timeZone: TimeZone = TimeZone.currentSystemDefault(),
-    now: LocalDateTime = Clock.System.now().toLocalDateTime(timeZone),
-): Boolean = runCatching {
-    val nowMinute = now.hour * 60 + now.minute
+internal fun isEventLiveAt(startTime: String, endTime: String, nowMinute: Int): Boolean =
     nowMinute in startTime.toMinuteOfDay()..endTime.toMinuteOfDay()
-}.getOrElse { false }
