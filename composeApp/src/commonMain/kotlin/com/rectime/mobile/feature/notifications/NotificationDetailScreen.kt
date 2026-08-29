@@ -154,7 +154,7 @@ private fun NotificationDetailContent(
         notification.relatedEvent?.let { event ->
             Column(verticalArrangement = Arrangement.spacedBy(RelatedEventSpacing)) {
                 Text(
-                    text = "関連イベント",
+                    text = "イベント",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                     color = AppTheme.colors.textRelationEvent,
