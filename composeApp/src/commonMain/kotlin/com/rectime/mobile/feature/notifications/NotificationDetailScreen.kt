@@ -183,7 +183,7 @@ private fun NotificationRelatedEventLink(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .height(80.dp),
+            .height(EventCardHeight),
     )
 }
 
