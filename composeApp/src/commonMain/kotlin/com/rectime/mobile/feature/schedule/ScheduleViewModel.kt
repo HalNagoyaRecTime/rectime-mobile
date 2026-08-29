@@ -12,23 +12,17 @@ import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
+import com.rectime.mobile.core.util.nowMinuteStateFlow
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
 private const val EVENTS_CACHE_KEY = "schedule_events_v1"
@@ -41,17 +35,7 @@ class ScheduleViewModel(
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
-    val nowMinute: StateFlow<Int> = flow {
-        while (true) {
-            val now = currentLocalDateTime()
-            emit(now.hour * 60 + now.minute)
-            delay(((60 - now.second) * 1000L).milliseconds)
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = currentMinuteOfDay(),
-    )
+    val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _events = mutableStateOf(listOf<TimelineEvent>())
     val events: State<List<TimelineEvent>> = _events
@@ -152,13 +136,5 @@ class ScheduleViewModel(
     override fun onCleared() {
         super.onCleared()
         client.close()
-    }
-
-    private fun currentLocalDateTime(): LocalDateTime =
-        clock.now().toLocalDateTime(timeZone)
-
-    private fun currentMinuteOfDay(): Int {
-        val now = currentLocalDateTime()
-        return now.hour * 60 + now.minute
     }
 }
