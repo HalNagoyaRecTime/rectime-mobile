@@ -22,6 +22,7 @@ import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
@@ -79,6 +80,15 @@ fun App() {
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             SessionTokenHolder.accessToken = session.accessToken
+            val badgeViewModel: NotificationBadgeViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { NotificationBadgeViewModel() }
+                }
+            )
+            val hasUnreadNotifications by badgeViewModel.hasUnreadNotifications.collectAsState()
+            LaunchedEffect(session.user.id) {
+                badgeViewModel.onSession(session.user.id)
+            }
             LaunchedEffect(notificationNavigationTarget) {
                 when (val target = notificationNavigationTarget) {
                     NotificationNavigationTarget.Home -> {
@@ -105,6 +115,7 @@ fun App() {
                     navigationController = navigationController,
                     session = session,
                     onLogout = onLogout,
+                    hasUnreadNotifications = hasUnreadNotifications,
                 )
             }
         }
