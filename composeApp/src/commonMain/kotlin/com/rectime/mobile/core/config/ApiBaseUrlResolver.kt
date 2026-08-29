@@ -8,6 +8,7 @@ internal fun resolveApiBaseUrl(rawValue: String?, isDebug: Boolean): String {
     require(url.startsWith("http://") || url.startsWith("https://")) {
         "API_BASE_URL must use http or https."
     }
+    require(url.apiHost().isNotEmpty()) { "API_BASE_URL must include a host." }
 
     if (!isDebug) {
         require(url.startsWith("https://")) { "Release builds require an HTTPS API_BASE_URL." }
@@ -20,10 +21,19 @@ internal fun resolveApiBaseUrl(rawValue: String?, isDebug: Boolean): String {
 }
 
 private fun String.isLocalDevelopmentUrl(): Boolean {
-    val host = substringAfter("://").substringBefore('/').substringBefore(':').lowercase()
+    val host = apiHost()
     return host == "localhost" ||
         host == "127.0.0.1" ||
         host == "0.0.0.0" ||
         host == "10.0.2.2" ||
         host == "::1"
+}
+
+private fun String.apiHost(): String {
+    val authority = substringAfter("://").substringBefore('/')
+    return if (authority.startsWith("[")) {
+        authority.substringAfter('[').substringBefore(']')
+    } else {
+        authority.substringBefore(':')
+    }.lowercase()
 }

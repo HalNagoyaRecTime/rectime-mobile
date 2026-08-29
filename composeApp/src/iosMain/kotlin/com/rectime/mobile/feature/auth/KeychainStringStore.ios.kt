@@ -62,7 +62,9 @@ internal class KeychainStringStore(
             val result = alloc<CFTypeRefVar>()
             val status = SecItemCopyMatching(query, result.ptr)
             if (status == errSecItemNotFound) return@withQuery null
-            if (status != errSecSuccess) return@withQuery null
+            check(status == errSecSuccess) {
+                "Failed to read auth session securely (OSStatus: $status)."
+            }
 
             val data: CFDataRef = result.value?.reinterpret() ?: return@withQuery null
             try {

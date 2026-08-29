@@ -7,8 +7,8 @@ import kotlin.test.assertNull
 class AuthSessionCodecTest {
     @Test
     fun decodeRejectsSessionWithoutRequiredTokens() {
-        val sessionWithoutAccessToken = validSession(accessToken = "")
-        val sessionWithoutRefreshToken = validSession(refreshTokenId = "")
+        val sessionWithoutAccessToken = createTestSession(accessToken = "")
+        val sessionWithoutRefreshToken = createTestSession(refreshTokenId = "")
 
         assertNull(decodeAuthSession(encodeAuthSession(sessionWithoutAccessToken)))
         assertNull(decodeAuthSession(encodeAuthSession(sessionWithoutRefreshToken)))
@@ -150,7 +150,8 @@ class AuthSessionCodecTest {
     }
 }
 
-private fun validSession(
+// Test fixture only; no account or token from this helper is included in the app binary.
+private fun createTestSession(
     accessToken: String = "token123",
     refreshTokenId: String = "refresh456",
 ) = AuthSession(

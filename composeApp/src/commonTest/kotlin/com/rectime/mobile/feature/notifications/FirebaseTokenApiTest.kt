@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
+import com.rectime.mobile.core.network.mobileAuthHeaders
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -40,7 +41,7 @@ class FirebaseTokenApiTest {
                 headers = jsonHeaders,
             )
         }
-        val api = FirebaseTokenApi(client = client, baseUrl = testBaseUrl)
+        val api = testApi(client)
 
         api.register(fcmToken = "firebase-token", accessToken = "access-token")
 
@@ -74,7 +75,7 @@ class FirebaseTokenApiTest {
                 headers = jsonHeaders,
             )
         }
-        val api = FirebaseTokenApi(client = client, baseUrl = testBaseUrl)
+        val api = testApi(client)
 
         api.register(fcmToken = "firebase-token", accessToken = "stale-persisted-token")
 
@@ -97,7 +98,7 @@ class FirebaseTokenApiTest {
                 headers = jsonHeaders,
             )
         }
-        val api = FirebaseTokenApi(client = client, baseUrl = testBaseUrl)
+        val api = testApi(client)
 
         val error = assertFailsWith<FirebaseTokenRegistrationException> {
             api.register(fcmToken = "firebase-token", accessToken = "expired-token")
@@ -123,6 +124,28 @@ class FirebaseTokenApiTest {
             api.register(fcmToken = "firebase-token", accessToken = "")
         }
     }
+
+    @Test
+    fun registerDoesNotSendAccessTokenToUnconfiguredHost() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val client = mockAppHttpClient { request ->
+            capturedRequest = request
+            respond(content = "{}", status = HttpStatusCode.OK, headers = jsonHeaders)
+        }
+        val api = FirebaseTokenApi(client = client, baseUrl = "https://external.example")
+
+        api.register(fcmToken = "firebase-token", accessToken = "access-token")
+
+        val request = requireNotNull(capturedRequest)
+        assertFalse(request.headers.contains(HttpHeaders.Authorization))
+        assertFalse(request.headers.contains("X-Client-Type"))
+    }
+
+    private fun testApi(client: HttpClient) = FirebaseTokenApi(
+        client = client,
+        baseUrl = testBaseUrl,
+        headersProvider = { url, token -> mobileAuthHeaders(url, token, testBaseUrl) },
+    )
 
     private fun mockAppHttpClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,

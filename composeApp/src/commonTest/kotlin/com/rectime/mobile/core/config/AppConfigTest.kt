@@ -16,8 +16,8 @@ class AppConfigTest {
     @Test
     fun allowsLocalHttpUrlInDebugBuild() {
         assertEquals(
-            "http://localhost:8787",
-            resolveApiBaseUrl("http://localhost:8787", isDebug = true),
+            LOCAL_DEBUG_API_URL,
+            resolveApiBaseUrl(LOCAL_DEBUG_API_URL, isDebug = true),
         )
     }
 
@@ -45,5 +45,19 @@ class AppConfigTest {
         assertFailsWith<IllegalArgumentException> {
             resolveApiBaseUrl("https://10.0.2.2:8787", isDebug = false)
         }
+        assertFailsWith<IllegalArgumentException> {
+            resolveApiBaseUrl("https://[::1]:8787", isDebug = false)
+        }
+    }
+
+    @Test
+    fun rejectsUrlWithoutHost() {
+        assertFailsWith<IllegalArgumentException> {
+            resolveApiBaseUrl("https://", isDebug = true)
+        }
+    }
+
+    private companion object {
+        const val LOCAL_DEBUG_API_URL = "http://localhost:8787"
     }
 }
