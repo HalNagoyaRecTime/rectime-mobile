@@ -60,4 +60,16 @@ class SecureEnvelopeTest {
             packSecureEnvelope(ByteArray(SECURE_ENVELOPE_NONCE_SIZE - 1), ciphertext)
         }
     }
+
+    @Test
+    fun `pack rejects a ciphertext too short to carry a GCM tag`() {
+        assertFailsWith<IllegalArgumentException> {
+            packSecureEnvelope(nonce, ByteArray(15))
+        }
+    }
+
+    @Test
+    fun `unpack rejects an empty value`() {
+        assertNull(unpackSecureEnvelope(""))
+    }
 }

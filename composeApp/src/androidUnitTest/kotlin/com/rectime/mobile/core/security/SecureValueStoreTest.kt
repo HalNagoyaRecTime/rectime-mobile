@@ -174,6 +174,15 @@ class SecureValueStoreTest {
         assertTrue(store.values.isEmpty())
     }
 
+    // ログアウト済みの状態からもう一度ログアウトしても、消すものがない以上は成功。
+    // ここでfalseを返すと「ログアウトに失敗しました」が誤って出る。
+    @Test
+    fun `remove succeeds when nothing is stored`() {
+        val store = FakeStringStore().apply { persistFails = true }
+
+        assertTrue(SecureValueStore(store, FakeCipher()).remove(KEY, LEGACY_KEY))
+    }
+
     @Test
     fun `remove does not report success when the delete was only in memory`() {
         val store = FakeStringStore(mapOf(KEY to "enc(payload)", LEGACY_KEY to "payload"))

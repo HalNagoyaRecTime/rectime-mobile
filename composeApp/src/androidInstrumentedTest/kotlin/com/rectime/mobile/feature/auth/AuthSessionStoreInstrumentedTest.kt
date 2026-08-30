@@ -10,6 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -144,6 +145,45 @@ class AuthSessionStoreInstrumentedTest {
 
         assertNull(store.load())
         assertTrue(prefs.all.isEmpty())
+    }
+
+    // fail closedでKeyStoreの鍵ごと破棄したあと、再ログインできることまでを見る。
+    @Test
+    fun loginWorksAgainAfterAFailClosedDiscard() = runBlocking {
+        store.save(session)
+
+        val blob = Base64.getDecoder().decode(assertNotNull(prefs.getString(SESSION_KEY, null)))
+        blob[blob.size - 1] = (blob[blob.size - 1] + 1).toByte()
+        prefs.edit().putString(SESSION_KEY, Base64.getEncoder().encodeToString(blob)).commit()
+        assertNull(store.load())
+
+        store.save(session)
+
+        assertEquals(session, store.load())
+        assertNotEquals(
+            Base64.getEncoder().encodeToString(blob),
+            prefs.getString(SESSION_KEY, null),
+        )
+    }
+
+    @Test
+    fun pendingAuthIsClearedOnDevice() = runBlocking {
+        store.savePendingAuth(pending)
+        prefs.edit().putString(LEGACY_PENDING_AUTH_KEY, encodePendingAuth(pending)).commit()
+
+        assertTrue(store.clearPendingAuth())
+
+        assertFalse(prefs.contains(PENDING_AUTH_KEY))
+        assertFalse(prefs.contains(LEGACY_PENDING_AUTH_KEY))
+        assertNull(store.loadPendingAuth())
+    }
+
+    // ログアウト済みの状態からもう一度ログアウトしても成功扱いにする。
+    // ここでfalseになると「ログアウトに失敗しました」が誤って出る。
+    @Test
+    fun clearSucceedsWhenNothingIsStored() = runBlocking {
+        assertTrue(store.clear())
+        assertTrue(store.clearPendingAuth())
     }
 
     @Test
