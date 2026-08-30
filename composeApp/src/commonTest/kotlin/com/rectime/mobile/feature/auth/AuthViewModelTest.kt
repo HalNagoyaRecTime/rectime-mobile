@@ -633,6 +633,45 @@ class AuthViewModelTest {
         assertNull(cache.load<String>("some_cached_key"))
     }
 
+    @Test
+    fun repeatedUnauthorizedStopsRefreshingAfterAttemptLimit() = runTest(testDispatcher) {
+        var refreshCount = 0
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    when {
+                        request.url.encodedPath.endsWith("/auth/me") -> respond(
+                            content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                        request.url.encodedPath.endsWith("/auth/refresh") -> {
+                            refreshCount++
+                            respond(
+                                content = """{"access_token":"refreshed-$refreshCount","expires_in":7200}""",
+                                status = HttpStatusCode.OK,
+                                headers = jsonHeaders,
+                            )
+                        }
+                        else -> error("Unexpected request: ${request.url}")
+                    }
+                },
+            ),
+            store = store,
+            nowMillis = { 1_000L },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+        viewModel.refreshAfterUnauthorized("refreshed-1")
+        viewModel.refreshAfterUnauthorized("refreshed-2")
+
+        assertEquals(2, refreshCount)
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+    }
+
     // ---- logout ----
 
     @Test
@@ -809,12 +848,14 @@ class AuthViewModelTest {
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
+        nowMillis: () -> Long = { 1_000L },
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
         cache = cache,
         devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
+        nowMillis = nowMillis,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })

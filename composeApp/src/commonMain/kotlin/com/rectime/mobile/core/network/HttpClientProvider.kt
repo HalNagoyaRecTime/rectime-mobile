@@ -8,6 +8,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.http.HttpHeaders
+import io.ktor.http.Url
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
@@ -47,8 +48,7 @@ internal fun isAuthApiPath(url: String): Boolean =
 
 internal fun isAuthApiPath(url: String, baseUrl: String): Boolean {
     if (!isApiUrl(url, baseUrl)) return false
-    val normalizedBaseUrl = baseUrl.trimEnd('/')
-    val path = url.substringBefore('?').removePrefix(normalizedBaseUrl)
+    val path = runCatching { Url(url).encodedPath }.getOrNull() ?: return false
     return path.startsWith("/api/v1/auth/")
 }
 
@@ -68,8 +68,16 @@ fun createAppHttpClient(): HttpClient = createHttpClient().config {
 internal fun isApiUrl(url: String): Boolean = isApiUrl(url, apiBaseUrl)
 
 internal fun isApiUrl(url: String, baseUrl: String): Boolean {
-    val normalizedBaseUrl = baseUrl.trimEnd('/')
-    return url == normalizedBaseUrl || url.startsWith("$normalizedBaseUrl/")
+    val target = runCatching { Url(url) }.getOrNull() ?: return false
+    val base = runCatching { Url(baseUrl) }.getOrNull() ?: return false
+    if (!target.protocol.name.equals(base.protocol.name, ignoreCase = true)) return false
+    if (!target.host.equals(base.host, ignoreCase = true)) return false
+    if (target.port != base.port) return false
+
+    val basePath = base.encodedPath.trimEnd('/')
+    return basePath.isEmpty() ||
+        target.encodedPath == basePath ||
+        target.encodedPath.startsWith("$basePath/")
 }
 
 internal val normalizedApiBaseUrl: String

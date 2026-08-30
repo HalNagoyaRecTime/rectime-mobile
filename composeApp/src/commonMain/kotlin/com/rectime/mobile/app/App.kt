@@ -96,11 +96,13 @@ fun App() {
     var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
-        updatePushTokenRegistration(authState.session?.accessToken)
         if (authState.session == null && hadSession) {
             navigationController.reset(CalendarScreen)
         }
         hadSession = authState.session != null
+    }
+    LaunchedEffect(authState.session?.accessToken) {
+        updatePushTokenRegistration(authState.session?.accessToken)
     }
     LaunchedEffect(Unit) {
         NotificationNavigationHandler.targets.collect {

@@ -1,7 +1,8 @@
 package com.rectime.mobile.feature.auth
 
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 class AuthApiException(
     val statusCode: Int,
@@ -10,12 +11,15 @@ class AuthApiException(
 ) : IllegalStateException(message)
 
 internal object AuthSessionInvalidationHandler {
-    private val eventChannel = Channel<String>(capacity = Channel.CONFLATED)
-    val events = eventChannel.receiveAsFlow()
+    private val mutableEvents = MutableSharedFlow<String>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val events = mutableEvents.asSharedFlow()
 
     fun notifyUnauthorized(accessToken: String) {
-        // 購読開始前や同時発生した401も、最新のTokenについて1件は保持する。
-        eventChannel.trySend(accessToken)
+        mutableEvents.tryEmit(accessToken)
     }
 }
 

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 private const val AUTH_FAILED_MESSAGE = "ログインに失敗しました"
 private const val LOGOUT_FAILED_MESSAGE = "ログアウトに失敗しました"
@@ -29,16 +31,20 @@ private fun authFailed(reason: String?): String {
     return AUTH_FAILED_MESSAGE
 }
 
+@OptIn(ExperimentalTime::class)
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
+    private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
     private val refreshMutex = Mutex()
+    private var refreshAttemptCount = 0
+    private var refreshWindowStartedAt = 0L
 
     init {
         restoreSession()
@@ -307,6 +313,17 @@ class AuthViewModel(
             val current = _uiState.value.session ?: return
             if (current.accessToken != accessToken) return
 
+            val now = nowMillis()
+            if (refreshWindowStartedAt == 0L || now - refreshWindowStartedAt > REFRESH_WINDOW_MILLIS) {
+                refreshWindowStartedAt = now
+                refreshAttemptCount = 0
+            }
+            if (refreshAttemptCount >= MAX_REFRESH_ATTEMPTS) {
+                invalidateSession(AUTH_EXPIRED_MESSAGE, expectedAccessToken = accessToken)
+                return
+            }
+            refreshAttemptCount++
+
             try {
                 val refreshed = api.refresh(current)
                 if (_uiState.value.session?.accessToken != accessToken) return
@@ -342,6 +359,11 @@ class AuthViewModel(
     override fun onCleared() {
         api.close()
         super.onCleared()
+    }
+
+    private companion object {
+        const val MAX_REFRESH_ATTEMPTS = 2
+        const val REFRESH_WINDOW_MILLIS = 60_000L
     }
 }
 

@@ -14,5 +14,6 @@ class AuthApiUrlTest {
         assertFalse(isAuthApiPath("$baseUrl/api/v1/me/notifications", baseUrl))
         assertFalse(isAuthApiPath("https://external.example/api/v1/auth/me", baseUrl))
         assertFalse(isAuthApiPath("$baseUrl/path/api/v1/auth/me", baseUrl))
+        assertTrue(isAuthApiPath("https://API.EXAMPLE.TEST:443/api/v1/auth/me", baseUrl))
     }
 }
