@@ -6,6 +6,7 @@ on:
       - develop
       - develop-v2
       - main
+      - 'feature/**'
   push:
     branches:
       - develop
