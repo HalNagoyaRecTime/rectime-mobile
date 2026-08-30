@@ -1,7 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
-import com.rectime.mobile.core.network.ApiStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
@@ -63,9 +62,9 @@ class NotificationApi(
 }
 
 class NotificationApiException(
-    statusCode: Int,
-    responseBody: String = "",
-) : ApiStatusException(statusCode, responseBody, "Notification API request failed: HTTP $statusCode")
+    val statusCode: Int,
+    val responseBody: String = "",
+) : IllegalStateException("Notification API request failed: HTTP $statusCode")
 
 interface MyEventsGateway {
     suspend fun getMyEventIds(): Set<Int>
