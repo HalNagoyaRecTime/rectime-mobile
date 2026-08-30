@@ -1,11 +1,11 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.ApiStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -25,7 +25,6 @@ interface NotificationGateway {
 class NotificationApi(
     private val client: HttpClient = createAppHttpClient(),
     baseUrl: String = apiBaseUrl,
-    private val accessTokenProvider: () -> String? = { SessionTokenHolder.accessToken },
 ) : NotificationGateway {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/me/notifications"
 
@@ -34,7 +33,6 @@ class NotificationApi(
         require(offset >= 0) { "Offset must not be negative" }
 
         val response = client.get(endpoint) {
-            addMobileAuthorization()
             parameter("limit", limit)
             parameter("offset", offset)
         }
@@ -45,18 +43,9 @@ class NotificationApi(
     override suspend fun getNotification(notificationId: Int): UserNotification {
         require(notificationId > 0) { "Notification ID must be positive" }
 
-        val response = client.get("$endpoint/$notificationId") {
-            addMobileAuthorization()
-        }
+        val response = client.get("$endpoint/$notificationId")
         ensureSuccess(response)
         return response.body<NotificationResponse>().toModel()
-    }
-
-    private fun HttpRequestBuilder.addMobileAuthorization() {
-        val accessToken = accessTokenProvider()?.takeIf(String::isNotBlank)
-            ?: throw NotificationApiException(statusCode = 401)
-        header("X-Client-Type", "mobile")
-        header(HttpHeaders.Authorization, "Bearer $accessToken")
     }
 
     private suspend fun ensureSuccess(response: io.ktor.client.statement.HttpResponse) {
@@ -74,9 +63,9 @@ class NotificationApi(
 }
 
 class NotificationApiException(
-    val statusCode: Int,
-    val responseBody: String = "",
-) : IllegalStateException("Notification API request failed: HTTP $statusCode")
+    statusCode: Int,
+    responseBody: String = "",
+) : ApiStatusException(statusCode, responseBody, "Notification API request failed: HTTP $statusCode")
 
 interface MyEventsGateway {
     suspend fun getMyEventIds(): Set<Int>

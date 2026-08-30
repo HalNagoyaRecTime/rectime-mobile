@@ -1,7 +1,6 @@
 package com.rectime.mobile.regression
 
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
-import com.rectime.mobile.core.config.apiBaseUrl as configuredApiBaseUrl
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.calendar.CalendarApi
 import com.rectime.mobile.feature.calendar.CalendarApiException
@@ -21,11 +20,17 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 
 class MobileBackendApiRegressionTest {
+    @BeforeTest
+    fun setUp() {
+        SessionTokenHolder.accessToken = null
+    }
+
     @AfterTest
     fun tearDown() {
         SessionTokenHolder.accessToken = null
@@ -38,7 +43,7 @@ class MobileBackendApiRegressionTest {
         val client = authenticatedMockClient(requests)
         val calendarApi = CalendarApi(client, apiBaseUrl)
         val competitionApi = CompetitionDetailApi(client, apiBaseUrl)
-        val notificationApi = NotificationApi(client, apiBaseUrl) { accessToken }
+        val notificationApi = NotificationApi(client, apiBaseUrl)
 
         val calendarEvent = calendarApi.getEvents().events.single()
         val competition = competitionApi.getEvent(calendarEvent.eventId)
@@ -92,10 +97,11 @@ class MobileBackendApiRegressionTest {
     @Test
     fun keepsServerResponseOutOfNotificationErrorMessage() = runTest {
         val responseBody = "sensitive backend response"
+        SessionTokenHolder.accessToken = accessToken
         val api = NotificationApi(
             errorClient(HttpStatusCode.InternalServerError, responseBody),
             apiBaseUrl,
-        ) { accessToken }
+        )
 
         val error = assertFailsWith<NotificationApiException> { api.getNotifications() }
 
@@ -126,7 +132,9 @@ class MobileBackendApiRegressionTest {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
         }
-        install(MobileAuthHeadersPlugin)
+        install(MobileAuthHeadersPlugin) {
+            baseUrl = apiBaseUrl
+        }
     }
 
     private fun errorClient(status: HttpStatusCode, body: String) = HttpClient(MockEngine) {
@@ -136,7 +144,9 @@ class MobileBackendApiRegressionTest {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
         }
-        install(MobileAuthHeadersPlugin)
+        install(MobileAuthHeadersPlugin) {
+            baseUrl = apiBaseUrl
+        }
     }
 
     private data class CapturedRequest(
@@ -146,7 +156,7 @@ class MobileBackendApiRegressionTest {
     )
 
     private companion object {
-        val apiBaseUrl = configuredApiBaseUrl
+        const val apiBaseUrl = "https://example.invalid"
         const val accessToken = "regression-access-token"
         const val clientTypeHeader = "X-Client-Type"
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")

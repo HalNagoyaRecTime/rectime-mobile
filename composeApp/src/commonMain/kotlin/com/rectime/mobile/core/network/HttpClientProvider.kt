@@ -22,10 +22,19 @@ expect fun createHttpClient(): HttpClient
 // SessionTokenHolder(現在のログインセッション用のグローバル状態)と異なる
 // トークンをリクエスト単位で使いたいケース(FirebaseTokenApi.register()など)
 // を、グローバル状態を書き換えずに実現できるようにするため。
-internal val MobileAuthHeadersPlugin = createClientPlugin("MobileAuthHeaders") {
+internal class MobileAuthHeadersConfig {
+    var baseUrl: String = apiBaseUrl
+}
+
+internal val MobileAuthHeadersPlugin = createClientPlugin(
+    "MobileAuthHeaders",
+    ::MobileAuthHeadersConfig,
+) {
+    val baseUrl = pluginConfig.baseUrl
     onRequest { request, _ ->
         if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
-        mobileAuthHeaders(request.url.toString())?.forEach { (name, value) ->
+        val token = SessionTokenHolder.accessToken?.takeIf(String::isNotBlank) ?: return@onRequest
+        mobileAuthHeaders(request.url.toString(), token, baseUrl)?.forEach { (name, value) ->
             request.headers.append(name, value)
         }
     }
@@ -37,7 +46,7 @@ internal val MobileAuthHeadersPlugin = createClientPlugin("MobileAuthHeaders") {
             ?.takeIf(String::isNotBlank)
         // 認証APIの401はAuthViewModel自身で分類する。リソースAPIの401だけを
         // refresh要求として通知し、通知時点のTokenも競合判定用に渡す。
-        if (response.status.value == 401 && requestToken != null && !isAuthApiPath(url)) {
+        if (response.status.value == 401 && requestToken != null && !isAuthApiPath(url, baseUrl)) {
             AuthSessionInvalidationHandler.notifyUnauthorized(requestToken)
         }
     }
