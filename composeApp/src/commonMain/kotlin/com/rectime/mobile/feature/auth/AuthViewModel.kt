@@ -16,20 +16,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-private const val AUTH_FAILED_MESSAGE = "ログインに失敗しました"
 private const val LOGOUT_FAILED_MESSAGE = "ログアウトに失敗しました"
-
-// 原因にはAPIのホスト名やIPが含まれうるため、画面には出さずデバッグビルドのログにだけ残す。
-private fun logAuthFailure(reason: String?) {
-    if (isDebugBuild && !reason.isNullOrBlank()) {
-        println("AuthViewModel: $reason")
-    }
-}
-
-private fun authFailed(reason: String?): String {
-    logAuthFailure(reason)
-    return AUTH_FAILED_MESSAGE
-}
 
 @OptIn(ExperimentalTime::class)
 class AuthViewModel(

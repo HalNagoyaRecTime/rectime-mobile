@@ -97,7 +97,7 @@ fun App() {
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
         if (authState.session == null && hadSession) {
-            navigationController.reset(CalendarScreen)
+            navigationController.reset(ScheduleScreen)
         }
         hadSession = authState.session != null
     }
