@@ -17,7 +17,7 @@ class TimelineEventMappingTest {
         assertEquals("第1体育館", timelineEvent.venue)
         assertEquals(9 * 60 + 30, timelineEvent.startMinuteOfDay)
         assertEquals(75, timelineEvent.durationMinutes)
-        assertEquals("09:30", timelineEvent.startTimeLabel)
+        assertEquals("9:30", timelineEvent.startTimeLabel)
         assertEquals("10:45", timelineEvent.endTimeLabel)
     }
 
@@ -43,8 +43,8 @@ class TimelineEventMappingTest {
 
         assertEquals(0, timelineEvent.startMinuteOfDay)
         assertEquals(5, timelineEvent.durationMinutes)
-        assertEquals("00:00", timelineEvent.startTimeLabel)
-        assertEquals("00:05", timelineEvent.endTimeLabel)
+        assertEquals("0:00", timelineEvent.startTimeLabel)
+        assertEquals("0:05", timelineEvent.endTimeLabel)
     }
 
     @Test
