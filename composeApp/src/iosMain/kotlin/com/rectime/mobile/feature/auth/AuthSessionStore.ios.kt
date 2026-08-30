@@ -14,7 +14,7 @@ actual class AuthSessionStore {
         defaults.setObject(encodeAuthSession(session), KEY)
     }
 
-    actual suspend fun clear(): Boolean = removeVerified(KEY)
+    actual suspend fun clear(): Boolean = removeAndFlush(KEY)
 
     actual suspend fun loadPendingAuth(): PendingAuth? {
         val value = defaults.stringForKey(PENDING_KEY) ?: return null
@@ -25,12 +25,13 @@ actual class AuthSessionStore {
         defaults.setObject(encodePendingAuth(pending), PENDING_KEY)
     }
 
-    actual suspend fun clearPendingAuth(): Boolean = removeVerified(PENDING_KEY)
+    actual suspend fun clearPendingAuth(): Boolean = removeAndFlush(PENDING_KEY)
 
-    private fun removeVerified(key: String): Boolean {
+    // removeObjectForKey()の直後にstringForKey()を読んでもメモリ上の値が消えているだけで、
+    // 永続化できたかは分からない。synchronize()の結果だけを削除成功の根拠にする。
+    private fun removeAndFlush(key: String): Boolean {
         defaults.removeObjectForKey(key)
-        defaults.synchronize()
-        return defaults.stringForKey(key) == null
+        return defaults.synchronize()
     }
 
     private companion object {

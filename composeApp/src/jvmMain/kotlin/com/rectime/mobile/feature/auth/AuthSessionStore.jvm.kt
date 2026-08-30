@@ -14,7 +14,7 @@ actual class AuthSessionStore {
         preferences.put(KEY, encodeAuthSession(session))
     }
 
-    actual suspend fun clear(): Boolean = removeVerified(KEY)
+    actual suspend fun clear(): Boolean = removeAndFlush(KEY)
 
     actual suspend fun loadPendingAuth(): PendingAuth? {
         val value = preferences.get(PENDING_KEY, null) ?: return null
@@ -25,12 +25,13 @@ actual class AuthSessionStore {
         preferences.put(PENDING_KEY, encodePendingAuth(pending))
     }
 
-    actual suspend fun clearPendingAuth(): Boolean = removeVerified(PENDING_KEY)
+    actual suspend fun clearPendingAuth(): Boolean = removeAndFlush(PENDING_KEY)
 
-    private fun removeVerified(key: String): Boolean {
+    // remove()の直後にget()を読んでもメモリ上の値が消えているだけで、永続化できたかは
+    // 分からない。flush()が成功したことだけを削除成功の根拠にする。
+    private fun removeAndFlush(key: String): Boolean {
         preferences.remove(key)
-        runCatching { preferences.flush() }
-        return preferences.get(key, null) == null
+        return runCatching { preferences.flush() }.isSuccess
     }
 
     private companion object {

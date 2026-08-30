@@ -13,7 +13,5 @@ internal class SharedPreferencesStringStore(
     override fun remove(key: String): Boolean =
         if (prefs.contains(key)) prefs.edit().remove(key).commit() else true
 
-    override fun clearAll() {
-        prefs.edit().clear().commit()
-    }
+    override fun clearAll(): Boolean = prefs.edit().clear().commit()
 }

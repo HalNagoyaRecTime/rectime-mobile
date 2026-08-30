@@ -4,7 +4,7 @@ internal interface StringStore {
     fun get(key: String): String?
     fun put(key: String, value: String): Boolean
     fun remove(key: String): Boolean
-    fun clearAll()
+    fun clearAll(): Boolean
 }
 
 internal interface ValueCipher {
@@ -13,6 +13,9 @@ internal interface ValueCipher {
     fun discardKey()
 }
 
+// 削除できたかどうかは書き込みAPIの戻り値だけで判断する。SharedPreferencesは
+// 永続化より先にメモリ上の値を消すため、消した直後に読み直しても、端末に
+// 残っていることを検出できない。
 internal class SecureValueStore(
     private val store: StringStore,
     private val cipher: ValueCipher,
@@ -20,11 +23,10 @@ internal class SecureValueStore(
     fun read(key: String, legacyKey: String): String? {
         store.get(key)?.let { stored ->
             val plaintext = cipher.decrypt(stored)
-            if (plaintext == null) {
+            if (plaintext == null || !store.remove(legacyKey)) {
                 discardAll()
                 return null
             }
-            store.remove(legacyKey)
             return plaintext
         }
 
@@ -36,27 +38,19 @@ internal class SecureValueStore(
         return legacy
     }
 
-    fun write(key: String, legacyKey: String, plaintext: String) {
+    fun write(key: String, legacyKey: String, plaintext: String): Boolean {
         val encrypted = cipher.encrypt(plaintext)
-        if (encrypted == null || !store.put(key, encrypted)) {
+        if (encrypted == null || !store.put(key, encrypted) || !store.remove(legacyKey)) {
             discardAll()
-            return
+            return false
         }
-        store.remove(legacyKey)
+        return true
     }
 
-    // 消せたことを読み直して確認する。commitの失敗を握り潰すと、
-    // ログアウトしたのに端末へSessionが残り、再起動で前のアカウントへ戻ってしまう。
     fun remove(key: String, legacyKey: String): Boolean {
-        val removed = store.remove(key) and store.remove(legacyKey)
-        if (removed && isAbsent(key, legacyKey)) return true
-
-        store.clearAll()
-        return isAbsent(key, legacyKey)
+        if (store.remove(key) and store.remove(legacyKey)) return true
+        return store.clearAll()
     }
-
-    private fun isAbsent(key: String, legacyKey: String): Boolean =
-        store.get(key) == null && store.get(legacyKey) == null
 
     private fun migrate(key: String, legacyKey: String, plaintext: String): Boolean {
         val encrypted = cipher.encrypt(plaintext) ?: return false
@@ -66,8 +60,9 @@ internal class SecureValueStore(
         return store.remove(legacyKey)
     }
 
-    private fun discardAll() {
-        store.clearAll()
+    private fun discardAll(): Boolean {
+        val cleared = store.clearAll()
         cipher.discardKey()
+        return cleared
     }
 }
