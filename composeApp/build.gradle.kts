@@ -78,6 +78,11 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlin.testJunit)
         }
+        androidInstrumentedTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.androidx.testExt.junit)
+            implementation(libs.androidx.test.runner)
+        }
         commonTest.dependencies {
             implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
@@ -103,6 +108,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionName = "1.0"
         val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
             ?: findProperty("API_BASE_URL") as String?
