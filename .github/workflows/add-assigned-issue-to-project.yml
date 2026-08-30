@@ -1,0 +1,18 @@
+name: Add Assigned Issue to Project
+
+on:
+  issues:
+    types:
+      - assigned
+
+permissions:
+  contents: read
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v2
+        with:
+          project-url: https://github.com/orgs/HalNagoyaRecTime/projects/1
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}

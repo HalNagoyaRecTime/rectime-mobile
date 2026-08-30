@@ -50,8 +50,8 @@ internal val normalizedApiBaseUrl: String =
 
 /**
  * `url` がrectime-apiへのリクエストで、かつログイン済みの場合に付与すべき
- * ヘッダーを返す。Ktor(HttpClientProvider/App.kt)・Coil(UserAvatar.kt)双方の
- * 呼び出し元で同じ判定・同じヘッダー値を使うための唯一の定義箇所。
+ * ヘッダーを返す。Ktor(HttpClientProvider)・Coil(App.kt)双方の呼び出し元で
+ * 同じ判定・同じヘッダー値を使うための唯一の定義箇所。
  */
 internal fun mobileAuthHeaders(url: String): Map<String, String>? {
     val token = SessionTokenHolder.accessToken ?: return null

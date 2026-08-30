@@ -1,0 +1,140 @@
+package com.rectime.mobile.feature.schedule
+
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.network.createAppHttpClient
+import com.rectime.mobile.core.util.nowMinuteStateFlow
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+
+private const val EVENTS_CACHE_KEY = "schedule_events_v1"
+
+@OptIn(ExperimentalTime::class)
+class ScheduleViewModel(
+    private val client: HttpClient = createAppHttpClient(),
+    private val baseUrl: String = apiBaseUrl,
+    private val clock: Clock = Clock.System,
+    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    private val cache: LocalCache = LocalCache(),
+) : ViewModel() {
+    val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
+
+    private val _events = mutableStateOf(listOf<TimelineEvent>())
+    val events: State<List<TimelineEvent>> = _events
+
+    var isLoading by mutableStateOf(false)
+        private set
+
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    // trueのとき、_eventsは通信失敗時にローカルキャッシュから復元した前回取得分。
+    var isOffline by mutableStateOf(false)
+        private set
+
+    fun fetchEvents() {
+        viewModelScope.launch {
+            try {
+                isLoading = true
+                error = null
+                when (
+                    val result = fetchWithCacheFallback(
+                        fetchLive = {
+                            val response = client.get("$baseUrl/api/v1/events")
+                            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+                            response.body<EventsResponse>()
+                        },
+                        loadCache = { cache.load<EventsResponse>(EVENTS_CACHE_KEY) },
+                        saveCache = { cache.save(EVENTS_CACHE_KEY, it) },
+                    )
+                ) {
+                    is CachedFetchResult.Fresh -> {
+                        _events.value = toTimelineEvents(result.value)
+                        isOffline = false
+                    }
+
+                    is CachedFetchResult.Cached -> {
+                        // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
+                        // errorはスナックバーで一瞬しか表示されないため、消えた後も未検証の
+                        // 古いイベントが表示され続けないよう_eventsもクリアする。
+                        if ((result.error as? HttpStatusException)?.status == HttpStatusCode.Unauthorized) {
+                            _events.value = emptyList()
+                            error = "ログイン情報の有効期限が切れました"
+                            isOffline = false
+                        } else {
+                            _events.value = toTimelineEvents(result.value)
+                            isOffline = true
+                            // 401以外の理由での フォールバックは「オフライン」として静かに
+                            // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
+                            // 可能性もある)を追えるようログには残す。
+                            result.error.printStackTrace()
+                        }
+                    }
+
+                    is CachedFetchResult.Failed -> {
+                        val status = (result.error as? HttpStatusException)?.status
+                        error = when (status) {
+                            HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
+                            else -> "通信に失敗しました"
+                        }
+                        // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
+                        // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
+                        // 401以外(ログアウト・新規ログインによるStaleCacheGenerationException
+                        // 等を含む)でも、有効なキャッシュが無いFailedでは理由を問わずクリアする。
+                        _events.value = emptyList()
+                        isOffline = false
+                        result.error.printStackTrace()
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                error = "通信に失敗しました"
+                isOffline = false
+                e.printStackTrace()
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    private fun toTimelineEvents(body: EventsResponse): List<TimelineEvent> {
+        val timelineEvents = body.events.mapNotNull {
+            val timelineEvent = it.toTimelineEvent()
+
+            // end <= start(不正データ・日跨ぎ)は0分に潰さず、原因が追えるようログを
+            // 出しつつ除外する。durationMinutes=0のカードはUI上の高さが0以下になり
+            // 実質見えなくなるだけで、原因調査ができなくなるため。
+            if (timelineEvent.durationMinutes <= 0) {
+                println("ScheduleViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                return@mapNotNull null
+            }
+
+            timelineEvent
+        }
+        return assignLanes(timelineEvents)
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        client.close()
+    }
+}

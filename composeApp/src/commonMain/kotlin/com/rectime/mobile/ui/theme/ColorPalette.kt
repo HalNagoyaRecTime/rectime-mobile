@@ -7,7 +7,6 @@ data class AppColorTokens(
     val navigationActive: Color,
     val navigationInactive: Color,
     val navigationSurface: Color,
-    val navigationScrim: Color,
     val navigationShadow: Color,
     val sheetBackground: Color,
     val sheetHandle: Color,
@@ -22,6 +21,68 @@ data class AppColorTokens(
     val borderSubtle: Color,
     val borderStrong: Color,
     val overlayBackdrop: Color,
+
+    // テーマ
+    val themeColorFirst: Color,
+    val themeColorSecond: Color,
+    val textThemeColorFirst: Color,
+    val textThemeColorSecond: Color,
+    // コモン
+    val commonBackground: Color,
+    val commonSeparatorLine: Color,
+    // ナビゲーション
+    val navigationDefaultBackground: Color,
+    val navigationActiveBackground: Color,
+    val textNavigationInactive: Color,
+    // ヘッダーとか
+    val headerBackground: Color,
+    val edgeFadeColor: Color,
+    // ドロップシャドウ
+    val dropShadow: Color,
+    // ログイン画面
+    val textAppLogo: Color,
+    val loginButtonBackground: Color,
+    val textLoginButton: Color,
+    val textLoginError: Color,
+    // 通知一覧画面
+    val textUnreadNotificationTitle: Color,
+    val textUnreadNotificationBody: Color,
+    val textUnreadNotificationTime: Color,
+    val unreadNotificationChevron: Color,
+    val textReadNotificationTitle: Color,
+    val textReadNotificationBody: Color,
+    val textReadNotificationTime: Color,
+    val readNotificationChevron: Color,
+    val notificationBackground: Color,
+    // スケジュール画面
+    val textScheduleTimeBar: Color,
+    val textScheduleTimeLine: Color,
+    val scheduleTimeBarBackground: Color,
+    val pastAreaBackground: Color,
+    val eventCardOverlay: Color,
+    val eventCardWave: Color,
+    val eventCardBoundaryLine: Color,
+    val eventOverflowBackground: Color,
+    val eventVenueBackground: Color,
+    // 設定画面
+    val userInformationHeader: Color,
+    val userInformationBody: Color,
+    val textContactInformation: Color,
+    val textCopyRight: Color,
+    val settingBackground: Color,
+    // 詳細画面
+    val textDetailsScreenHeader: Color,
+    val textDetailsScreenTitle: Color,
+    val textDetailsScreenTime: Color,
+    val textDetailsScreenBody: Color,
+    val textRelationEvent: Color,
+    val detailsScreenHeaderBackground: Color,
+    val detailsScreenListBackground: Color,
+    // モーダル画面
+    val modalBackground: Color,
+    val textMapModal: Color,
+    val textSettingModalHeader: Color,
+    val textSettingModalBody: Color,
 )
 
 private val defaultLight = AppColorTokens(
@@ -29,7 +90,6 @@ private val defaultLight = AppColorTokens(
     navigationActive = Color(0xFF1C1D22),
     navigationInactive = Color(0xFF8A8F9C),
     navigationSurface = Color(0xFFFDFDFF),
-    navigationScrim = Color(0xFF000000).copy(alpha = 0.12f),
     navigationShadow = Color(0x33000000),
     sheetBackground = Color(0xFFFFFFFF),
     sheetHandle = Color(0xFFCED1DA),
@@ -44,75 +104,71 @@ private val defaultLight = AppColorTokens(
     borderSubtle = Color(0xFFE2E5ED),
     borderStrong = Color(0xFFB8BECA),
     overlayBackdrop = Color(0xCC0D1018),
+
+    //テーマ
+    themeColorFirst = Color(0xFFFF4000),
+    themeColorSecond = Color(0xFF2ab3bf),
+    textThemeColorFirst = Color(0xFFFFFFFF),
+    textThemeColorSecond = Color(0xFFFFFFFF),
+    //コモン
+    commonBackground = Color(0xFFFFFFFF),
+    commonSeparatorLine = Color(0xFFcccccc), //区切り線
+    //ナビゲーション
+    navigationDefaultBackground = Color(0xCCFFFFFF),
+    navigationActiveBackground = Color(0xB3FFFFFF),
+    textNavigationInactive = Color(0xFF666666),
+    //ヘッダーとか
+    headerBackground = Color(0xB3FFFFFF),
+    edgeFadeColor = Color(0xFFe6e6e6),
+    //ドロップシャドウ
+    dropShadow = Color(0x1A000000),
+    //ログイン画面
+    textAppLogo = Color(0xFF333333),
+    loginButtonBackground = Color(0xFF333333),
+    textLoginButton = Color(0xFFFFFFFF),
+    textLoginError = Color(0xFFFF0000),
+    //通知一覧画面
+    textUnreadNotificationTitle = Color(0xFF000000),
+    textUnreadNotificationBody = Color(0xFF666666),
+    textUnreadNotificationTime = Color(0xFF000000),
+    unreadNotificationChevron = Color(0xFF666666),
+    textReadNotificationTitle = Color(0xFF333333),
+    textReadNotificationBody = Color(0xFF808080),
+    textReadNotificationTime = Color(0xFFb3b3b3),
+    readNotificationChevron = Color(0xFF999999),
+    notificationBackground = Color(0xFFf2f2f2),
+    //スケジュール画面
+    textScheduleTimeBar = Color(0xFF999999),
+    textScheduleTimeLine = Color(0xFFb3b3b3),
+    scheduleTimeBarBackground = Color(0xCCFFFFFF),
+    pastAreaBackground = Color(0x33000000),
+    eventCardOverlay = Color(0x26FFFFFF),
+    eventCardWave = Color(0x40FFFFFF),
+    eventCardBoundaryLine = Color(0x80FFFFFF),
+    eventOverflowBackground = Color(0xFFB3B3B3),
+    eventVenueBackground = Color(0x26000000),
+    //設定画面
+    userInformationHeader = Color(0xFF808080),
+    userInformationBody = Color(0xFF333333),
+    textContactInformation = Color(0xFF666666),
+    textCopyRight = Color(0xFF808080),
+    settingBackground = Color(0xFFf2f2f2),
+    //詳細画面
+    textDetailsScreenHeader = Color(0xFF666666),
+    textDetailsScreenTitle = Color(0xFF000000),
+    textDetailsScreenTime = Color(0xFF333333),
+    textDetailsScreenBody = Color(0xFF333333),
+    textRelationEvent = Color(0xFF808080),
+    detailsScreenHeaderBackground = Color(0xCCFFFFFF),
+    detailsScreenListBackground = Color(0xFFf2f2f2),
+    //モーダル画面
+    modalBackground = Color(0x4D000000),
+    textMapModal = Color(0xFF808080),
+    textSettingModalHeader = Color(0xFF333333),
+    textSettingModalBody = Color(0xFF999999),
 )
 
-private val defaultDark = AppColorTokens(
-    navigationBackground = Color(0xFF01040A),
-    navigationActive = Color(0xFFE6E9F2),
-    navigationInactive = Color(0xFF9097AA),
-    navigationSurface = Color(0xFF181B23),
-    navigationScrim = Color(0xFF000000).copy(alpha = 0.22f),
-    navigationShadow = Color(0x66000000),
-    sheetBackground = Color(0xFF171A21),
-    sheetHandle = Color(0xFF5A6273),
-    surfacePrimary = Color(0xFF1F242F),
-    surfaceMuted = Color(0xFF161B25),
-    surfaceAccent = Color(0xFF1D2A46),
-    surfaceAccentStrong = Color(0xFF6C8DFF),
-    textPrimary = Color(0xFFE8EBF3),
-    textSecondary = Color(0xFFBEC5D5),
-    textMuted = Color(0xFF8E96A7),
-    textOnAccent = Color(0xFF081027),
-    borderSubtle = Color(0xFF252B38),
-    borderStrong = Color(0xFF4B5468),
-    overlayBackdrop = Color(0xE6080A11),
-)
-
-private val blueLight = AppColorTokens(
-    navigationBackground = Color(0xFFF2F7FF),
-    navigationActive = Color(0xFF0F325D),
-    navigationInactive = Color(0xFF6D86A2),
-    navigationSurface = Color(0xFFF8FBFF),
-    navigationScrim = Color(0xFF0A2F57).copy(alpha = 0.12f),
-    navigationShadow = Color(0x330A2F57),
-    sheetBackground = Color(0xFFFDFEFF),
-    sheetHandle = Color(0xFFC4D5EB),
-    surfacePrimary = Color(0xFFF1F6FF),
-    surfaceMuted = Color(0xFFE5EFFC),
-    surfaceAccent = Color(0xFFD6E8FF),
-    surfaceAccentStrong = Color(0xFF0067D7),
-    textPrimary = Color(0xFF163A64),
-    textSecondary = Color(0xFF375D88),
-    textMuted = Color(0xFF5B7EA3),
-    textOnAccent = Color(0xFFFFFFFF),
-    borderSubtle = Color(0xFFD8E5F6),
-    borderStrong = Color(0xFFA8C4E6),
-    overlayBackdrop = Color(0xCC04162B),
-)
-
-private val blueDark = AppColorTokens(
-    navigationBackground = Color(0xFF09111E),
-    navigationActive = Color(0xFFCAE2FF),
-    navigationInactive = Color(0xFF809BC1),
-    navigationSurface = Color(0xFF0F1A2A),
-    navigationScrim = Color(0xFF000000).copy(alpha = 0.24f),
-    navigationShadow = Color(0x66000000),
-    sheetBackground = Color(0xFF0E1828),
-    sheetHandle = Color(0xFF4E6482),
-    surfacePrimary = Color(0xFF070F1B),
-    surfaceMuted = Color(0xFF0D1625),
-    surfaceAccent = Color(0xFF123054),
-    surfaceAccentStrong = Color(0xFF1E8BFF),
-    textPrimary = Color(0xFFE2EEFF),
-    textSecondary = Color(0xFFB5CAE8),
-    textMuted = Color(0xFF7D97B7),
-    textOnAccent = Color(0xFF00162C),
-    borderSubtle = Color(0xFF172840),
-    borderStrong = Color(0xFF355374),
-    overlayBackdrop = Color(0xDE01060E),
-)
-
-internal fun appColors(themeId: ThemeId, dark: Boolean): AppColorTokens = when (themeId) {
-    ThemeId.Default -> if (dark) defaultDark else defaultLight
-    ThemeId.Blue2024 -> if (dark) blueDark else blueLight
+internal fun appColors(themeId: ThemeId): AppColorTokens = when (themeId) {
+    ThemeId.Default -> defaultLight
+    ThemeId.Blue2024 -> defaultLight
 }

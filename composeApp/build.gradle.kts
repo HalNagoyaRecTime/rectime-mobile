@@ -42,7 +42,7 @@ kotlin {
 
     sourceSets {
         androidMain.dependencies {
-            implementation(libs.compose.uiToolingPreview)
+            implementation(libs.androidx.compose.ui.tooling.preview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.core.splashscreen)
             implementation(project.dependencies.platform(libs.firebase.bom))
@@ -67,11 +67,21 @@ kotlin {
             implementation(libs.compose.icon.collections.fontawesome)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
+            implementation(libs.coil.network.cache.control)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
+        }
+        androidUnitTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlin.testJunit)
+        }
+        androidInstrumentedTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.androidx.testExt.junit)
+            implementation(libs.androidx.test.runner)
         }
         commonTest.dependencies {
             implementation(libs.ktor.client.mock)
@@ -98,6 +108,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionName = "1.0"
         val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
             ?: findProperty("API_BASE_URL") as String?
@@ -121,7 +132,7 @@ android {
 }
 
 dependencies {
-    debugImplementation(libs.compose.uiTooling)
+    debugImplementation(libs.androidx.compose.ui.tooling)
 }
 
 compose.desktop {

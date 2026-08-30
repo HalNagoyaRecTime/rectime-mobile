@@ -22,11 +22,12 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
+private const val AUTH_FAILED_MESSAGE = "ログインに失敗しました"
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthViewModelTest {
@@ -616,6 +617,61 @@ class AuthViewModelTest {
         assertNull(cache.load<String>("some_cached_key"))
     }
 
+    @Test
+    fun logoutKeepsTheSessionWhenLocalStorageCannotBeCleared() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession, clearFails = true)
+        val viewModel = buildViewModel(api = okApi(), store = store)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("ログアウトに失敗しました", state.error)
+        assertNotNull(state.session)
+        assertNotNull(store.session)
+        assertFalse(state.isLoading)
+    }
+
+    @Test
+    fun logoutStillClearsPendingAuthWhenTheSessionCannotBeCleared() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(
+            session = storedSession,
+            pendingAuth = PendingAuth("state-abc", "verifier-123"),
+            clearFails = true,
+        )
+        val viewModel = buildViewModel(api = okApi(), store = store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val callsBeforeLogout = store.clearPendingAuthCalls
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Sessionの削除に失敗しても、code verifierの削除は必ず試みる。
+        assertEquals(callsBeforeLogout + 1, store.clearPendingAuthCalls)
+        assertNull(store.pendingAuth)
+        assertEquals("ログアウトに失敗しました", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun logoutFailsWhenOnlyPendingAuthCannotBeCleared() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(
+            session = storedSession,
+            pendingAuth = PendingAuth("state-abc", "verifier-123"),
+            clearPendingAuthFails = true,
+        )
+        val viewModel = buildViewModel(api = okApi(), store = store)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("ログアウトに失敗しました", state.error)
+        assertNotNull(state.session)
+        assertNotNull(store.pendingAuth)
+    }
+
     // ---- DEV_BYPASS_AUTH ----
 
     @Test
@@ -669,6 +725,16 @@ class AuthViewModelTest {
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })
 
+    private fun okApi() = AuthApi(
+        mockClient {
+            respond(
+                content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                status = HttpStatusCode.OK,
+                headers = jsonHeaders,
+            )
+        },
+    )
+
     private fun mockClient(
         dispatcher: CoroutineDispatcher = testDispatcher,
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
@@ -682,15 +748,22 @@ class AuthViewModelTest {
     private class FakeAuthSessionStorage(
         var session: AuthSession? = null,
         var pendingAuth: PendingAuth? = null,
+        var clearFails: Boolean = false,
+        var clearPendingAuthFails: Boolean = false,
     ) : AuthSessionStorage {
+        var clearPendingAuthCalls = 0
+            private set
+
         override suspend fun load(): AuthSession? = session
 
         override suspend fun save(session: AuthSession) {
             this.session = session
         }
 
-        override suspend fun clear() {
+        override suspend fun clear(): Boolean {
+            if (clearFails) return false
             session = null
+            return true
         }
 
         override suspend fun loadPendingAuth(): PendingAuth? = pendingAuth
@@ -699,8 +772,11 @@ class AuthViewModelTest {
             pendingAuth = pending
         }
 
-        override suspend fun clearPendingAuth() {
+        override suspend fun clearPendingAuth(): Boolean {
+            clearPendingAuthCalls++
+            if (clearPendingAuthFails) return false
             pendingAuth = null
+            return true
         }
     }
 

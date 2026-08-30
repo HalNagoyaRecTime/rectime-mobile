@@ -21,25 +21,22 @@ import androidx.compose.ui.platform.LocalDensity
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.feature.auth.toUserProfile
-import com.rectime.mobile.ui.component.SideMenu
 import com.rectime.mobile.ui.theme.AppTheme
-import com.rectime.mobile.ui.theme.ThemeStateHolder
 import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
 
 @Composable
 fun NavigationHost(
     navigationController: NavigationController,
-    themeStateHolder: ThemeStateHolder,
     session: AuthSession,
     onLogout: () -> Unit,
+    hasUnreadNotifications: Boolean,
 ) {
     val state = navigationController.state
     val coroutineScope = rememberCoroutineScope()
     val userProfile = session.user.toUserProfile()
 
     // BoxWithConstraints 内で計算したサイズをジェスチャーハンドラーと共有する
-    var revealWidthPx by remember { mutableFloatStateOf(0f) }
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
 
@@ -65,64 +62,37 @@ fun NavigationHost(
                         navigationController.beginGesture(gesture)
                     },
                     onHorizontalDrag = { change, dragAmount ->
-                        val gesture = navigationController.state.activeGesture
-                        if (gesture != ActiveGesture.Menu && gesture != ActiveGesture.Back) {
+                        if (navigationController.state.activeGesture != ActiveGesture.Back) {
                             return@detectHorizontalDragGestures
                         }
                         change.consume()
                         velocityTracker.addPosition(change.uptimeMillis, change.position)
-                        when (gesture) {
-                            ActiveGesture.Menu -> {
-                                val rw = revealWidthPx
-                                if (rw > 0f) {
-                                    val next = navigationController.state.menuProgress + (dragAmount / rw)
-                                    navigationController.setMenuProgress(next)
-                                }
-                            }
-                            ActiveGesture.Back -> {
-                                val next = navigationController.state.backDragOffsetPx + dragAmount
-                                navigationController.setBackDragOffset(next)
-                            }
-                            else -> Unit
-                        }
+                        val next = navigationController.state.backDragOffsetPx + dragAmount
+                        navigationController.setBackDragOffset(next)
                     },
                     onDragEnd = {
-                        val gesture = navigationController.state.activeGesture
-                        val velocity = velocityTracker.calculateVelocity().x
-                        when (gesture) {
-                            ActiveGesture.Menu -> {
-                                val progress = navigationController.state.menuProgress
-                                val velProgress = if (revealWidthPx > 0f) velocity / revealWidthPx else 0f
-                                when {
-                                    velocity > GestureTokens.menuFlingVelocityX -> navigationController.openMenu(velProgress)
-                                    velocity < -GestureTokens.menuFlingVelocityX -> navigationController.closeMenu(velProgress)
-                                    progress > GestureTokens.menuSettleProgress -> navigationController.openMenu()
-                                    else -> navigationController.closeMenu()
-                                }
-                            }
-                            ActiveGesture.Back -> {
-                                val cw = containerWidthPx
-                                val progress = if (cw > 0f) {
-                                    (navigationController.state.backDragOffsetPx / cw).coerceIn(0f, 1f)
-                                } else 0f
-                                if (velocity > GestureTokens.backDismissVelocityX || progress > GestureTokens.backDismissProgress) {
-                                    navigationController.requestPop()
-                                } else {
-                                    coroutineScope.launch {
-                                        val animator = Animatable(navigationController.state.backDragOffsetPx)
-                                        animator.animateTo(
-                                            targetValue = 0f,
-                                            animationSpec = spring(
-                                                dampingRatio = 0.9f,
-                                                stiffness = GestureTokens.menuOpenCloseStiffness,
-                                            ),
-                                        ) {
-                                            navigationController.setBackDragOffset(value)
-                                        }
+                        if (navigationController.state.activeGesture == ActiveGesture.Back) {
+                            val velocity = velocityTracker.calculateVelocity().x
+                            val cw = containerWidthPx
+                            val progress = if (cw > 0f) {
+                                (navigationController.state.backDragOffsetPx / cw).coerceIn(0f, 1f)
+                            } else 0f
+                            if (velocity > GestureTokens.backDismissVelocityX || progress > GestureTokens.backDismissProgress) {
+                                navigationController.requestPop()
+                            } else {
+                                coroutineScope.launch {
+                                    val animator = Animatable(navigationController.state.backDragOffsetPx)
+                                    animator.animateTo(
+                                        targetValue = 0f,
+                                        animationSpec = spring(
+                                            dampingRatio = 0.9f,
+                                            stiffness = GestureTokens.layerSettleStiffness,
+                                        ),
+                                    ) {
+                                        navigationController.setBackDragOffset(value)
                                     }
                                 }
                             }
-                            else -> Unit
                         }
                         navigationController.endGesture()
                     },
@@ -132,41 +102,21 @@ fun NavigationHost(
                 )
             },
     ) {
-        val layout = AppTheme.layout
         val density = LocalDensity.current
-        val revealWidthDp = maxOf(
-            layout.sideMenuRevealMin,
-            minOf(maxWidth * GestureTokens.sideMenuRevealRatio, layout.sideMenuRevealMax),
-        )
 
         // コンポジションごとにサイズを更新してジェスチャーハンドラーと共有する
         SideEffect {
-            revealWidthPx = revealWidthDp.value * density.density
             containerWidthPx = maxWidth.value * density.density
             containerHeightPx = maxHeight.value * density.density
         }
-
-        // Background Side Menu
-        SideMenu(
-            revealWidthDp = revealWidthDp,
-            onPushFromMenu = { screen ->
-                navigationController.push(screen, PushTransitionSource.SideMenu)
-            },
-            onPresentThemeSheet = { sheet ->
-                navigationController.presentSheet(sheet)
-            },
-            themeStateHolder = themeStateHolder,
-            session = session,
-            onLogout = onLogout,
-        )
 
         // Layer 1: Root (Home / Calendar)
         RootLayer(
             state = state,
             navigationController = navigationController,
-            revealWidthPx = revealWidthPx,
             session = session,
             onLogout = onLogout,
+            hasUnreadNotifications = hasUnreadNotifications,
         )
 
         // Layer 2: Push Layer (above Root+BottomNav, all sources)
@@ -174,7 +124,6 @@ fun NavigationHost(
             state = state,
             navigationController = navigationController,
             containerWidthPx = containerWidthPx,
-            revealWidthPx = revealWidthPx,
         )
 
         // Layer 3: Sheet (Modals)
