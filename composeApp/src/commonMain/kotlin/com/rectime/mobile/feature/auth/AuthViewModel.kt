@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
+import com.rectime.mobile.core.image.AuthenticatedImageCache
+import com.rectime.mobile.core.image.CoilAuthenticatedImageCache
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.platform.openExternalUrl
 import io.ktor.http.HttpStatusCode
@@ -32,6 +34,7 @@ class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
+    private val imageCache: AuthenticatedImageCache = CoilAuthenticatedImageCache,
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
 ) : ViewModel() {
@@ -97,6 +100,7 @@ class AuthViewModel(
                         // セッションが本当に無効と判断し、セッション・キャッシュを
                         // クリアする。他画面(Calendar/Event等)のセッション切れ
                         // 判定も同様に401のみを見ている。
+                        clearAuthenticatedImageCache()
                         sessionStore.clear()
                         sessionStore.clearPendingAuth()
                         cache.clearAll()
@@ -206,6 +210,7 @@ class AuthViewModel(
                 // 共有端末で前のユーザーがログアウトせずにアプリを離れていた場合、
                 // キャッシュキーはユーザーIDで分離されていないため、新規ログイン時にも
                 // 明示的にクリアしておかないと前ユーザーのデータが見えてしまう。
+                clearAuthenticatedImageCache()
                 cache.clearAll()
                 _uiState.update {
                     it.copy(
@@ -239,11 +244,23 @@ class AuthViewModel(
                 if (error is CancellationException) throw error
                 // Prefer local sign-out even if server logout fails.
             } finally {
+                clearAuthenticatedImageCache()
                 sessionStore.clear()
                 sessionStore.clearPendingAuth()
                 cache.clearAll()
                 _uiState.update { AuthUiState(message = "Logged out") }
             }
+        }
+    }
+
+    // 画像Cacheを消せなくてもSession・PendingAuth・LocalCacheの削除は必ず行う。
+    // 失敗理由にはURLが含まれうるため、画面へは出さずデバッグログにだけ残す。
+    private suspend fun clearAuthenticatedImageCache() {
+        try {
+            imageCache.clear()
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            logAuthFailure("画像キャッシュの消去: ${error.describe()}")
         }
     }
 

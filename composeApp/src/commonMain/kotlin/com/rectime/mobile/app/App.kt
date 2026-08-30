@@ -16,6 +16,7 @@ import coil3.network.cachecontrol.CacheControlCacheStrategy
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
+import com.rectime.mobile.core.image.CoilAuthenticatedImageCache
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
@@ -60,6 +61,8 @@ fun App() {
                     .build()
             }
             .build()
+            // ログアウト・401・利用者切替でCacheを消せるように参照を渡す。
+            .also { CoilAuthenticatedImageCache.imageLoader = it }
     }
 
     val navigationController = remember { NavigationController() }

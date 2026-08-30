@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.image.AuthenticatedImageCache
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -144,6 +145,41 @@ class AuthViewModelTest {
     }
 
     // ---- restoreSession 異常系 ----
+
+    @Test
+    fun aConfirmedUnauthorizedClearsTheAuthenticatedImageCache() = runTest(testDispatcher) {
+        val imageCache = FakeAuthenticatedImageCache()
+        buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"error":{"message":"refresh token revoked"}}""",
+                        status = HttpStatusCode.Unauthorized,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = FakeAuthSessionStorage(session = storedSession),
+            imageCache = imageCache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, imageCache.clearCount)
+    }
+
+    @Test
+    fun anOfflineRefreshFailureKeepsTheAuthenticatedImageCache() = runTest(testDispatcher) {
+        val imageCache = FakeAuthenticatedImageCache()
+        buildViewModel(
+            api = AuthApi(mockClient { throw RuntimeException("network down") }),
+            store = FakeAuthSessionStorage(session = storedSession),
+            imageCache = imageCache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(0, imageCache.clearCount)
+    }
+
 
     @Test
     fun restoreSessionClearsStoreAndCacheWhenServerExplicitlyRejectsRefresh() = runTest(testDispatcher) {
@@ -443,6 +479,27 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun handleCallbackUrlClearsTheAuthenticatedImageCacheOnUserSwitch() = runTest(testDispatcher) {
+        val imageCache = FakeAuthenticatedImageCache()
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(content = sessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
+                },
+            ),
+            store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123")),
+            imageCache = imageCache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, imageCache.clearCount)
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+    }
+
+    @Test
     fun handleCallbackUrlDecodesPercentEncodedQueryValues() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state abc", "verifier-123"))
         var receivedPath: String? = null
@@ -616,6 +673,64 @@ class AuthViewModelTest {
         assertNull(cache.load<String>("some_cached_key"))
     }
 
+    @Test
+    fun logoutClearsTheAuthenticatedImageCache() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val imageCache = FakeAuthenticatedImageCache()
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                        status = HttpStatusCode.OK,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+            imageCache = imageCache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, imageCache.clearCount)
+        assertNull(store.session)
+    }
+
+    @Test
+    fun logoutStillClearsSessionAndCacheWhenTheImageCacheFails() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("some_cached_key", "cached-value")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                        status = HttpStatusCode.OK,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+            cache = cache,
+            imageCache = FakeAuthenticatedImageCache(RuntimeException("disk cache locked")),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("Logged out", state.message)
+        assertNull(state.session)
+        assertNull(store.session)
+        assertNull(store.pendingAuth)
+        assertNull(cache.load<String>("some_cached_key"))
+    }
+
     // ---- DEV_BYPASS_AUTH ----
 
     @Test
@@ -657,15 +772,28 @@ class AuthViewModelTest {
         api: AuthApi,
         store: FakeAuthSessionStorage,
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
+        imageCache: AuthenticatedImageCache = FakeAuthenticatedImageCache(),
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
         cache = cache,
+        imageCache = imageCache,
         devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
     )
+
+    private class FakeAuthenticatedImageCache(
+        private val failsWith: Throwable? = null,
+    ) : AuthenticatedImageCache {
+        var clearCount = 0
+
+        override suspend fun clear() {
+            clearCount++
+            failsWith?.let { throw it }
+        }
+    }
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })
 
