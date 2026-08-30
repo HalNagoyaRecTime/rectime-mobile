@@ -12,6 +12,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.disk.DiskCache
+import coil3.network.cachecontrol.CacheControlCacheStrategy
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
@@ -40,9 +41,15 @@ fun App() {
             .components {
                 add(
                     KtorNetworkFetcherFactory(
-                        createHttpClient().config {
-                            install(MobileAuthHeadersPlugin)
-                        }
+                        httpClient = {
+                            createHttpClient().config {
+                                install(MobileAuthHeadersPlugin)
+                            }
+                        },
+                        // 既定のCacheStrategyはディスクキャッシュがあれば無条件に返すため、
+                        // 差し替えた画像が二度と反映されない。Cache-ControlとETagを見て
+                        // 再検証させる。
+                        cacheStrategy = { CacheControlCacheStrategy() },
                     )
                 )
             }

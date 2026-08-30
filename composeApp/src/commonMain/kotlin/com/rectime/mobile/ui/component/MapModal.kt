@@ -1,6 +1,5 @@
 package com.rectime.mobile.ui.component
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -24,12 +23,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Xmark
-import org.jetbrains.compose.resources.painterResource
-import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.recmap
 
 // 横長のマップをできるだけ大きく見せるため、画面幅いっぱいに近いカードにする
 private const val MapModalWidthRatio = 0.96f
@@ -39,6 +37,9 @@ private val MapCornerRadius = 12.dp
 private val HintFontSize = 14.sp
 private const val MinScale = 1f
 private const val MaxScale = 5f
+
+internal fun venueMapImageUrl(baseUrl: String = apiBaseUrl): String =
+    "${baseUrl.trimEnd('/')}/map/recmap.png"
 
 @Composable
 fun MapModal(onDismiss: () -> Unit) {
@@ -97,8 +98,8 @@ private fun ZoomableMap() {
                 }
             },
     ) {
-        Image(
-            painter = painterResource(Res.drawable.recmap),
+        AsyncImage(
+            model = venueMapImageUrl(),
             contentDescription = "会場マップ",
             contentScale = ContentScale.FillWidth,
             modifier = Modifier
