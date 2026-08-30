@@ -74,6 +74,10 @@ kotlin {
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
         }
+        androidUnitTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlin.testJunit)
+        }
         commonTest.dependencies {
             implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
