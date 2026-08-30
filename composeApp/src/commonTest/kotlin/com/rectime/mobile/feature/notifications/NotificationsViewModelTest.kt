@@ -271,8 +271,8 @@ class NotificationsViewModelTest {
             }
         }
         val viewModel = NotificationsViewModel(
-            gateway,
-            cache = LocalCache(LoadCacheAlwaysFailsKeyValueStore()),
+            NotificationFeedStore(gateway, LocalCache(LoadCacheAlwaysFailsKeyValueStore())),
+            readStore(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(listOf(1), viewModel.uiState.value.notifications.map(UserNotification::id))
