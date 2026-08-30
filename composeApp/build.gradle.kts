@@ -103,6 +103,9 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.androidx.compose.ui.tooling.preview)
             implementation(libs.androidx.activity.compose)
+            // 直接は使わないが、play-services-basement が引き込む fragment 1.1.0 では
+            // registerForActivityResult がlintのfatalエラーになりrelease buildが通らない。
+            implementation(libs.androidx.fragment)
             implementation(libs.androidx.core.splashscreen)
             implementation(project.dependencies.platform(libs.firebase.bom))
             implementation(libs.firebase.messaging)
