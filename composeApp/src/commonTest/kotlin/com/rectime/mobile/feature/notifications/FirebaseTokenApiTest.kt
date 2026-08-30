@@ -114,7 +114,7 @@ class FirebaseTokenApiTest {
     fun registerRejectsBlankTokensBeforeNetwork() = runTest {
         val api = FirebaseTokenApi(
             client = mockAppHttpClient { error("Network request must not be sent") },
-            baseUrl = "https://api.example.invalid",
+            baseUrl = testBaseUrl,
         )
 
         assertFailsWith<IllegalArgumentException> {
