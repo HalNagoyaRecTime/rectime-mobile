@@ -14,9 +14,7 @@ actual class AuthSessionStore {
         defaults.setObject(encodeAuthSession(session), KEY)
     }
 
-    actual suspend fun clear() {
-        defaults.removeObjectForKey(KEY)
-    }
+    actual suspend fun clear(): Boolean = removeVerified(KEY)
 
     actual suspend fun loadPendingAuth(): PendingAuth? {
         val value = defaults.stringForKey(PENDING_KEY) ?: return null
@@ -27,8 +25,12 @@ actual class AuthSessionStore {
         defaults.setObject(encodePendingAuth(pending), PENDING_KEY)
     }
 
-    actual suspend fun clearPendingAuth() {
-        defaults.removeObjectForKey(PENDING_KEY)
+    actual suspend fun clearPendingAuth(): Boolean = removeVerified(PENDING_KEY)
+
+    private fun removeVerified(key: String): Boolean {
+        defaults.removeObjectForKey(key)
+        defaults.synchronize()
+        return defaults.stringForKey(key) == null
     }
 
     private companion object {

@@ -14,9 +14,7 @@ actual class AuthSessionStore {
         preferences.put(KEY, encodeAuthSession(session))
     }
 
-    actual suspend fun clear() {
-        preferences.remove(KEY)
-    }
+    actual suspend fun clear(): Boolean = removeVerified(KEY)
 
     actual suspend fun loadPendingAuth(): PendingAuth? {
         val value = preferences.get(PENDING_KEY, null) ?: return null
@@ -27,8 +25,12 @@ actual class AuthSessionStore {
         preferences.put(PENDING_KEY, encodePendingAuth(pending))
     }
 
-    actual suspend fun clearPendingAuth() {
-        preferences.remove(PENDING_KEY)
+    actual suspend fun clearPendingAuth(): Boolean = removeVerified(PENDING_KEY)
+
+    private fun removeVerified(key: String): Boolean {
+        preferences.remove(key)
+        runCatching { preferences.flush() }
+        return preferences.get(key, null) == null
     }
 
     private companion object {

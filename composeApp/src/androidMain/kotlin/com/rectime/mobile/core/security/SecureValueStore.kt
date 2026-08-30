@@ -45,10 +45,18 @@ internal class SecureValueStore(
         store.remove(legacyKey)
     }
 
-    fun remove(key: String, legacyKey: String) {
-        store.remove(key)
-        store.remove(legacyKey)
+    // 消せたことを読み直して確認する。commitの失敗を握り潰すと、
+    // ログアウトしたのに端末へSessionが残り、再起動で前のアカウントへ戻ってしまう。
+    fun remove(key: String, legacyKey: String): Boolean {
+        val removed = store.remove(key) and store.remove(legacyKey)
+        if (removed && isAbsent(key, legacyKey)) return true
+
+        store.clearAll()
+        return isAbsent(key, legacyKey)
     }
+
+    private fun isAbsent(key: String, legacyKey: String): Boolean =
+        store.get(key) == null && store.get(legacyKey) == null
 
     private fun migrate(key: String, legacyKey: String, plaintext: String): Boolean {
         val encrypted = cipher.encrypt(plaintext) ?: return false

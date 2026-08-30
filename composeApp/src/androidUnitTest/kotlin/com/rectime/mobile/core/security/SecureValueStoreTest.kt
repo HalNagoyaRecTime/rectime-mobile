@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 private const val KEY = "session_v1"
 private const val LEGACY_KEY = "session"
 
-private class FakeStringStore(initial: Map<String, String> = emptyMap()) : StringStore {
+private open class FakeStringStore(initial: Map<String, String> = emptyMap()) : StringStore {
     val values = initial.toMutableMap()
     var putFails = false
 
@@ -149,8 +149,44 @@ class SecureValueStoreTest {
     fun `remove drops both the encrypted and the legacy value`() {
         val store = FakeStringStore(mapOf(KEY to "enc(payload)", LEGACY_KEY to "payload"))
 
-        SecureValueStore(store, FakeCipher()).remove(KEY, LEGACY_KEY)
-
+        assertTrue(SecureValueStore(store, FakeCipher()).remove(KEY, LEGACY_KEY))
         assertTrue(store.values.isEmpty())
+    }
+
+    @Test
+    fun `remove falls back to wiping everything when a delete fails`() {
+        val store = object : FakeStringStore(mapOf(KEY to "enc(payload)", LEGACY_KEY to "payload")) {
+            override fun remove(key: String): Boolean = false
+        }
+
+        assertTrue(SecureValueStore(store, FakeCipher()).remove(KEY, LEGACY_KEY))
+        assertTrue(store.values.isEmpty())
+    }
+
+    @Test
+    fun `remove reports failure when the value survives the wipe`() {
+        val store = object : FakeStringStore(mapOf(KEY to "enc(payload)", LEGACY_KEY to "payload")) {
+            override fun remove(key: String): Boolean = false
+            override fun clearAll() = Unit
+        }
+
+        assertFalse(SecureValueStore(store, FakeCipher()).remove(KEY, LEGACY_KEY))
+        assertEquals("enc(payload)", store.values[KEY])
+    }
+
+    @Test
+    fun `remove reports failure when the legacy value survives`() {
+        val store = object : FakeStringStore(mapOf(KEY to "enc(payload)", LEGACY_KEY to "payload")) {
+            override fun remove(key: String): Boolean {
+                if (key == LEGACY_KEY) return false
+                values.remove(key)
+                return true
+            }
+
+            override fun clearAll() = Unit
+        }
+
+        assertFalse(SecureValueStore(store, FakeCipher()).remove(KEY, LEGACY_KEY))
+        assertEquals("payload", store.values[LEGACY_KEY])
     }
 }

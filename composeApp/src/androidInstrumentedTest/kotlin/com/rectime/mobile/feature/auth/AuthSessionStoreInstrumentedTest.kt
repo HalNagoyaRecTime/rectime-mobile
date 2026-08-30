@@ -151,7 +151,7 @@ class AuthSessionStoreInstrumentedTest {
         store.save(session)
         prefs.edit().putString(LEGACY_SESSION_KEY, encodeAuthSession(session)).commit()
 
-        store.clear()
+        assertTrue(store.clear())
 
         assertFalse(prefs.contains(SESSION_KEY))
         assertFalse(prefs.contains(LEGACY_SESSION_KEY))

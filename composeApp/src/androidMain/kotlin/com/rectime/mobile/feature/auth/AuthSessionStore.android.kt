@@ -22,9 +22,8 @@ actual class AuthSessionStore {
         secureStore()?.write(SESSION_KEY, LEGACY_SESSION_KEY, encodeAuthSession(session))
     }
 
-    actual suspend fun clear() {
-        secureStore()?.remove(SESSION_KEY, LEGACY_SESSION_KEY)
-    }
+    actual suspend fun clear(): Boolean =
+        secureStore()?.remove(SESSION_KEY, LEGACY_SESSION_KEY) ?: false
 
     actual suspend fun loadPendingAuth(): PendingAuth? =
         read(PENDING_AUTH_KEY, LEGACY_PENDING_AUTH_KEY, ::decodePendingAuth)
@@ -33,9 +32,8 @@ actual class AuthSessionStore {
         secureStore()?.write(PENDING_AUTH_KEY, LEGACY_PENDING_AUTH_KEY, encodePendingAuth(pending))
     }
 
-    actual suspend fun clearPendingAuth() {
-        secureStore()?.remove(PENDING_AUTH_KEY, LEGACY_PENDING_AUTH_KEY)
-    }
+    actual suspend fun clearPendingAuth(): Boolean =
+        secureStore()?.remove(PENDING_AUTH_KEY, LEGACY_PENDING_AUTH_KEY) ?: false
 
     private fun <T> read(key: String, legacyKey: String, decode: (String) -> T?): T? {
         val store = secureStore() ?: return null
