@@ -3,8 +3,11 @@ package com.rectime.mobile.app
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -16,6 +19,7 @@ import coil3.network.cachecontrol.CacheControlCacheStrategy
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
+import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
@@ -36,6 +40,21 @@ import okio.Path.Companion.toPath
 @Composable
 @Preview
 fun App() {
+    val configurationError = apiBaseUrlConfigurationError
+    if (configurationError != null) {
+        AppTheme(themeStateHolder = remember { ThemeStateHolder() }) {
+            Box(
+                modifier = Modifier
+                    .background(AppTheme.colors.surfacePrimary)
+                    .fillMaxSize()
+                    .padding(24.dp),
+            ) {
+                Text("API接続先の設定を確認してください。\n$configurationError")
+            }
+        }
+        return
+    }
+
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
             .components {

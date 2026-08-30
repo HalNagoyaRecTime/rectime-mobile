@@ -46,8 +46,8 @@ import platform.Security.kSecValueData
 
 internal interface SecureStringStore {
     fun read(key: String): String?
-    fun write(key: String, value: String)
-    fun delete(key: String)
+    fun write(key: String, value: String): Boolean
+    fun delete(key: String): Boolean
 }
 
 @OptIn(ExperimentalForeignApi::class)
@@ -61,9 +61,11 @@ internal class KeychainStringStore(
         memScoped {
             val result = alloc<CFTypeRefVar>()
             val status = SecItemCopyMatching(query, result.ptr)
-            if (status == errSecItemNotFound) return@withQuery null
-            check(status == errSecSuccess) {
-                "Failed to read auth session securely (OSStatus: $status)."
+            if (status != errSecSuccess) {
+                if (status != errSecItemNotFound) {
+                    println("KeychainStringStore: read failed (OSStatus: $status)")
+                }
+                return@withQuery null
             }
 
             val data: CFDataRef = result.value?.reinterpret() ?: return@withQuery null
@@ -76,7 +78,7 @@ internal class KeychainStringStore(
         }
     }
 
-    override fun write(key: String, value: String) = withQuery(key) { query ->
+    override fun write(key: String, value: String): Boolean = withQuery(key) { query ->
         val data = value.toCFData()
         try {
             val addQuery = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, query)
@@ -92,9 +94,10 @@ internal class KeychainStringStore(
             } finally {
                 CFRelease(addQuery)
             }
-            if (addStatus == errSecSuccess) return@withQuery
-            check(addStatus == errSecDuplicateItem) {
-                "Failed to save auth session securely (OSStatus: $addStatus)."
+            if (addStatus == errSecSuccess) return@withQuery true
+            if (addStatus != errSecDuplicateItem) {
+                println("KeychainStringStore: write failed (OSStatus: $addStatus)")
+                return@withQuery false
             }
 
             val attributes = newDictionary()
@@ -104,19 +107,21 @@ internal class KeychainStringStore(
             } finally {
                 CFRelease(attributes)
             }
-            check(updateStatus == errSecSuccess) {
-                "Failed to update auth session securely (OSStatus: $updateStatus)."
+            if (updateStatus != errSecSuccess) {
+                println("KeychainStringStore: update failed (OSStatus: $updateStatus)")
             }
+            updateStatus == errSecSuccess
         } finally {
             CFRelease(data)
         }
     }
 
-    override fun delete(key: String) = withQuery(key) { query ->
+    override fun delete(key: String): Boolean = withQuery(key) { query ->
         val status = SecItemDelete(query)
-        check(status == errSecSuccess || status == errSecItemNotFound) {
-            "Failed to delete auth session securely (OSStatus: $status)."
+        if (status != errSecSuccess && status != errSecItemNotFound) {
+            println("KeychainStringStore: delete failed (OSStatus: $status)")
         }
+        status == errSecSuccess || status == errSecItemNotFound
     }
 
     private inline fun <T> withQuery(key: String, block: (CFMutableDictionaryRef) -> T): T {

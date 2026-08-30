@@ -1,23 +1,30 @@
 package com.rectime.mobile.core.config
 
-internal fun resolveApiBaseUrl(rawValue: String?, isDebug: Boolean): String {
+sealed interface ApiBaseUrlResult {
+    data class Valid(val url: String) : ApiBaseUrlResult
+    data class Invalid(val reason: String) : ApiBaseUrlResult
+}
+
+internal fun resolveApiBaseUrl(rawValue: String?, isDebug: Boolean): ApiBaseUrlResult {
     val url = rawValue?.trim()?.trimEnd('/').orEmpty()
 
-    require(url.isNotEmpty()) { "API_BASE_URL is not configured." }
-    require(!url.contains("$(")) { "API_BASE_URL contains an unresolved build setting." }
-    require(url.startsWith("http://") || url.startsWith("https://")) {
-        "API_BASE_URL must use http or https."
+    if (url.isEmpty()) return ApiBaseUrlResult.Invalid("API_BASE_URL is not configured.")
+    if (url.contains("$(")) return ApiBaseUrlResult.Invalid("API_BASE_URL contains an unresolved build setting.")
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        return ApiBaseUrlResult.Invalid("API_BASE_URL must use http or https.")
     }
-    require(url.apiHost().isNotEmpty()) { "API_BASE_URL must include a host." }
+    if (url.apiHost().isEmpty()) return ApiBaseUrlResult.Invalid("API_BASE_URL must include a host.")
 
     if (!isDebug) {
-        require(url.startsWith("https://")) { "Release builds require an HTTPS API_BASE_URL." }
-        require(!url.isLocalDevelopmentUrl()) {
-            "Release builds cannot use a local API_BASE_URL."
+        if (!url.startsWith("https://")) {
+            return ApiBaseUrlResult.Invalid("Release builds require an HTTPS API_BASE_URL.")
+        }
+        if (url.isLocalDevelopmentUrl()) {
+            return ApiBaseUrlResult.Invalid("Release builds cannot use a local API_BASE_URL.")
         }
     }
 
-    return url
+    return ApiBaseUrlResult.Valid(url)
 }
 
 private fun String.isLocalDevelopmentUrl(): Boolean {
