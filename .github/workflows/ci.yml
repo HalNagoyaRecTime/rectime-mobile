@@ -12,6 +12,7 @@ on:
       - develop
       - develop-v2
       - main
+      - 'feature/**'
 
 concurrency:
   group: ci-${{ github.ref }}
