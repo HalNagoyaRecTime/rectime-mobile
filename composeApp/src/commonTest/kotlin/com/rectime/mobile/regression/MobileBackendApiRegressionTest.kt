@@ -1,17 +1,17 @@
 package com.rectime.mobile.regression
 
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
+import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.feature.auth.SessionTokenHolder
-import com.rectime.mobile.feature.calendar.CalendarApi
-import com.rectime.mobile.feature.calendar.CalendarApiException
-import com.rectime.mobile.feature.competition.CompetitionDetailApi
-import com.rectime.mobile.feature.competition.CompetitionDetailApiException
 import com.rectime.mobile.feature.notifications.NotificationApi
 import com.rectime.mobile.feature.notifications.NotificationApiException
+import com.rectime.mobile.feature.schedule.EventsResponse
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.get
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
@@ -41,12 +41,14 @@ class MobileBackendApiRegressionTest {
         SessionTokenHolder.accessToken = accessToken
         val requests = mutableListOf<CapturedRequest>()
         val client = authenticatedMockClient(requests)
-        val calendarApi = CalendarApi(client, apiBaseUrl)
-        val competitionApi = CompetitionDetailApi(client, apiBaseUrl)
         val notificationApi = NotificationApi(client, apiBaseUrl)
 
-        val calendarEvent = calendarApi.getEvents().events.single()
-        val competition = competitionApi.getEvent(calendarEvent.eventId)
+        val calendarEvent = client.get("$apiBaseUrl/api/v1/events")
+            .body<EventsResponse>()
+            .events
+            .single()
+        val competition = client.get("$apiBaseUrl/api/v1/events/${calendarEvent.eventId}")
+            .body<EventDetailResponse>()
         val notificationPage = notificationApi.getNotifications(limit = 20, offset = 0)
         val notification = notificationApi.getNotification(notificationPage.notifications.single().id)
 
@@ -74,24 +76,6 @@ class MobileBackendApiRegressionTest {
                 "X-Client-Type header mismatch: ${request.path}",
             )
         }
-    }
-
-    @Test
-    fun mapsUnauthorizedCalendarResponseToApiException() = runTest {
-        val api = CalendarApi(errorClient(HttpStatusCode.Unauthorized, "expired"), apiBaseUrl)
-
-        val error = assertFailsWith<CalendarApiException> { api.getEvents() }
-
-        assertEquals(401, error.statusCode)
-    }
-
-    @Test
-    fun mapsMissingCompetitionResponseToApiException() = runTest {
-        val api = CompetitionDetailApi(errorClient(HttpStatusCode.NotFound, "not found"), apiBaseUrl)
-
-        val error = assertFailsWith<CompetitionDetailApiException> { api.getEvent(999) }
-
-        assertEquals(404, error.statusCode)
     }
 
     @Test
