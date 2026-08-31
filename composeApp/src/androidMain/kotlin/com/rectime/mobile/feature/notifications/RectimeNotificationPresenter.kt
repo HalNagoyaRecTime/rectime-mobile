@@ -44,7 +44,11 @@ object RectimeNotificationPresenter {
             .setContentIntent(contentIntent)
             .build()
 
-        NotificationManagerCompat.from(context).notify(notificationId, androidNotification)
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, androidNotification)
+        } catch (_: SecurityException) {
+            // Permission can be revoked after the check above and before notify() executes.
+        }
     }
 
     private fun hasNotificationPermission(context: Context): Boolean {
