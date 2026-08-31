@@ -36,7 +36,7 @@ import okio.Path.Companion.toPath
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
 @Preview
-fun App() {
+fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
             .components {
@@ -64,7 +64,6 @@ fun App() {
     }
 
     val navigationController = remember { NavigationController() }
-    val notificationPermissionStartup = remember { NotificationPermissionStartup() }
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
@@ -77,7 +76,7 @@ fun App() {
 
     val authState by authViewModel.uiState.collectAsState()
     LaunchedEffect(notificationPermissionStartup) {
-        notificationPermissionStartup.requestIfNeeded()
+        notificationPermissionStartup?.requestIfNeeded()
     }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken

@@ -16,8 +16,7 @@ import com.rectime.mobile.core.platform.initializePlatformContext
 import com.rectime.mobile.feature.auth.AuthDeepLinkHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.RectimeNotificationChannel
-import com.rectime.mobile.feature.notifications.setNotificationPermissionContext
-import com.rectime.mobile.feature.notifications.setNotificationPermissionRequester
+import com.rectime.mobile.feature.notifications.createAndroidNotificationPermissionStartup
 
 class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -45,8 +44,7 @@ class MainActivity : ComponentActivity() {
             ),
         )
         initializePlatformContext(this)
-        setNotificationPermissionContext(this)
-        setNotificationPermissionRequester { onResult ->
+        val notificationPermissionStartup = createAndroidNotificationPermissionStartup(this) { onResult ->
             notificationPermissionResult = onResult
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -55,7 +53,7 @@ class MainActivity : ComponentActivity() {
         RectimeNotificationChannel.create(this)
 
         setContent {
-            App()
+            App(notificationPermissionStartup)
         }
     }
 
@@ -67,8 +65,6 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        setNotificationPermissionRequester(null)
-        setNotificationPermissionContext(null)
         notificationPermissionResult = null
         super.onDestroy()
     }

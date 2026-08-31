@@ -15,20 +15,16 @@ interface NotificationPermissionController {
     suspend fun requestPermission(): NotificationPermissionStatus
 }
 
-expect fun notificationPermissionController(): NotificationPermissionController
-
 interface NotificationPermissionRequestStore {
     suspend fun wasRequested(): Boolean
 
     suspend fun markRequested()
 }
 
-expect fun notificationPermissionRequestStore(): NotificationPermissionRequestStore
-
 /** 初回起動時だけOSの通知権限を要求する。 */
 class NotificationPermissionStartup(
-    private val controller: NotificationPermissionController = notificationPermissionController(),
-    private val store: NotificationPermissionRequestStore = notificationPermissionRequestStore(),
+    private val controller: NotificationPermissionController,
+    private val store: NotificationPermissionRequestStore,
 ) {
     suspend fun requestIfNeeded(): NotificationPermissionStatus {
         if (store.wasRequested()) {
@@ -36,8 +32,8 @@ class NotificationPermissionStartup(
         }
 
         val status = controller.getStatus()
-        store.markRequested()
         return if (status == NotificationPermissionStatus.NotDetermined) {
+            store.markRequested()
             controller.requestPermission()
         } else {
             status

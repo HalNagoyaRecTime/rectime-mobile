@@ -13,11 +13,11 @@ import platform.UserNotifications.UNAuthorizationStatusProvisional
 import platform.UserNotifications.UNUserNotificationCenter
 import kotlin.coroutines.resume
 
-actual fun notificationPermissionController(): NotificationPermissionController =
-    IosNotificationPermissionController
-
-actual fun notificationPermissionRequestStore(): NotificationPermissionRequestStore =
-    IosNotificationPermissionRequestStore
+internal fun createIosNotificationPermissionStartup(): NotificationPermissionStartup =
+    NotificationPermissionStartup(
+        controller = IosNotificationPermissionController,
+        store = IosNotificationPermissionRequestStore,
+    )
 
 private object IosNotificationPermissionRequestStore : NotificationPermissionRequestStore {
     private val defaults = platform.Foundation.NSUserDefaults.standardUserDefaults
