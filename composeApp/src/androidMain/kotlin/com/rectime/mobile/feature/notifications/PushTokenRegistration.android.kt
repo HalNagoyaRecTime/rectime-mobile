@@ -18,7 +18,6 @@ actual fun updatePushTokenRegistration(accessToken: String?) {
     AndroidPushTokenRegistrar.updateAccessToken(accessToken)
 }
 
-
 internal object AndroidPushTokenRegistrar {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val registrationMutex = Mutex()

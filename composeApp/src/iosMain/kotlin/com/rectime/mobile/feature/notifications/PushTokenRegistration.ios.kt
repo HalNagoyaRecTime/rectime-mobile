@@ -13,7 +13,6 @@ actual fun updatePushTokenRegistration(accessToken: String?) {
     IosPushTokenRegistrar.updateAccessToken(accessToken)
 }
 
-
 /** SwiftのMessagingDelegateとKMPの認証/API層を接続するiOS専用ブリッジ。 */
 object IosPushTokenRegistrar {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
