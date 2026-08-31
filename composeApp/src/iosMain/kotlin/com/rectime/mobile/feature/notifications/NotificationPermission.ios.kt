@@ -13,9 +13,11 @@ import platform.UserNotifications.UNAuthorizationStatusProvisional
 import platform.UserNotifications.UNUserNotificationCenter
 import kotlin.coroutines.resume
 
-internal fun createIosNotificationPermissionStartup(): NotificationPermissionStartup =
+internal fun createIosNotificationPermissionStartup(
+    onPermissionGranted: () -> Unit,
+): NotificationPermissionStartup =
     NotificationPermissionStartup(
-        controller = IosNotificationPermissionController,
+        controller = IosNotificationPermissionController(onPermissionGranted),
         store = IosNotificationPermissionRequestStore,
     )
 
@@ -31,7 +33,9 @@ private object IosNotificationPermissionRequestStore : NotificationPermissionReq
     }
 }
 
-private object IosNotificationPermissionController : NotificationPermissionController {
+private class IosNotificationPermissionController(
+    private val onPermissionGranted: () -> Unit,
+) : NotificationPermissionController {
     override suspend fun getStatus(): NotificationPermissionStatus =
         suspendCancellableCoroutine { continuation ->
             UNUserNotificationCenter.currentNotificationCenter()
@@ -60,6 +64,9 @@ private object IosNotificationPermissionController : NotificationPermissionContr
                         if (!continuation.isActive) return@getNotificationSettingsWithCompletionHandler
                         val status = settings?.authorizationStatus?.toPermissionStatus()
                             ?: NotificationPermissionStatus.Unavailable
+                        if (status == NotificationPermissionStatus.Granted) {
+                            onPermissionGranted()
+                        }
                         continuation.resume(status)
                     }
             }
