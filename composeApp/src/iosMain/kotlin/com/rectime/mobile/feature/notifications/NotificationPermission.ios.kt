@@ -3,7 +3,6 @@
 package com.rectime.mobile.feature.notifications
 
 import kotlinx.coroutines.suspendCancellableCoroutine
-import platform.UIKit.UIApplication
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionBadge
 import platform.UserNotifications.UNAuthorizationOptionSound
@@ -61,9 +60,6 @@ private object IosNotificationPermissionController : NotificationPermissionContr
                         if (!continuation.isActive) return@getNotificationSettingsWithCompletionHandler
                         val status = settings?.authorizationStatus?.toPermissionStatus()
                             ?: NotificationPermissionStatus.Unavailable
-                        if (status == NotificationPermissionStatus.Granted) {
-                            UIApplication.sharedApplication.registerForRemoteNotifications()
-                        }
                         continuation.resume(status)
                     }
             }
