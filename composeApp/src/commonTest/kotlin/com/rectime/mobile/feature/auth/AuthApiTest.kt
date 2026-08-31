@@ -53,17 +53,18 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"error":{"message":"invalid client type"}}""",
+                    content = """{"error":{"code":"INVALID_CLIENT_TYPE","message":"invalid client type"}}""",
                     status = HttpStatusCode.BadRequest,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
         }
 
+        assertEquals("INVALID_CLIENT_TYPE", error.code)
         assertEquals("invalid client type", error.message)
     }
 
@@ -79,10 +80,11 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
         }
 
+        assertEquals("UNKNOWN_API_ERROR", error.code)
         assertEquals("認証 URL の取得に失敗しました", error.message)
     }
 
@@ -237,21 +239,22 @@ class AuthApiTest {
     // ---- exchangeCode 異常系 ----
 
     @Test
-    fun exchangeCodeUsesFlatErrorMessageWhenStateIsRejected() = runTest {
+    fun exchangeCodeUsesApiErrorMessageWhenStateIsRejected() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"message":"state mismatch"}""",
+                    content = """{"error":{"code":"STATE_MISMATCH","message":"state mismatch"}}""",
                     status = HttpStatusCode.Unauthorized,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.exchangeCode("auth-code", "state-abc", "verifier-123")
         }
 
+        assertEquals("STATE_MISMATCH", error.code)
         assertEquals("state mismatch", error.message)
     }
 
@@ -377,7 +380,7 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"error":{"message":"token expired"}}""",
+                    content = """{"error":{"code":"UNAUTHORIZED","message":"token expired"}}""",
                     status = HttpStatusCode.Unauthorized,
                     headers = jsonHeaders,
                 )
@@ -388,6 +391,7 @@ class AuthApiTest {
             api.currentUser("access-token")
         }
 
+        assertEquals("UNAUTHORIZED", error.code)
         assertEquals("token expired", error.message)
     }
 
@@ -469,7 +473,7 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"error":{"message":"refresh token revoked"}}""",
+                    content = """{"error":{"code":"REFRESH_TOKEN_REVOKED","message":"refresh token revoked"}}""",
                     status = HttpStatusCode.Unauthorized,
                     headers = jsonHeaders,
                 )
@@ -480,6 +484,7 @@ class AuthApiTest {
             api.refresh(storedSession)
         }
 
+        assertEquals("REFRESH_TOKEN_REVOKED", error.code)
         assertEquals("refresh token revoked", error.message)
     }
 
@@ -528,17 +533,18 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"message":"session not found"}""",
+                    content = """{"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}}""",
                     status = HttpStatusCode.NotFound,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.logout(storedSession)
         }
 
+        assertEquals("SESSION_NOT_FOUND", error.code)
         assertEquals("session not found", error.message)
     }
 

@@ -119,7 +119,7 @@ class AuthViewModelTest {
                 mockClient { request ->
                     if (request.url.encodedPath.endsWith("/auth/me")) {
                         respond(
-                            content = """{"error":{"message":"token expired"}}""",
+                            content = """{"error":{"code":"UNAUTHORIZED","message":"token expired"}}""",
                             status = HttpStatusCode.Unauthorized,
                             headers = jsonHeaders,
                         )
@@ -158,7 +158,7 @@ class AuthViewModelTest {
             api = AuthApi(
                 mockClient {
                     respond(
-                        content = """{"error":{"message":"refresh token revoked"}}""",
+                        content = """{"error":{"code":"REFRESH_TOKEN_REVOKED","message":"refresh token revoked"}}""",
                         status = HttpStatusCode.Unauthorized,
                         headers = jsonHeaders,
                     )
@@ -192,7 +192,7 @@ class AuthViewModelTest {
                 mockClient { request ->
                     if (request.url.encodedPath.endsWith("/auth/me")) {
                         respond(
-                            content = """{"error":{"message":"token expired"}}""",
+                            content = """{"error":{"code":"UNAUTHORIZED","message":"token expired"}}""",
                             status = HttpStatusCode.Unauthorized,
                             headers = jsonHeaders,
                         )
@@ -231,7 +231,7 @@ class AuthViewModelTest {
                 mockClient { request ->
                     if (request.url.encodedPath.endsWith("/auth/me")) {
                         respond(
-                            content = """{"error":{"message":"token expired"}}""",
+                            content = """{"error":{"code":"UNAUTHORIZED","message":"token expired"}}""",
                             status = HttpStatusCode.Unauthorized,
                             headers = jsonHeaders,
                         )
@@ -272,13 +272,13 @@ class AuthViewModelTest {
                 mockClient { request ->
                     if (request.url.encodedPath.endsWith("/auth/me")) {
                         respond(
-                            content = """{"error":{"message":"token expired"}}""",
+                            content = """{"error":{"code":"UNAUTHORIZED","message":"token expired"}}""",
                             status = HttpStatusCode.Unauthorized,
                             headers = jsonHeaders,
                         )
                     } else {
                         respond(
-                            content = """{"error":{"message":"internal server error"}}""",
+                            content = """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"internal server error"}}""",
                             status = HttpStatusCode.InternalServerError,
                             headers = jsonHeaders,
                         )
@@ -370,7 +370,7 @@ class AuthViewModelTest {
             api = AuthApi(
                 mockClient {
                     respond(
-                        content = """{"error":{"message":"invalid client type"}}""",
+                        content = """{"error":{"code":"INVALID_CLIENT_TYPE","message":"invalid client type"}}""",
                         status = HttpStatusCode.BadRequest,
                         headers = jsonHeaders,
                     )
@@ -518,7 +518,7 @@ class AuthViewModelTest {
             api = AuthApi(
                 mockClient {
                     respond(
-                        content = """{"error":{"message":"invalid code"}}""",
+                        content = """{"error":{"code":"INVALID_AUTHORIZATION_CODE","message":"invalid code"}}""",
                         status = HttpStatusCode.BadRequest,
                         headers = jsonHeaders,
                     )

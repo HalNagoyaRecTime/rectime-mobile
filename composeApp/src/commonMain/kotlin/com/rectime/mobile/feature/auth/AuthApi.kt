@@ -1,7 +1,7 @@
 package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.config.apiBaseUrl
-import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -30,7 +30,7 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw IllegalStateException(readErrorMessage(body) ?: "認証 URL の取得に失敗しました")
+            throw apiErrorException(response.status, body, "認証 URL の取得に失敗しました")
         }
         return decodeBody<AuthUrlResponse>(body)?.authUrl
             ?: throw IllegalStateException("認証 URL のレスポンスが不正です")
@@ -48,7 +48,7 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw IllegalStateException(readErrorMessage(body) ?: "トークン交換に失敗しました")
+            throw apiErrorException(response.status, body, "トークン交換に失敗しました")
         }
 
         val parsed = decodeBody<AuthSessionResponse>(body)
@@ -73,7 +73,7 @@ class AuthApi(
             // 2xxなのにレスポンス本文の解析に失敗した場合(下のnullチェック)は
             // 別の例外型のままにし、AuthViewModelが「セッションが本当に無効」と
             // 誤認しないようにする。
-            throw HttpStatusException(response.status, readErrorMessage(body) ?: "セッション確認に失敗しました")
+            throw apiErrorException(response.status, body, "セッション確認に失敗しました")
         }
 
         val user = decodeBody<UserEnvelope>(body)?.user
@@ -91,7 +91,7 @@ class AuthApi(
         if (response.status.value !in 200..299) {
             // currentUser()と同様、明示的な非2xxのみHttpStatusExceptionにする
             // (AuthViewModel側でセッション失効かどうかの判定に使うため)。
-            throw HttpStatusException(response.status, readErrorMessage(body) ?: "セッション更新に失敗しました")
+            throw apiErrorException(response.status, body, "セッション更新に失敗しました")
         }
 
         val parsed = decodeBody<AuthSessionResponse>(body)
@@ -112,7 +112,7 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw IllegalStateException(readErrorMessage(body) ?: "ログアウトに失敗しました")
+            throw apiErrorException(response.status, body, "ログアウトに失敗しました")
         }
     }
 
@@ -129,9 +129,6 @@ private val json = Json {
 
 private inline fun <reified T> decodeBody(body: String): T? =
     runCatching { json.decodeFromString<T>(body) }.getOrNull()
-
-private fun readErrorMessage(body: String): String? =
-    decodeBody<ApiErrorResponse>(body)?.let { it.error?.message ?: it.message }
 
 private fun AuthUserResponse.toAuthUser(): AuthUser {
     return AuthUser(
@@ -191,15 +188,4 @@ private data class AuthUserResponse(
     val isStudent: Boolean = false,
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
-)
-
-@Serializable
-private data class ApiErrorResponse(
-    val message: String? = null,
-    val error: ApiErrorDetail? = null,
-)
-
-@Serializable
-private data class ApiErrorDetail(
-    val message: String? = null,
 )

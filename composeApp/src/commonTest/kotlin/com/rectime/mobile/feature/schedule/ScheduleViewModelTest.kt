@@ -209,7 +209,7 @@ class ScheduleViewModelTest {
                 callCount++
                 if (callCount == 1) {
                     respondJson(
-                        """{"error":{"message":"Internal Server Error"}}""",
+                        """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"Internal Server Error"}}""",
                         HttpStatusCode.InternalServerError,
                     )
                 } else {
@@ -235,7 +235,7 @@ class ScheduleViewModelTest {
         val viewModel = buildViewModel(
             mockClient {
                 respondJson(
-                    """{"error":{"message":"Internal Server Error"}}""",
+                    """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"Internal Server Error"}}""",
                     HttpStatusCode.InternalServerError,
                 )
             },
@@ -253,7 +253,7 @@ class ScheduleViewModelTest {
     fun fetchEventsReportsSessionExpiredOnUnauthorized() = runTest(testDispatcher) {
         val viewModel = buildViewModel(
             mockClient {
-                respondJson("""{"error":{"message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
+                respondJson("""{"error":{"code":"UNAUTHORIZED","message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
             },
         )
 
@@ -273,7 +273,7 @@ class ScheduleViewModelTest {
             mockClient {
                 callCount++
                 if (callCount == 1) {
-                    respondJson("""{"error":{"message":"boom"}}""", HttpStatusCode.InternalServerError)
+                    respondJson("""{"error":{"code":"INTERNAL_SERVER_ERROR","message":"boom"}}""", HttpStatusCode.InternalServerError)
                 } else {
                     error("接続できません")
                 }
@@ -438,7 +438,7 @@ class ScheduleViewModelTest {
                 if (callCount == 1) {
                     respondJson(eventsJson)
                 } else {
-                    respondJson("""{"error":{"message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
+                    respondJson("""{"error":{"code":"UNAUTHORIZED","message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
                 }
             },
         )
@@ -468,7 +468,7 @@ class ScheduleViewModelTest {
                 if (callCount == 1) {
                     respondJson(eventsJson)
                 } else {
-                    respondJson("""{"error":{"message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
+                    respondJson("""{"error":{"code":"UNAUTHORIZED","message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
                 }
             },
             cache = LocalCache(NeverPersistingKeyValueStore()),
