@@ -80,7 +80,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
-        updatePushTokenRegistration(authState.session?.accessToken)
+        updatePushTokenRegistration(authState.session)
     }
     LaunchedEffect(Unit) {
         NotificationNavigationHandler.targets.collect {

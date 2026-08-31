@@ -618,6 +618,36 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun logoutStillCallsServerWhenFirebaseTokenUnregisterFails() = runTest(testDispatcher) {
+        var logoutCalled = false
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/logout")) {
+                        logoutCalled = true
+                        respond(content = "", status = HttpStatusCode.NoContent)
+                    } else {
+                        respond(
+                            content = "{\"user\":{\"id\":\"6\",\"email\":\"test@example.com\",\"display_name\":\"テスト太郎\"}}",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = FakeAuthSessionStorage(session = storedSession),
+            unregisterPushToken = { error("token unregister failed") },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(logoutCalled)
+        assertEquals("Logged out", viewModel.uiState.value.message)
+    }
+
+    @Test
     fun logoutKeepsTheSessionWhenLocalStorageCannotBeCleared() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(session = storedSession, clearFails = true)
         val viewModel = buildViewModel(api = okApi(), store = store)
@@ -715,12 +745,14 @@ class AuthViewModelTest {
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
+        unregisterPushToken: suspend (AuthSession) -> Unit = {},
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
         cache = cache,
         devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
+        unregisterPushToken = unregisterPushToken,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })

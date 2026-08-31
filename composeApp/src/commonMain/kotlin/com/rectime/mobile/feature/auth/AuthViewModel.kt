@@ -6,6 +6,7 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.platform.openExternalUrl
+import com.rectime.mobile.feature.notifications.unregisterPushToken as unregisterPushTokenPlatform
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +36,7 @@ class AuthViewModel(
     private val cache: LocalCache = LocalCache(),
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
+    private val unregisterPushToken: suspend (AuthSession) -> Unit = { unregisterPushTokenPlatform(it) },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -234,6 +236,12 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 if (session != null && !devAuthBypassEnabled) {
+                    try {
+                        unregisterPushToken(session)
+                    } catch (error: Throwable) {
+                        if (error is CancellationException) throw error
+                        logAuthFailure("FCM token解除: ${error.describe()}")
+                    }
                     api.logout(session)
                 }
             } catch (error: Throwable) {

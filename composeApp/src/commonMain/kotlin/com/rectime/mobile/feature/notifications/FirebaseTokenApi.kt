@@ -4,6 +4,7 @@ import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.network.mobileAuthHeaders
 import io.ktor.client.HttpClient
+import io.ktor.client.request.delete
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -54,6 +55,25 @@ class FirebaseTokenApi(
         }
     }
 
+    suspend fun unregister(accessToken: String) {
+        require(accessToken.isNotBlank()) { "Access token must not be blank" }
+
+        val currentEndpoint = "$endpoint/current"
+        val response = client.delete(currentEndpoint) {
+            mobileAuthHeaders(currentEndpoint, accessToken)?.forEach { (name, value) ->
+                header(name, value)
+            }
+        }
+        val responseBody = response.bodyAsText()
+
+        if (response.status.value !in 200..299) {
+            throw FirebaseTokenUnregistrationException(
+                statusCode = response.status.value,
+                responseBody = responseBody,
+            )
+        }
+    }
+
     fun close() {
         client.close()
     }
@@ -74,3 +94,8 @@ class FirebaseTokenRegistrationException(
     val statusCode: Int,
     val responseBody: String,
 ) : IllegalStateException("Firebase token registration failed: HTTP $statusCode")
+
+class FirebaseTokenUnregistrationException(
+    val statusCode: Int,
+    val responseBody: String,
+) : IllegalStateException("Firebase token unregistration failed: HTTP $statusCode")

@@ -171,6 +171,47 @@ class FirebaseTokenApiTest {
         assertTrue(body.contains(""""platform":"ios""""))
     }
 
+    @Test
+    fun unregisterSendsCurrentUserDeleteWithSessionHeader() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val api = FirebaseTokenApi(
+            client = mockAppHttpClient { request ->
+                capturedRequest = request
+                respond(content = "", status = HttpStatusCode.NoContent)
+            },
+            baseUrl = apiBaseUrl,
+        )
+
+        api.unregister("access-token")
+
+        val request = requireNotNull(capturedRequest)
+        assertEquals("DELETE", request.method.value)
+        assertEquals("$apiBaseUrl/api/v1/firebase-tokens/current", request.url.toString())
+        assertEquals(listOf("Bearer access-token"), request.headers.getAll(HttpHeaders.Authorization))
+        assertEquals(listOf("mobile"), request.headers.getAll("X-Client-Type"))
+    }
+
+    @Test
+    fun unregisterExposesBackendFailureWithoutLeakingTheAccessToken() = runTest {
+        val api = FirebaseTokenApi(
+            client = mockAppHttpClient {
+                respond(
+                    content = "{\"error\":\"unauthorized\"}",
+                    status = HttpStatusCode.Unauthorized,
+                    headers = jsonHeaders,
+                )
+            },
+            baseUrl = apiBaseUrl,
+        )
+
+        val error = assertFailsWith<FirebaseTokenUnregistrationException> {
+            api.unregister("expired-token")
+        }
+
+        assertEquals(401, error.statusCode)
+        assertFalse(error.message.orEmpty().contains("expired-token"))
+    }
+
     private fun mockAppHttpClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
     ): HttpClient = HttpClient(MockEngine) {

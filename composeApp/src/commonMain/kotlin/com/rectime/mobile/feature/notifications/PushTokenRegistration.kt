@@ -1,3 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
-expect fun updatePushTokenRegistration(accessToken: String?)
+import com.rectime.mobile.feature.auth.AuthSession
+
+expect fun updatePushTokenRegistration(session: AuthSession?)
+
+expect suspend fun unregisterPushToken(session: AuthSession)
