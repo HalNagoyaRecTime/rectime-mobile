@@ -12,6 +12,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.disk.DiskCache
+import coil3.network.cachecontrol.CacheControlCacheStrategy
 import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
@@ -22,6 +23,7 @@ import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
@@ -40,9 +42,15 @@ fun App() {
             .components {
                 add(
                     KtorNetworkFetcherFactory(
-                        createHttpClient().config {
-                            install(MobileAuthHeadersPlugin)
-                        }
+                        httpClient = {
+                            createHttpClient().config {
+                                install(MobileAuthHeadersPlugin)
+                            }
+                        },
+                        // 既定のCacheStrategyはディスクキャッシュがあれば無条件に返すため、
+                        // 差し替えた画像が二度と反映されない。Cache-ControlとETagを見て
+                        // 再検証させる。
+                        cacheStrategy = { CacheControlCacheStrategy() },
                     )
                 )
             }
@@ -84,6 +92,15 @@ fun App() {
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             SessionTokenHolder.accessToken = session.accessToken
+            val badgeViewModel: NotificationBadgeViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { NotificationBadgeViewModel() }
+                }
+            )
+            val hasUnreadNotifications by badgeViewModel.hasUnreadNotifications.collectAsState()
+            LaunchedEffect(session.user.id) {
+                badgeViewModel.onSession(session.user.id)
+            }
             LaunchedEffect(notificationNavigationTarget) {
                 when (val target = notificationNavigationTarget) {
                     NotificationNavigationTarget.Home -> {
@@ -110,6 +127,7 @@ fun App() {
                     navigationController = navigationController,
                     session = session,
                     onLogout = onLogout,
+                    hasUnreadNotifications = hasUnreadNotifications,
                 )
             }
         }

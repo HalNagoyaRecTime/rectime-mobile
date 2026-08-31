@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.schedule
 
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.format.Padding
 import kotlinx.datetime.format.char
 
 /**
@@ -28,7 +29,7 @@ private val apiTimeFormat = LocalTime.Format {
 }
 
 private val displayTimeFormat = LocalTime.Format {
-    hour()
+    hour(Padding.NONE)
     char(':')
     minute()
 }

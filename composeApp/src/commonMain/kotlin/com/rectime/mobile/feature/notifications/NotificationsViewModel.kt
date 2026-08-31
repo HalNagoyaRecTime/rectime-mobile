@@ -5,14 +5,15 @@ import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.util.nowMinuteStateFlow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-
-private const val NOTIFICATIONS_CACHE_KEY = "notifications_v1"
+import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
 
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
@@ -25,8 +26,7 @@ data class NotificationsUiState(
 )
 
 class NotificationsViewModel(
-    private val gateway: NotificationGateway = NotificationApi(),
-    private val cache: LocalCache = LocalCache(),
+    private val feedStore: NotificationFeedStore = NotificationFeedStore.shared,
     private val readStore: NotificationReadStore = NotificationReadStore.shared,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NotificationsUiState(isLoading = true))
@@ -59,13 +59,7 @@ class NotificationsViewModel(
         )
         loadJob = viewModelScope.launch {
             try {
-                when (
-                    val result = fetchWithCacheFallback(
-                        fetchLive = { fetchAllNotifications(gateway) },
-                        loadCache = { cache.load<List<UserNotification>>(NOTIFICATIONS_CACHE_KEY) },
-                        saveCache = { cache.save(NOTIFICATIONS_CACHE_KEY, it) },
-                    )
-                ) {
+                when (val result = feedStore.load(force = isRefresh)) {
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = _uiState.value.copy(
                             notifications = result.value,
@@ -122,11 +116,6 @@ class NotificationsViewModel(
             }
         }
     }
-
-    override fun onCleared() {
-        super.onCleared()
-        gateway.close()
-    }
 }
 
 internal suspend fun fetchAllNotifications(
@@ -161,7 +150,11 @@ class NotificationDetailViewModel(
     private val cache: LocalCache = LocalCache(),
     private val readStore: NotificationReadStore = NotificationReadStore.shared,
     private val myEventsGateway: MyEventsGateway = MyEventsApi(),
+    private val clock: Clock = Clock.System,
+    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
 ) : ViewModel() {
+    val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
+
     private val _uiState = MutableStateFlow(NotificationDetailUiState())
     val uiState: StateFlow<NotificationDetailUiState> = _uiState.asStateFlow()
 

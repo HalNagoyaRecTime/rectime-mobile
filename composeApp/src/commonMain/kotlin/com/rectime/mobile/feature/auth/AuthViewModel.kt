@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val AUTH_FAILED_MESSAGE = "ログインに失敗しました"
+private const val LOGOUT_FAILED_MESSAGE = "ログアウトに失敗しました"
 
 // 原因にはAPIのホスト名やIPが含まれうるため、画面には出さずデバッグビルドのログにだけ残す。
 private fun logAuthFailure(reason: String?) {
@@ -239,10 +240,17 @@ class AuthViewModel(
                 if (error is CancellationException) throw error
                 // Prefer local sign-out even if server logout fails.
             } finally {
-                sessionStore.clear()
-                sessionStore.clearPendingAuth()
+                // API側でログアウトしてもaccess tokenは期限まで有効なため、端末から
+                // 消せたことを確認できない限りログアウト成功として扱わない。
+                val cleared = sessionStore.clear() and sessionStore.clearPendingAuth()
                 cache.clearAll()
-                _uiState.update { AuthUiState(message = "Logged out") }
+                _uiState.update {
+                    if (cleared) {
+                        AuthUiState(message = "Logged out")
+                    } else {
+                        it.copy(isLoading = false, error = LOGOUT_FAILED_MESSAGE)
+                    }
+                }
             }
         }
     }

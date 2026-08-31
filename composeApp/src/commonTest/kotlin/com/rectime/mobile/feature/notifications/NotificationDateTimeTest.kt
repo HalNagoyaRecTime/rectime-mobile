@@ -58,46 +58,47 @@ class NotificationDateTimeTest {
         }
     }
 
-    // ---- isEventLive: 正常系 ----
+    // ---- isEventLiveAt: 正常系 ----
 
     @Test
     fun eventIsLiveWhenNowIsWithinRange() {
-        assertTrue(isEventLive("1700", "1800", now = LocalDateTime(2026, 1, 1, 17, 30)))
+        assertTrue(isEventLiveAt("1700", "1800", nowMinute = 17 * 60 + 30))
     }
 
     @Test
     fun eventIsLiveAtExactStartTime() {
-        assertTrue(isEventLive("1700", "1800", now = LocalDateTime(2026, 1, 1, 17, 0)))
+        assertTrue(isEventLiveAt("1700", "1800", nowMinute = 17 * 60))
     }
 
     @Test
     fun eventIsLiveAtExactEndTime() {
-        assertTrue(isEventLive("1700", "1800", now = LocalDateTime(2026, 1, 1, 18, 0)))
+        assertTrue(isEventLiveAt("1700", "1800", nowMinute = 18 * 60))
     }
 
     @Test
     fun eventIsNotLiveBeforeStartTime() {
-        assertFalse(isEventLive("1700", "1800", now = LocalDateTime(2026, 1, 1, 16, 59)))
+        assertFalse(isEventLiveAt("1700", "1800", nowMinute = 16 * 60 + 59))
     }
 
     @Test
     fun eventIsNotLiveAfterEndTime() {
-        assertFalse(isEventLive("1700", "1800", now = LocalDateTime(2026, 1, 1, 18, 1)))
+        assertFalse(isEventLiveAt("1700", "1800", nowMinute = 18 * 60 + 1))
     }
 
     @Test
     fun swaggerExampleFormatIsHandledCorrectly() {
         // swagger.yml MobileNotificationEvent の example: '1030'
-        assertTrue(isEventLive("1030", "1130", now = LocalDateTime(2026, 1, 1, 11, 0)))
-        assertFalse(isEventLive("1030", "1130", now = LocalDateTime(2026, 1, 1, 9, 59)))
+        assertTrue(isEventLiveAt("1030", "1130", nowMinute = 11 * 60))
+        assertFalse(isEventLiveAt("1030", "1130", nowMinute = 9 * 60 + 59))
     }
 
-    // ---- isEventLive: 異常系 ----
+    // ---- isEventLiveAt: 異常系 ----
 
     @Test
     fun emptyTimeStringReturnsFalse() {
-        assertFalse(isEventLive("", "", now = LocalDateTime(2026, 1, 1, 17, 30)))
+        assertFalse(isEventLiveAt("", "", nowMinute = 17 * 60 + 30))
     }
+
 
     // ---- toShortFormattedTime: 正常系 ----
 
@@ -122,5 +123,29 @@ class NotificationDateTimeTest {
     fun shortFormattedTimeReturnsPlaceholderForInvalidInput() {
         assertEquals("--:--", "".toShortFormattedTime())
         assertEquals("--:--", "900".toShortFormattedTime())
+    }
+
+    // ---- toMinuteOfDay: 正常系 ----
+
+    @Test
+    fun toMinuteOfDayConvertsHhmmToMinutesSinceMidnight() {
+        assertEquals(1020, "1700".toMinuteOfDay())
+    }
+
+    @Test
+    fun toMinuteOfDayHandlesMidnight() {
+        assertEquals(0, "0000".toMinuteOfDay())
+    }
+
+    // ---- toMinuteOfDay: 異常系 ----
+
+    @Test
+    fun toMinuteOfDayReturnsZeroForEmptyString() {
+        assertEquals(0, "".toMinuteOfDay())
+    }
+
+    @Test
+    fun toMinuteOfDayReturnsZeroForShortString() {
+        assertEquals(0, "12".toMinuteOfDay())
     }
 }
