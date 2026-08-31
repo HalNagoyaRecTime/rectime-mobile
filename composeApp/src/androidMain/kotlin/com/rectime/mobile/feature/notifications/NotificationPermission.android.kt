@@ -45,30 +45,29 @@ private class AndroidNotificationPermissionController(
 ) : NotificationPermissionController {
     override suspend fun getStatus(): NotificationPermissionStatus {
         val context = activity.applicationContext
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            return if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                NotificationPermissionStatus.Granted
-            } else {
-                NotificationPermissionStatus.Denied
-            }
-        }
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-            return if (NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                NotificationPermissionStatus.Granted
-            } else {
-                NotificationPermissionStatus.Denied
-            }
-        }
+        val runtimePermissionRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        val runtimePermissionGranted = !runtimePermissionRequired ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        val shouldShowRationale = runtimePermissionRequired &&
+            !runtimePermissionGranted &&
+            ActivityCompat.shouldShowRequestPermissionRationale(
+                activity,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
+        val wasRequested = runtimePermissionRequired &&
+            !runtimePermissionGranted &&
+            requestStore.wasRequested()
 
-        return if (
-            ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.POST_NOTIFICATIONS)
-        ) {
-            NotificationPermissionStatus.Denied
-        } else if (requestStore.wasRequested()) {
-            NotificationPermissionStatus.Denied
-        } else {
-            NotificationPermissionStatus.NotDetermined
-        }
+        return resolveAndroidNotificationPermissionStatus(
+            runtimePermissionRequired = runtimePermissionRequired,
+            runtimePermissionGranted = runtimePermissionGranted,
+            notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled(),
+            shouldShowRationale = shouldShowRationale,
+            wasRequested = wasRequested,
+        )
     }
 
     override suspend fun requestPermission(): NotificationPermissionStatus {
@@ -92,4 +91,22 @@ private class AndroidNotificationPermissionController(
             }
         }
     }
+}
+
+internal fun resolveAndroidNotificationPermissionStatus(
+    runtimePermissionRequired: Boolean,
+    runtimePermissionGranted: Boolean,
+    notificationsEnabled: Boolean,
+    shouldShowRationale: Boolean,
+    wasRequested: Boolean,
+): NotificationPermissionStatus = when {
+    !runtimePermissionRequired || runtimePermissionGranted -> {
+        if (notificationsEnabled) {
+            NotificationPermissionStatus.Granted
+        } else {
+            NotificationPermissionStatus.Denied
+        }
+    }
+    shouldShowRationale || wasRequested -> NotificationPermissionStatus.Denied
+    else -> NotificationPermissionStatus.NotDetermined
 }
