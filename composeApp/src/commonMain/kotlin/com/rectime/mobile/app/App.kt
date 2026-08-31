@@ -27,6 +27,7 @@ import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
@@ -35,7 +36,7 @@ import okio.Path.Companion.toPath
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
 @Preview
-fun App() {
+fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
             .components {
@@ -74,6 +75,9 @@ fun App() {
     )
 
     val authState by authViewModel.uiState.collectAsState()
+    LaunchedEffect(notificationPermissionStartup) {
+        notificationPermissionStartup?.requestIfNeeded()
+    }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
         updatePushTokenRegistration(authState.session?.accessToken)
