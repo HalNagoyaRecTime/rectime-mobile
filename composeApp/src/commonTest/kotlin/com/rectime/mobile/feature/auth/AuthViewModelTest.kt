@@ -26,7 +26,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
+private const val AUTH_FAILED_MESSAGE = "ログインに失敗しました"
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthViewModelTest {

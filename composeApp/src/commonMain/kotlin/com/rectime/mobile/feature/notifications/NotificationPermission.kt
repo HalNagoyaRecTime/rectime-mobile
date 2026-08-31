@@ -11,19 +11,36 @@ enum class NotificationPermissionStatus {
 interface NotificationPermissionController {
     suspend fun getStatus(): NotificationPermissionStatus
 
-    /** 未選択ならOSの許可ダイアログを表示し、選択済みならOS設定を開く。 */
-    suspend fun requestPermissionOrOpenSettings(): NotificationPermissionStatus
-
-    fun openSystemSettings()
+    /** 未選択ならOSの許可ダイアログを表示する。 */
+    suspend fun requestPermission(): NotificationPermissionStatus
 }
 
 expect fun notificationPermissionController(): NotificationPermissionController
 
-internal fun NotificationPermissionStatus.isGranted(): Boolean = this == NotificationPermissionStatus.Granted
+interface NotificationPermissionRequestStore {
+    suspend fun wasRequested(): Boolean
 
-internal fun NotificationPermissionStatus.description(): String = when (this) {
-    NotificationPermissionStatus.Granted -> "通知は許可されています"
-    NotificationPermissionStatus.NotDetermined -> "通知の許可を選択してください"
-    NotificationPermissionStatus.Denied -> "端末の設定で通知を許可してください"
-    NotificationPermissionStatus.Unavailable -> "この端末では通知設定を確認できません"
+    suspend fun markRequested()
+}
+
+expect fun notificationPermissionRequestStore(): NotificationPermissionRequestStore
+
+/** 初回起動時だけOSの通知権限を要求する。 */
+class NotificationPermissionStartup(
+    private val controller: NotificationPermissionController = notificationPermissionController(),
+    private val store: NotificationPermissionRequestStore = notificationPermissionRequestStore(),
+) {
+    suspend fun requestIfNeeded(): NotificationPermissionStatus {
+        if (store.wasRequested()) {
+            return controller.getStatus()
+        }
+
+        val status = controller.getStatus()
+        store.markRequested()
+        return if (status == NotificationPermissionStatus.NotDetermined) {
+            controller.requestPermission()
+        } else {
+            status
+        }
+    }
 }

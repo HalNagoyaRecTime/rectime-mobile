@@ -2,8 +2,10 @@ package com.rectime.mobile.feature.legal
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -17,6 +19,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
@@ -59,14 +64,26 @@ internal fun LegalDocumentLinks(
             TextButton(
                 enabled = !state.isOpening,
                 onClick = { open(LegalDocument.Terms) },
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.height(20.dp), // ← 最小タッチサイズ(40dp)を上書きして余白を消す
             ) {
-                Text("利用規約")
+                Text(
+                    text = "利用規約",
+                    fontSize = 13.sp,
+                    color = AppTheme.colors.themeColorFirst,
+                )
             }
             TextButton(
                 enabled = !state.isOpening,
                 onClick = { open(LegalDocument.PrivacyPolicy) },
+                contentPadding = PaddingValues(horizontal = 8.dp),
+                modifier = Modifier.height(20.dp),
             ) {
-                Text("プライバシーポリシー")
+                Text(
+                    text = "プライバシーポリシー",
+                    fontSize = 13.sp,
+                    color = AppTheme.colors.themeColorFirst,
+                )
             }
         }
         state.errorMessage?.let { message ->

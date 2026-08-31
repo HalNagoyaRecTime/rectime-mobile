@@ -3,13 +3,12 @@ package com.rectime.mobile.feature.notifications
 import android.Manifest
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.rectime.mobile.core.platform.getPlatformContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -28,6 +27,28 @@ fun setNotificationPermissionRequester(requester: (((Boolean) -> Unit) -> Unit)?
 
 actual fun notificationPermissionController(): NotificationPermissionController =
     AndroidNotificationPermissionController
+
+actual fun notificationPermissionRequestStore(): NotificationPermissionRequestStore =
+    AndroidNotificationPermissionRequestStore
+
+private object AndroidNotificationPermissionRequestStore : NotificationPermissionRequestStore {
+    private const val PREFERENCES_NAME = "rectime_notification_permission"
+    private const val REQUESTED_KEY = "requested"
+
+    override suspend fun wasRequested(): Boolean =
+        getPlatformContext()
+            ?.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+            ?.getBoolean(REQUESTED_KEY, false)
+            ?: false
+
+    override suspend fun markRequested() {
+        getPlatformContext()
+            ?.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putBoolean(REQUESTED_KEY, true)
+            ?.apply()
+    }
+}
 
 private object AndroidNotificationPermissionController : NotificationPermissionController {
     override suspend fun getStatus(): NotificationPermissionStatus {
@@ -57,12 +78,9 @@ private object AndroidNotificationPermissionController : NotificationPermissionC
         }
     }
 
-    override suspend fun requestPermissionOrOpenSettings(): NotificationPermissionStatus {
+    override suspend fun requestPermission(): NotificationPermissionStatus {
         val status = getStatus()
-        if (status != NotificationPermissionStatus.NotDetermined) {
-            openSystemSettings()
-            return status
-        }
+        if (status != NotificationPermissionStatus.NotDetermined) return status
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return status
 
         val requester = notificationPermissionRequester ?: return NotificationPermissionStatus.Unavailable
@@ -75,19 +93,5 @@ private object AndroidNotificationPermissionController : NotificationPermissionC
                 }
             }
         }
-    }
-
-    override fun openSystemSettings() {
-        val context = notificationPermissionContext ?: return
-        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            }
-        } else {
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                data = android.net.Uri.fromParts("package", context.packageName, null)
-            }
-        }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
     }
 }

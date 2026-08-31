@@ -73,8 +73,8 @@ class NotificationDetailViewModelTest {
             id = 7,
             name = "玉入れ",
             venue = "体育館",
-            startTime = "2026-07-31T09:15:00+09:00",
-            endTime = "2026-07-31T09:45:00+09:00",
+            startTime = "0915",
+            endTime = "0945",
         )
         val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
         val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
@@ -309,8 +309,8 @@ class NotificationDetailViewModelTest {
             id = 7,
             name = "玉入れ",
             venue = "体育館",
-            startTime = "2026-07-31T09:15:00+09:00",
-            endTime = "2026-07-31T09:45:00+09:00",
+            startTime = "0915",
+            endTime = "0945",
         )
         val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
         val myEventsGateway = FakeMyEventsGateway { setOf(7, 9) }
@@ -333,8 +333,8 @@ class NotificationDetailViewModelTest {
             id = 7,
             name = "玉入れ",
             venue = "体育館",
-            startTime = "2026-07-31T09:15:00+09:00",
-            endTime = "2026-07-31T09:45:00+09:00",
+            startTime = "0915",
+            endTime = "0945",
         )
         val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
         val myEventsGateway = FakeMyEventsGateway { setOf(1, 2) }
@@ -374,8 +374,8 @@ class NotificationDetailViewModelTest {
             id = 7,
             name = "玉入れ",
             venue = "体育館",
-            startTime = "2026-07-31T09:15:00+09:00",
-            endTime = "2026-07-31T09:45:00+09:00",
+            startTime = "0915",
+            endTime = "0945",
         )
         val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
         val myEventsGateway = FakeMyEventsGateway { throw NotificationApiException(statusCode = 500) }

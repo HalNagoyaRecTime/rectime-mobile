@@ -25,6 +25,7 @@ import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
@@ -55,6 +56,7 @@ fun App() {
     }
 
     val navigationController = remember { NavigationController() }
+    val notificationPermissionStartup = remember { NotificationPermissionStartup() }
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
@@ -66,6 +68,9 @@ fun App() {
     )
 
     val authState by authViewModel.uiState.collectAsState()
+    LaunchedEffect(notificationPermissionStartup) {
+        notificationPermissionStartup.requestIfNeeded()
+    }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
         updatePushTokenRegistration(authState.session?.accessToken)

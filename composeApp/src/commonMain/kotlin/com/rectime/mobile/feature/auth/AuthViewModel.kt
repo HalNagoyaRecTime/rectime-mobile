@@ -14,11 +14,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-private const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
+private const val AUTH_FAILED_MESSAGE = "ログインに失敗しました"
 
-// リリースビルドでは内部エラーを露出させず、デバッグビルドでのみ原因を添える。
-private fun authFailed(reason: String?): String =
-    if (isDebugBuild && !reason.isNullOrBlank()) "$AUTH_FAILED_MESSAGE ($reason)" else AUTH_FAILED_MESSAGE
+// 原因にはAPIのホスト名やIPが含まれうるため、画面には出さずデバッグビルドのログにだけ残す。
+private fun logAuthFailure(reason: String?) {
+    if (isDebugBuild && !reason.isNullOrBlank()) {
+        println("AuthViewModel: $reason")
+    }
+}
+
+private fun authFailed(reason: String?): String {
+    logAuthFailure(reason)
+    return AUTH_FAILED_MESSAGE
+}
 
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
@@ -81,7 +89,7 @@ class AuthViewModel(
                     _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
-                    val detail = if (isDebugBuild) " (${refreshError.describe()})" else ""
+                    logAuthFailure(refreshError.describe())
                     if (refreshError is HttpStatusException && refreshError.status == HttpStatusCode.Unauthorized) {
                         // HttpStatusExceptionは非2xx全般(500/503等の一時的な
                         // サーバーエラーも含む)で投げられるため、ステータスコードまで
@@ -93,7 +101,7 @@ class AuthViewModel(
                         sessionStore.clearPendingAuth()
                         cache.clearAll()
                         _uiState.update {
-                            AuthUiState(error = "Session expired. Please login again.$detail")
+                            AuthUiState(error = "Session expired. Please login again.")
                         }
                     } else {
                         // 圏外・オフライン等、通信自体が失敗した場合。セッションが
@@ -104,7 +112,7 @@ class AuthViewModel(
                             it.copy(
                                 isLoading = false,
                                 session = stored,
-                                message = "Offline$detail",
+                                message = "Offline",
                             )
                         }
                     }

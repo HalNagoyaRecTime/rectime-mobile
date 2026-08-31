@@ -3,9 +3,7 @@
 package com.rectime.mobile.feature.notifications
 
 import kotlinx.coroutines.suspendCancellableCoroutine
-import platform.Foundation.NSURL
 import platform.UIKit.UIApplication
-import platform.UIKit.UIApplicationOpenSettingsURLString
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionBadge
 import platform.UserNotifications.UNAuthorizationOptionSound
@@ -18,6 +16,21 @@ import kotlin.coroutines.resume
 
 actual fun notificationPermissionController(): NotificationPermissionController =
     IosNotificationPermissionController
+
+actual fun notificationPermissionRequestStore(): NotificationPermissionRequestStore =
+    IosNotificationPermissionRequestStore
+
+private object IosNotificationPermissionRequestStore : NotificationPermissionRequestStore {
+    private val defaults = platform.Foundation.NSUserDefaults.standardUserDefaults
+    private const val REQUESTED_KEY = "rectime_notification_permission_requested"
+
+    override suspend fun wasRequested(): Boolean =
+        defaults.stringForKey(REQUESTED_KEY) == "true"
+
+    override suspend fun markRequested() {
+        defaults.setObject("true", REQUESTED_KEY)
+    }
+}
 
 private object IosNotificationPermissionController : NotificationPermissionController {
     override suspend fun getStatus(): NotificationPermissionStatus =
@@ -33,11 +46,9 @@ private object IosNotificationPermissionController : NotificationPermissionContr
                 }
         }
 
-    override suspend fun requestPermissionOrOpenSettings(): NotificationPermissionStatus {
-        if (getStatus() != NotificationPermissionStatus.NotDetermined) {
-            openSystemSettings()
-            return getStatus()
-        }
+    override suspend fun requestPermission(): NotificationPermissionStatus {
+        val status = getStatus()
+        if (status != NotificationPermissionStatus.NotDetermined) return status
 
         return suspendCancellableCoroutine { continuation ->
             UNUserNotificationCenter.currentNotificationCenter().requestAuthorizationWithOptions(
@@ -50,19 +61,13 @@ private object IosNotificationPermissionController : NotificationPermissionContr
                         if (!continuation.isActive) return@getNotificationSettingsWithCompletionHandler
                         val status = settings?.authorizationStatus?.toPermissionStatus()
                             ?: NotificationPermissionStatus.Unavailable
+                        if (status == NotificationPermissionStatus.Granted) {
+                            UIApplication.sharedApplication.registerForRemoteNotifications()
+                        }
                         continuation.resume(status)
                     }
             }
         }
-    }
-
-    override fun openSystemSettings() {
-        val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
-        UIApplication.sharedApplication.openURL(
-            url = url,
-            options = emptyMap<Any?, Any>(),
-            completionHandler = null,
-        )
     }
 }
 
