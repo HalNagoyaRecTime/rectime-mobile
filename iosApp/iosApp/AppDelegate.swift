@@ -46,21 +46,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         print("[PushNotification] APNs registration failed: \(error.localizedDescription)")
     }
 
-    func application(
-        _ application: UIApplication,
-        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
-        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
-    ) {
-        if isFirebaseConfigured {
-            Messaging.messaging().appDidReceiveMessage(userInfo)
-        }
-
-        // 表示通知はOSが表示し、画面遷移はユーザーが通知をタップした時だけ行う。
-        // content-available付き通知ではここまで到達し、Payloadを安全に解釈できる。
-        _ = NotificationPayloadBridge.stringPayload(from: userInfo)
-        completionHandler(.newData)
-    }
-
     private func configureFirebase() {
         guard
             let configurationPath = Bundle.main.path(
