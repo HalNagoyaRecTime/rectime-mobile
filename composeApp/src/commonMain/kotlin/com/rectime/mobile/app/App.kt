@@ -93,8 +93,15 @@ fun App() {
     )
 
     val authState by authViewModel.uiState.collectAsState()
+    var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
+        if (authState.session == null && hadSession) {
+            navigationController.reset(ScheduleScreen)
+        }
+        hadSession = authState.session != null
+    }
+    LaunchedEffect(authState.session?.accessToken) {
         updatePushTokenRegistration(authState.session?.accessToken)
     }
     LaunchedEffect(Unit) {

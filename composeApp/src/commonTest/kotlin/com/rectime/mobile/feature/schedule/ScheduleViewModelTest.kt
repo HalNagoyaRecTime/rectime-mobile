@@ -38,6 +38,7 @@ import kotlin.time.Instant
 
 private const val LOAD_FAILED_MESSAGE = "通信に失敗しました"
 private const val SESSION_EXPIRED_MESSAGE = "ログイン情報の有効期限が切れました"
+private fun skippedEventsMessage(count: Int) = "一部の予定を表示できませんでした（${count}件）"
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class ScheduleViewModelTest {
@@ -120,7 +121,7 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(listOf(3), viewModel.events.value.map { it.eventId })
-        assertNull(viewModel.error)
+        assertEquals(skippedEventsMessage(2), viewModel.error)
     }
 
     @Test
@@ -320,7 +321,7 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun fetchEventsReportsErrorOnUnparsableTime() = runTest(testDispatcher) {
+    fun fetchEventsSkipsUnparsableTimeAndReportsWarning() = runTest(testDispatcher) {
         val viewModel = buildViewModel(
             mockClient {
                 respondJson(
@@ -349,7 +350,7 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
+        assertEquals(skippedEventsMessage(1), viewModel.error)
         assertTrue(viewModel.events.value.isEmpty())
     }
 
