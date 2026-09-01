@@ -618,7 +618,7 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun logoutKeepsTheSessionWhenLocalStorageCannotBeCleared() = runTest(testDispatcher) {
+    fun logoutDropsTheUiSessionWhenLocalStorageCannotBeCleared() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(session = storedSession, clearFails = true)
         val viewModel = buildViewModel(api = okApi(), store = store)
         testDispatcher.scheduler.advanceUntilIdle()
@@ -628,7 +628,7 @@ class AuthViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals("ログアウトに失敗しました", state.error)
-        assertNotNull(state.session)
+        assertNull(state.session)
         assertNotNull(store.session)
         assertFalse(state.isLoading)
     }
@@ -668,7 +668,7 @@ class AuthViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals("ログアウトに失敗しました", state.error)
-        assertNotNull(state.session)
+        assertNull(state.session)
         assertNotNull(store.pendingAuth)
     }
 

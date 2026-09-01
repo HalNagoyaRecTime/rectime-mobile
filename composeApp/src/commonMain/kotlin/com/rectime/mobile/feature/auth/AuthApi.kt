@@ -21,9 +21,10 @@ import kotlinx.serialization.json.JsonNamingStrategy
 
 class AuthApi(
     private val client: HttpClient = createAppHttpClient(),
+    private val baseUrl: String = apiBaseUrl,
 ) {
     suspend fun requestAuthUrl(state: String, codeChallenge: String): String {
-        val response = client.get("$apiBaseUrl/api/v1/auth/microsoft/login") {
+        val response = client.get("$baseUrl/api/v1/auth/microsoft/login") {
             header("X-Client-Type", "mobile")
             header("X-State", state)
             header("X-PKCE-Code-Challenge", codeChallenge)
@@ -37,7 +38,7 @@ class AuthApi(
     }
 
     suspend fun exchangeCode(code: String, state: String, codeVerifier: String): AuthSession {
-        val response = client.post("$apiBaseUrl/api/v1/auth/microsoft/token") {
+        val response = client.post("$baseUrl/api/v1/auth/microsoft/token") {
             header("X-Client-Type", "mobile")
             contentType(ContentType.Application.Json)
             setBody(
@@ -58,12 +59,12 @@ class AuthApi(
             refreshTokenId = parsed.refreshTokenId
                 ?: throw IllegalStateException("refresh_token_id がありません"),
             expiresIn = parsed.expiresIn ?: 0L,
-            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(),
+            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(baseUrl),
         )
     }
 
     suspend fun currentUser(accessToken: String): AuthUser {
-        val response = client.get("$apiBaseUrl/api/v1/auth/me") {
+        val response = client.get("$baseUrl/api/v1/auth/me") {
             header("X-Client-Type", "mobile")
             header(HttpHeaders.Authorization, "Bearer $accessToken")
         }
@@ -78,11 +79,11 @@ class AuthApi(
 
         val user = decodeBody<UserEnvelope>(body)?.user
             ?: throw IllegalStateException("ユーザー情報のレスポンスが不正です")
-        return user.toAuthUser()
+        return user.toAuthUser(baseUrl)
     }
 
     suspend fun refresh(session: AuthSession): AuthSession {
-        val response = client.post("$apiBaseUrl/api/v1/auth/refresh") {
+        val response = client.post("$baseUrl/api/v1/auth/refresh") {
             header("X-Client-Type", "mobile")
             contentType(ContentType.Application.Json)
             setBody(json.encodeToString(RefreshRequest(refreshTokenId = session.refreshTokenId)))
@@ -104,7 +105,7 @@ class AuthApi(
     }
 
     suspend fun logout(session: AuthSession) {
-        val response = client.post("$apiBaseUrl/api/v1/auth/logout") {
+        val response = client.post("$baseUrl/api/v1/auth/logout") {
             header("X-Client-Type", "mobile")
             header(HttpHeaders.Authorization, "Bearer ${session.accessToken}")
             contentType(ContentType.Application.Json)
@@ -133,13 +134,13 @@ private inline fun <reified T> decodeBody(body: String): T? =
 private fun readErrorMessage(body: String): String? =
     decodeBody<ApiErrorResponse>(body)?.let { it.error?.message ?: it.message }
 
-private fun AuthUserResponse.toAuthUser(): AuthUser {
+private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
     return AuthUser(
         id = id,
         email = email,
         displayName = displayName,
         avatarUrl = avatarUrl?.let {
-            val base = if (it.startsWith("http")) it else "$apiBaseUrl$it"
+            val base = if (it.startsWith("http")) it else "$baseUrl$it"
             if (!avatarUpdatedAt.isNullOrBlank()) "$base?v=$avatarUpdatedAt" else base
         },
         avatarUpdatedAt = avatarUpdatedAt,

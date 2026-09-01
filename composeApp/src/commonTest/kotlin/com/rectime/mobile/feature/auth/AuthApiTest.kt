@@ -170,6 +170,7 @@ class AuthApiTest {
                     headers = jsonHeaders,
                 )
             },
+            baseUrl = "https://api.example.test",
         )
 
         val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")

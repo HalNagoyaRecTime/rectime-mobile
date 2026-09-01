@@ -248,7 +248,7 @@ class AuthViewModel(
                     if (cleared) {
                         AuthUiState(message = "Logged out")
                     } else {
-                        it.copy(isLoading = false, error = LOGOUT_FAILED_MESSAGE)
+                        AuthUiState(error = LOGOUT_FAILED_MESSAGE)
                     }
                 }
             }

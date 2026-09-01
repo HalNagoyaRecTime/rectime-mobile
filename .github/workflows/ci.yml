@@ -6,11 +6,13 @@ on:
       - develop
       - develop-v2
       - main
+      - 'feature/**'
   push:
     branches:
       - develop
       - develop-v2
       - main
+      - 'feature/**'
 
 concurrency:
   group: ci-${{ github.ref }}

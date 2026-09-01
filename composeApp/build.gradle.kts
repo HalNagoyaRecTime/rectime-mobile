@@ -183,6 +183,7 @@ android {
         getByName("debug") {
             val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
                 ?: findProperty("API_BASE_URL") as String?
+                ?: providers.environmentVariable("API_BASE_URL").orNull
                 ?: "http://10.0.2.2:8787"
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         }
