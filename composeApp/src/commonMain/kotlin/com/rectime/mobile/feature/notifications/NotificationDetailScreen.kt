@@ -1,9 +1,12 @@
 package com.rectime.mobile.feature.notifications
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
@@ -18,19 +21,38 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.competition.CompetitionDetailScreen
-import com.rectime.mobile.ui.component.OfflineBanner
+import com.rectime.mobile.core.util.toFormattedTime
+import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.ui.component.AppDivider
+import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 import kotlin.time.Instant
+
+private val LoadingIndicatorPadding = 24.dp
+private val ErrorContentPadding = 32.dp
+private val ErrorContentSpacing = 12.dp
+private val NotificationContentHorizontalPadding = 10.dp
+private val NotificationContentVerticalPadding = 12.dp
+private val NotificationContentSpacing = 12.dp
+private val NotificationTitleTopPadding = 16.dp
+private val NotificationDateTimeOffsetY = (-8).dp
+private val NotificationBodyLineHeight = 30.sp
+private val RelatedEventSpacing = 6.dp
+private val RelatedEventTitleTopPadding = 8.dp
+private val EventCardHeight = 80.dp
 
 data class NotificationDetailScreen(val id: Int) : Screen {
     override val key: String = "notification_detail_$id"
@@ -39,6 +61,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel(key = key) { NotificationDetailViewModel(id) }
         val uiState by viewModel.uiState.collectAsState()
+        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
 
         PushScreenScaffold(
             title = "通知詳細",
@@ -48,7 +71,7 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                 when {
                     uiState.isLoading -> {
                         CircularProgressIndicator(
-                            modifier = Modifier.padding(vertical = 24.dp),
+                            modifier = Modifier.padding(vertical = LoadingIndicatorPadding),
                         )
                     }
 
@@ -56,9 +79,9 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 32.dp),
+                                .padding(vertical = ErrorContentPadding),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(ErrorContentSpacing),
                         ) {
                             Text(
                                 text = requireNotNull(uiState.error),
@@ -71,21 +94,16 @@ data class NotificationDetailScreen(val id: Int) : Screen {
                     }
 
                     uiState.notification != null -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            if (uiState.isOffline) {
-                                OfflineBanner(
-                                    message = "オフライン: 最新の通知を取得できません。前回取得時の内容を表示しています。",
+                        NotificationDetailContent(
+                            notification = requireNotNull(uiState.notification),
+                            isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
+                            nowMinute = nowMinute,
+                            onRelatedEventClick = { eventId ->
+                                navigationController.push(
+                                    EventDetailScreen(eventId = eventId),
                                 )
-                            }
-                            NotificationDetailContent(
-                                notification = requireNotNull(uiState.notification),
-                                onRelatedEventClick = { eventId ->
-                                    navigationController.push(
-                                        CompetitionDetailScreen(eventId = eventId),
-                                    )
-                                },
-                            )
-                        }
+                            },
+                        )
                     }
                 }
             }
@@ -96,43 +114,55 @@ data class NotificationDetailScreen(val id: Int) : Screen {
 @Composable
 private fun NotificationDetailContent(
     notification: UserNotification,
+    isParticipatingInRelatedEvent: Boolean,
+    nowMinute: Int,
     onRelatedEventClick: (Int) -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = NotificationContentHorizontalPadding, vertical = NotificationContentVerticalPadding),
+        verticalArrangement = Arrangement.spacedBy(NotificationContentSpacing),
     ) {
         Text(
             text = notification.title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.colors.textPrimary,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+            color = AppTheme.colors.textDetailsScreenTitle,
+            modifier = Modifier.padding(top = NotificationTitleTopPadding),
         )
         Text(
             text = notification.scheduledAt.toNotificationDateTime(),
             style = MaterialTheme.typography.labelLarge,
-            color = AppTheme.colors.textSecondary,
+            color = AppTheme.colors.textDetailsScreenTime,
+            modifier = Modifier.offset(y = NotificationDateTimeOffsetY),
         )
+        AppDivider()
         Text(
             text = notification.body,
             style = MaterialTheme.typography.bodyLarge,
-            color = AppTheme.colors.textPrimary,
+            fontWeight = FontWeight.Medium,
+            color = AppTheme.colors.textDetailsScreenBody,
+            lineHeight = NotificationBodyLineHeight,
         )
+        AppDivider()
 
         notification.relatedEvent?.let { event ->
-            Text(
-                text = "関連競技",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = AppTheme.colors.textSecondary,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-            NotificationRelatedEventLink(
-                event = event,
-                onClick = { onRelatedEventClick(event.id) },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(RelatedEventSpacing)) {
+                Text(
+                    text = "イベント",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = AppTheme.colors.textRelationEvent,
+                    modifier = Modifier.padding(top = RelatedEventTitleTopPadding),
+                )
+                NotificationRelatedEventLink(
+                    event = event,
+                    isParticipating = isParticipatingInRelatedEvent,
+                    nowMinute = nowMinute,
+                    onClick = { onRelatedEventClick(event.id) },
+                )
+            }
         }
     }
 }
@@ -140,48 +170,51 @@ private fun NotificationDetailContent(
 @Composable
 private fun NotificationRelatedEventLink(
     event: NotificationRelatedEvent,
+    isParticipating: Boolean,
+    nowMinute: Int,
     onClick: () -> Unit,
 ) {
-    PressSurface(
+    EventCard(
+        time = "${event.startTime.toShortFormattedTime()}-${event.endTime.toShortFormattedTime()}",
+        title = event.name,
+        court = event.venue,
+        isLive = isEventLiveAt(event.startTime, event.endTime, nowMinute),
+        isParticipating = isParticipating,
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = event.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = AppTheme.colors.textPrimary,
-                )
-                Text(
-                    text = event.venue,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppTheme.colors.textSecondary,
-                )
-            }
-            Icon(
-                imageVector = SolidGroup.ChevronRight,
-                contentDescription = null,
-                tint = AppTheme.colors.textSecondary,
-                modifier = Modifier.size(14.dp),
-            )
-        }
-    }
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(EventCardHeight),
+    )
 }
+
+private fun String.toIsoDateTime(): String =
+    this.replace(" ", "T")
+        .let { if (it.contains("+") || it.endsWith("Z")) it else "${it}Z" }
 
 internal fun String.toNotificationDateTime(
     timeZone: TimeZone = TimeZone.currentSystemDefault(),
 ): String = runCatching {
-    val dateTime = Instant.parse(this).toLocalDateTime(timeZone)
-    "${dateTime.month.ordinal + 1}月${dateTime.day}日 " +
-        "${dateTime.hour.toTwoDigits()}:${dateTime.minute.toTwoDigits()}"
+    val dateTime = Instant.parse(this.toIsoDateTime()).toLocalDateTime(timeZone)
+    "${dateTime.year}/${(dateTime.month.ordinal + 1).toTwoDigits()}/${dateTime.day.toTwoDigits()} " +
+            "${dateTime.hour}:${dateTime.minute.toTwoDigits()}"
 }.getOrElse { this }
 
+internal fun String.toShortFormattedTime(): String {
+    val formatted = toFormattedTime()
+    if (formatted == "--:--") return formatted
+    val hour = formatted.substring(0, 2).toIntOrNull() ?: return formatted
+    val minute = formatted.substring(3, 5)
+    return "$hour:$minute"
+}
+
 private fun Int.toTwoDigits(): String = toString().padStart(2, '0')
+
+internal fun String.toMinuteOfDay(): Int {
+    if (length < 4) return 0
+    val hour = substring(0, 2).toIntOrNull() ?: return 0
+    val minute = substring(2, 4).toIntOrNull() ?: return 0
+    return hour * 60 + minute
+}
+
+internal fun isEventLiveAt(startTime: String, endTime: String, nowMinute: Int): Boolean =
+    nowMinute in startTime.toMinuteOfDay()..endTime.toMinuteOfDay()

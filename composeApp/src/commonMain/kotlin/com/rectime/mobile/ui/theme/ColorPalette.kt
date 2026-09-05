@@ -38,15 +38,21 @@ data class AppColorTokens(
     val headerBackground: Color,
     val edgeFadeColor: Color,
     // ドロップシャドウ
-    val dropShadowDark: Color,
-    val dropShadowLight: Color,
+    val dropShadow: Color,
+    // ログイン画面
+    val textAppLogo: Color,
+    val loginButtonBackground: Color,
+    val textLoginButton: Color,
+    val textLoginError: Color,
     // 通知一覧画面
     val textUnreadNotificationTitle: Color,
     val textUnreadNotificationBody: Color,
     val textUnreadNotificationTime: Color,
+    val unreadNotificationChevron: Color,
     val textReadNotificationTitle: Color,
     val textReadNotificationBody: Color,
     val textReadNotificationTime: Color,
+    val readNotificationChevron: Color,
     val notificationBackground: Color,
     // スケジュール画面
     val textScheduleTimeBar: Color,
@@ -54,7 +60,9 @@ data class AppColorTokens(
     val scheduleTimeBarBackground: Color,
     val pastAreaBackground: Color,
     val eventCardOverlay: Color,
+    val eventCardWave: Color,
     val eventCardBoundaryLine: Color,
+    val eventOverflowBackground: Color,
     val eventVenueBackground: Color,
     // 設定画面
     val userInformationHeader: Color,
@@ -68,6 +76,8 @@ data class AppColorTokens(
     val textDetailsScreenTime: Color,
     val textDetailsScreenBody: Color,
     val textRelationEvent: Color,
+    val detailsScreenHeaderBackground: Color,
+    val detailsScreenListBackground: Color,
     // モーダル画面
     val modalBackground: Color,
     val textMapModal: Color,
@@ -111,23 +121,31 @@ private val defaultLight = AppColorTokens(
     headerBackground = Color(0xB3FFFFFF),
     edgeFadeColor = Color(0xFFe6e6e6),
     //ドロップシャドウ
-    dropShadowDark = Color(0x1A000000),
-    dropShadowLight = Color(0x26000000),
+    dropShadow = Color(0x1A000000),
+    //ログイン画面
+    textAppLogo = Color(0xFF333333),
+    loginButtonBackground = Color(0xFF333333),
+    textLoginButton = Color(0xFFFFFFFF),
+    textLoginError = Color(0xFFFF0000),
     //通知一覧画面
     textUnreadNotificationTitle = Color(0xFF000000),
     textUnreadNotificationBody = Color(0xFF666666),
     textUnreadNotificationTime = Color(0xFF000000),
+    unreadNotificationChevron = Color(0xFF666666),
     textReadNotificationTitle = Color(0xFF333333),
     textReadNotificationBody = Color(0xFF808080),
     textReadNotificationTime = Color(0xFFb3b3b3),
+    readNotificationChevron = Color(0xFF999999),
     notificationBackground = Color(0xFFf2f2f2),
     //スケジュール画面
     textScheduleTimeBar = Color(0xFF999999),
     textScheduleTimeLine = Color(0xFFb3b3b3),
     scheduleTimeBarBackground = Color(0xCCFFFFFF),
     pastAreaBackground = Color(0x33000000),
-    eventCardOverlay = Color(0x40FFFFFF),
+    eventCardOverlay = Color(0x26FFFFFF),
+    eventCardWave = Color(0x40FFFFFF),
     eventCardBoundaryLine = Color(0x80FFFFFF),
+    eventOverflowBackground = Color(0xFFB3B3B3),
     eventVenueBackground = Color(0x26000000),
     //設定画面
     userInformationHeader = Color(0xFF808080),
@@ -138,9 +156,11 @@ private val defaultLight = AppColorTokens(
     //詳細画面
     textDetailsScreenHeader = Color(0xFF666666),
     textDetailsScreenTitle = Color(0xFF000000),
-    textDetailsScreenTime = Color(0xFF999999),
+    textDetailsScreenTime = Color(0xFF333333),
     textDetailsScreenBody = Color(0xFF333333),
     textRelationEvent = Color(0xFF808080),
+    detailsScreenHeaderBackground = Color(0xCCFFFFFF),
+    detailsScreenListBackground = Color(0xFFf2f2f2),
     //モーダル画面
     modalBackground = Color(0x4D000000),
     textMapModal = Color(0xFF808080),

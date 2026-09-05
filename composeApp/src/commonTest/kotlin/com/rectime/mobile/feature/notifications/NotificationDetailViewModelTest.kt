@@ -42,7 +42,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun uiStateIsLoadingUntilFirstResponseArrives() = runTest(testDispatcher) {
         val gateway = FakeGateway { notification(it) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         val state = viewModel.uiState.value
         assertTrue(state.isLoading)
@@ -55,7 +55,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun initLoadsRequestedNotification() = runTest(testDispatcher) {
         val gateway = FakeGateway { notification(it) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -73,11 +73,11 @@ class NotificationDetailViewModelTest {
             id = 7,
             name = "玉入れ",
             venue = "体育館",
-            startTime = "2026-07-31T09:15:00+09:00",
-            endTime = "2026-07-31T09:45:00+09:00",
+            startTime = "0915",
+            endTime = "0945",
         )
         val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -93,7 +93,7 @@ class NotificationDetailViewModelTest {
             callCount++
             if (callCount == 1) throw NotificationApiException(statusCode = 500) else notification(id)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(DETAIL_LOAD_FAILED_MESSAGE, viewModel.uiState.value.error)
 
@@ -116,7 +116,7 @@ class NotificationDetailViewModelTest {
             gate.await()
             notification(id)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.retry()
@@ -141,7 +141,7 @@ class NotificationDetailViewModelTest {
             gate.await()
             notification(id)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.retry()
@@ -160,7 +160,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun notFoundResponseReportsMissingNotification() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw NotificationApiException(statusCode = 404) }
-        val viewModel = NotificationDetailViewModel(notificationId = 999, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 999, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -173,7 +173,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun unauthorizedResponseReportsExpiredSession() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw NotificationApiException(statusCode = 401) }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -183,7 +183,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun otherFailuresReportGenericMessage() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw IllegalStateException("接続できません") }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -199,7 +199,7 @@ class NotificationDetailViewModelTest {
             callCount++
             if (callCount == 1) notification(id) else throw NotificationApiException(statusCode = 404)
         }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.retry()
@@ -213,7 +213,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun cancellationIsNotReportedAsError() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw CancellationException("画面を離れた") }
-        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()))
+        val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -243,6 +243,48 @@ class NotificationDetailViewModelTest {
         }
     }
 
+    private class FakeMyEventsGateway(
+        private val idsProvider: suspend () -> Set<Int> = { emptySet() },
+    ) : MyEventsGateway {
+        override suspend fun getMyEventIds(): Set<Int> = idsProvider()
+    }
+
+    // ---- 既読 ----
+
+    @Test
+    fun openedNotificationIsMarkedAsRead() = runTest(testDispatcher) {
+        val gateway = FakeGateway { notification(it) }
+        val readStore = readStore()
+        NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(setOf(15), readStore.readIds.value)
+    }
+
+    @Test
+    fun notificationIsNotMarkedAsReadWhenLoadFails() = runTest(testDispatcher) {
+        val gateway = FakeGateway { throw NotificationApiException(statusCode = 404) }
+        val readStore = readStore()
+        NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(readStore.readIds.value.isEmpty())
+    }
+
+    private fun readStore() = NotificationReadStore(LocalCache(InMemoryKeyValueStore()))
+
     // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
     // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
     private class InMemoryKeyValueStore : KeyValueStore {
@@ -257,5 +299,101 @@ class NotificationDetailViewModelTest {
         override suspend fun clear() {
             values.clear()
         }
+    }
+
+    // ---- 参加イベント判定 ----
+
+    @Test
+    fun isParticipatingIsTrueWhenRelatedEventIsInMyEvents() = runTest(testDispatcher) {
+        val relatedEvent = NotificationRelatedEvent(
+            id = 7,
+            name = "玉入れ",
+            venue = "体育館",
+            startTime = "0915",
+            endTime = "0945",
+        )
+        val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
+        val myEventsGateway = FakeMyEventsGateway { setOf(7, 9) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun isParticipatingIsFalseWhenRelatedEventIsNotInMyEvents() = runTest(testDispatcher) {
+        val relatedEvent = NotificationRelatedEvent(
+            id = 7,
+            name = "玉入れ",
+            venue = "体育館",
+            startTime = "0915",
+            endTime = "0945",
+        )
+        val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
+        val myEventsGateway = FakeMyEventsGateway { setOf(1, 2) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun isParticipatingIsFalseWhenNotificationHasNoRelatedEvent() = runTest(testDispatcher) {
+        val gateway = FakeGateway { notification(it) }  // relatedEvent = null (デフォルト)
+        val myEventsGateway = FakeMyEventsGateway { setOf(7) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun isParticipatingFallsBackToFalseWhenMyEventsGatewayFails() = runTest(testDispatcher) {
+        val relatedEvent = NotificationRelatedEvent(
+            id = 7,
+            name = "玉入れ",
+            venue = "体育館",
+            startTime = "0915",
+            endTime = "0945",
+        )
+        val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
+        val myEventsGateway = FakeMyEventsGateway { throw NotificationApiException(statusCode = 500) }
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore(),
+            myEventsGateway = myEventsGateway,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        // 通知自体は正常に表示され、エラーにはならない
+        assertEquals(15, state.notification?.id)
+        assertNull(state.error)
+        // 参加判定だけfalseにフォールバック
+        assertFalse(state.isParticipatingInRelatedEvent)
     }
 }

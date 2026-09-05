@@ -4,31 +4,34 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
-import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.platform.openExternalUrl
-import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
-private const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
+private const val LOGOUT_FAILED_MESSAGE = "ログアウトに失敗しました"
 
-// リリースビルドでは内部エラーを露出させず、デバッグビルドでのみ原因を添える。
-private fun authFailed(reason: String?): String =
-    if (isDebugBuild && !reason.isNullOrBlank()) "$AUTH_FAILED_MESSAGE ($reason)" else AUTH_FAILED_MESSAGE
-
+@OptIn(ExperimentalTime::class)
 class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
+    private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+    private val refreshMutex = Mutex()
+    private var refreshAttemptCount = 0
+    private var refreshWindowStartedAt = 0L
 
     init {
         restoreSession()
@@ -36,6 +39,11 @@ class AuthViewModel(
         viewModelScope.launch {
             AuthDeepLinkHandler.callbacks.collect { callbackUrl ->
                 handleCallbackUrl(callbackUrl)
+            }
+        }
+        viewModelScope.launch {
+            AuthSessionInvalidationHandler.events.collect { accessToken ->
+                refreshAfterUnauthorized(accessToken)
             }
         }
     }
@@ -74,37 +82,39 @@ class AuthViewModel(
                 _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
+                // 一時的な通信・Server障害では保存済みSessionとPKCE情報を維持する。
+                if (!error.isUnauthorizedAuthError()) {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            session = stored,
+                            pendingAuth = storedPending,
+                            message = "Offline",
+                            error = null,
+                        )
+                    }
+                    return@launch
+                }
                 try {
-                    val refreshed = api.refresh(stored)
+                    val refreshed = refreshMutex.withLock { api.refresh(stored) }
                     sessionStore.save(refreshed)
                     sessionStore.clearPendingAuth()
                     _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
-                    val detail = if (isDebugBuild) " (${refreshError.describe()})" else ""
-                    if (refreshError is HttpStatusException && refreshError.status == HttpStatusCode.Unauthorized) {
-                        // HttpStatusExceptionは非2xx全般(500/503等の一時的な
-                        // サーバーエラーも含む)で投げられるため、ステータスコードまで
-                        // 見て判定する。401(refreshTokenId自体が無効・失効)の場合のみ
-                        // セッションが本当に無効と判断し、セッション・キャッシュを
-                        // クリアする。他画面(Calendar/Competition等)のセッション切れ
-                        // 判定も同様に401のみを見ている。
-                        sessionStore.clear()
-                        sessionStore.clearPendingAuth()
-                        cache.clearAll()
-                        _uiState.update {
-                            AuthUiState(error = "Session expired. Please login again.$detail")
-                        }
+                    if (refreshError.isUnauthorizedAuthError()) {
+                        invalidateSession(AUTH_EXPIRED_MESSAGE)
                     } else {
-                        // 圏外・オフライン等、通信自体が失敗した場合。セッションが
-                        // 無効だとは判断できないため、セッション・オフラインキャッシュは
-                        // 保持し、保存済みの(古い)セッションでアプリを継続させる
-                        // (オフラインでもキャッシュ済みデータで各画面を使えるように)。
+                        val detail = if (isDebugBuild) {
+                            " (${authErrorMessage(refreshError, debugDetailsEnabled = true)})"
+                        } else {
+                            ""
+                        }
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
                                 session = stored,
-                                message = "Offline$detail",
+                                message = "Offline",
                             )
                         }
                     }
@@ -130,37 +140,47 @@ class AuthViewModel(
             _uiState.update {
                 it.copy(isLoading = true, error = null, message = "Opening Microsoft login...")
             }
+            var pendingForAttempt: PendingAuth? = null
             try {
                 val codeVerifier = generateBase64UrlRandom(32)
                 val codeChallenge = generateCodeChallenge(codeVerifier)
                 val state = generateBase64UrlRandom(32)
+                val pending = PendingAuth(state = state, codeVerifier = codeVerifier)
                 val authUrl = api.requestAuthUrl(state, codeChallenge)
+
+                // Microsoftで認証済みの場合も即時コールバックを処理できるよう、
+                // ブラウザーへ制御を渡す前に今回のPKCE情報を保存する。
+                sessionStore.savePendingAuth(pending)
+                pendingForAttempt = pending
+                _uiState.update { it.copy(pendingAuth = pending) }
                 val opened = openUrl(authUrl)
                 if (!opened) {
+                    clearPendingAuthForAttempt(pending)
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = authFailed("ブラウザを開けませんでした"),
+                            pendingAuth = null,
+                            error = debugAuthMessage("ブラウザを開けませんでした", isDebugBuild),
                             message = "",
                         )
                     }
                     return@launch
                 }
-                val pending = PendingAuth(state = state, codeVerifier = codeVerifier)
-                sessionStore.savePendingAuth(pending)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        pendingAuth = pending,
                         message = "Continue login in your browser",
                     )
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                _uiState.update {
-                    it.copy(
+                pendingForAttempt?.let { clearPendingAuthForAttempt(it) }
+                _uiState.update { current ->
+                    current.copy(
                         isLoading = false,
-                        error = authFailed("認証URL取得: ${error.describe()}"),
+                        pendingAuth = current.pendingAuth.takeUnless { it == pendingForAttempt },
+                        error = authErrorMessage(error, isDebugBuild),
+                        message = "",
                     )
                 }
             }
@@ -169,9 +189,32 @@ class AuthViewModel(
 
     fun handleCallbackUrl(url: String) {
         viewModelScope.launch {
-            val pending = _uiState.value.pendingAuth
+            // コールドスタート時はセッション復元より先にディープリンクが届くことがあるため、
+            // 画面状態が未復元なら永続化済みPKCE情報を直接参照する。
+            val pending = _uiState.value.pendingAuth ?: sessionStore.loadPendingAuth()
             if (pending == null) {
-                _uiState.update { it.copy(error = authFailed("認証待ち情報がありません")) }
+                _uiState.update {
+                    it.copy(error = debugAuthMessage("認証待ち情報がありません", isDebugBuild))
+                }
+                return@launch
+            }
+
+            val callbackError = readQueryValue(url, "error")
+            if (!callbackError.isNullOrBlank()) {
+                // OAuth callbackの失敗時はPKCE/stateを破棄し、再試行時に新しい認証を開始する。
+                sessionStore.clearPendingAuth()
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        pendingAuth = null,
+                        message = "",
+                        error = if (callbackError == "access_denied") {
+                            AUTH_CANCELED_MESSAGE
+                        } else {
+                            debugAuthMessage("Microsoft callback error", isDebugBuild)
+                        },
+                    )
+                }
                 return@launch
             }
 
@@ -182,11 +225,23 @@ class AuthViewModel(
                     "code".takeIf { code.isNullOrBlank() },
                     "state".takeIf { state.isNullOrBlank() },
                 ).joinToString("/")
-                _uiState.update { it.copy(error = authFailed("コールバックに $missing がありません")) }
+                sessionStore.clearPendingAuth()
+                _uiState.update {
+                    it.copy(
+                        pendingAuth = null,
+                        error = debugAuthMessage("コールバックに $missing がありません", isDebugBuild),
+                    )
+                }
                 return@launch
             }
             if (state != pending.state) {
-                _uiState.update { it.copy(error = authFailed("state が一致しません")) }
+                sessionStore.clearPendingAuth()
+                _uiState.update {
+                    it.copy(
+                        pendingAuth = null,
+                        error = debugAuthMessage("state が一致しません", isDebugBuild),
+                    )
+                }
                 return@launch
             }
 
@@ -209,10 +264,15 @@ class AuthViewModel(
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
+                if (error is AuthApiException) {
+                    sessionStore.clearPendingAuth()
+                }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        error = authFailed("トークン交換: ${error.describe()}"),
+                        pendingAuth = if (error is AuthApiException) null else it.pendingAuth,
+                        error = authErrorMessage(error, isDebugBuild),
+                        message = "",
                     )
                 }
             }
@@ -231,11 +291,72 @@ class AuthViewModel(
                 if (error is CancellationException) throw error
                 // Prefer local sign-out even if server logout fails.
             } finally {
-                sessionStore.clear()
-                sessionStore.clearPendingAuth()
+                // API側でログアウトしてもaccess tokenは期限まで有効なため、端末から
+                // 消せたことを確認できない限りログアウト成功として扱わない。
+                val cleared = sessionStore.clear() and sessionStore.clearPendingAuth()
                 cache.clearAll()
-                _uiState.update { AuthUiState(message = "Logged out") }
+                _uiState.update {
+                    if (cleared) {
+                        AuthUiState(message = "Logged out")
+                    } else {
+                        AuthUiState(error = LOGOUT_FAILED_MESSAGE)
+                    }
+                }
             }
+        }
+    }
+
+    internal suspend fun refreshAfterUnauthorized(accessToken: String) {
+        refreshMutex.withLock {
+            val current = _uiState.value.session ?: return
+            if (current.accessToken != accessToken) return
+
+            val now = nowMillis()
+            if (refreshWindowStartedAt == 0L || now - refreshWindowStartedAt > REFRESH_WINDOW_MILLIS) {
+                refreshWindowStartedAt = now
+                refreshAttemptCount = 0
+            }
+            if (refreshAttemptCount >= MAX_REFRESH_ATTEMPTS) {
+                invalidateSession(AUTH_EXPIRED_MESSAGE, expectedAccessToken = accessToken)
+                return
+            }
+            refreshAttemptCount++
+
+            try {
+                val refreshed = api.refresh(current)
+                if (_uiState.value.session?.accessToken != accessToken) return
+                sessionStore.save(refreshed)
+                _uiState.update {
+                    it.copy(session = refreshed, error = null, message = "Logged in")
+                }
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                if (error.isUnauthorizedAuthError()) {
+                    invalidateSession(AUTH_EXPIRED_MESSAGE, expectedAccessToken = accessToken)
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = authErrorMessage(error, isDebugBuild),
+                            message = "Offline",
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun invalidateSession(message: String, expectedAccessToken: String? = null) {
+        if (expectedAccessToken != null && _uiState.value.session?.accessToken != expectedAccessToken) return
+        sessionStore.clear()
+        sessionStore.clearPendingAuth()
+        cache.clearAll()
+        _uiState.value = AuthUiState(error = message)
+    }
+
+    private suspend fun clearPendingAuthForAttempt(pending: PendingAuth) {
+        if (sessionStore.loadPendingAuth() == pending) {
+            sessionStore.clearPendingAuth()
         }
     }
 
@@ -243,9 +364,17 @@ class AuthViewModel(
         api.close()
         super.onCleared()
     }
+
+    private companion object {
+        const val MAX_REFRESH_ATTEMPTS = 2
+        const val REFRESH_WINDOW_MILLIS = 60_000L
+    }
 }
 
-// ネットワーク例外はmessageがnullになることがあり、その場合は型名だけが手がかりになる。
+private fun Throwable.isUnauthorizedAuthError(): Boolean =
+    this is AuthApiException && statusCode == 401
+
+// 例外messageが空の場合も、デバッグログに最低限の原因を残す。
 private fun Throwable.describe(): String =
     message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "unknown error"
 

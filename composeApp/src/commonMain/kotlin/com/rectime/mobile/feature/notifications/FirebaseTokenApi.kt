@@ -14,7 +14,8 @@ import kotlinx.serialization.Serializable
 
 class FirebaseTokenApi(
     private val client: HttpClient = createAppHttpClient(),
-    baseUrl: String = apiBaseUrl,
+    private val baseUrl: String = apiBaseUrl,
+    private val headersProvider: (String, String) -> Map<String, String>? = ::mobileAuthHeaders,
 ) {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/firebase-tokens"
 
@@ -29,7 +30,7 @@ class FirebaseTokenApi(
             // accessTokenをこのリクエストにのみ明示的に付与する。ログアウト直後に
             // FCMのトークンリフレッシュが走った場合でも、他のAPIリクエストへ古い
             // トークンが漏れ出さないようにするため。
-            mobileAuthHeaders(endpoint, accessToken)?.forEach { (name, value) ->
+            headersProvider(endpoint, accessToken)?.forEach { (name, value) ->
                 header(name, value)
             }
             contentType(ContentType.Application.Json)

@@ -83,6 +83,23 @@ rectime-mobile/
 
 IDE のツールバーから Run Configuration `composeApp [mobile]` を使うことも可能。
 
+#### Android の release build
+
+```shell
+# Windows
+.\gradlew.bat :composeApp:bundleRelease -PVERSION_CODE=2 -PVERSION_NAME=1.0.1
+```
+
+AAB は `composeApp/build/outputs/bundle/release/` に出力される。
+
+- `API_BASE_URL` は release build では `local.properties` を参照せず、承認済みの本番 origin
+  （`https://rectime-api.rectime-project.workers.dev`）が埋め込まれる。開発用の接続先が
+  紛れ込むと、アプリは起動するのに API 通信だけ OS に遮断されるため、非本番の値を
+  指定した場合は build が失敗する。
+- `VERSION_CODE` / `VERSION_NAME` は未指定なら `1` / `1.0`。Play は同じ `versionCode` の
+  再アップロードを受け付けないため、配布のたびに指定する。
+- `BuildConfig.GIT_COMMIT` に build 時の commit が入る。
+
 ### Desktop（JVM）
 
 ```shell
