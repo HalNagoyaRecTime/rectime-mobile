@@ -32,6 +32,7 @@ import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.LogoutConfirmationModal
+import com.rectime.mobile.ui.component.ProductionCredits
 
 // 画面全体の横幅を絞るための追加マージン。
 // RootScreenScaffoldが既にscreenHorizontalPaddingを適用しているので、これはその「上乗せ分」。
@@ -205,7 +206,7 @@ private fun InfoRow(label: String, value: String) {
 }
 
 /**
- * お問い合わせ先セクション（著作権表示を含む）
+ * お問い合わせ先セクション（制作クレジットを含む）
  */
 @Composable
 private fun ContactSection(modifier: Modifier = Modifier) {
@@ -227,11 +228,7 @@ private fun ContactSection(modifier: Modifier = Modifier) {
             color = AppTheme.colors.textContactInformation,
         )
         Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
-        Text(
-            text = "© 2026 著作権者名",
-            fontSize = 12.sp,
-            color = AppTheme.colors.textCopyRight,
-        )
+        ProductionCredits()
 
     }
 

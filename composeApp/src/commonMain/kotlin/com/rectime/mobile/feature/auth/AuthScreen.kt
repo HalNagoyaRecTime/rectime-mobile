@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.component.AppLogoMark
+import com.rectime.mobile.ui.component.ProductionCredits
 import com.rectime.mobile.ui.theme.AppTheme
 
 @Composable
@@ -94,11 +95,9 @@ private fun AuthLoginScreen(
 
         Spacer(modifier = Modifier.height(AppTheme.spacing.md))
 
-        Text(
-            text = "© 2026 著作権者名",
-            fontSize = 12.sp,
-            color = AppTheme.colors.textCopyRight,
+        ProductionCredits(
             modifier = Modifier.padding(bottom = AppTheme.spacing.xxl),
+            horizontalAlignment = Alignment.CenterHorizontally,
         )
     }
 }
