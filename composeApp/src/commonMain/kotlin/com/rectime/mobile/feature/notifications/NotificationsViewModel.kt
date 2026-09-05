@@ -95,10 +95,12 @@ class NotificationsViewModel(
                     }
 
                     is CachedFetchResult.Failed -> {
-                        _uiState.value = _uiState.value.copy(
+                        // 有効なキャッシュが無い(=このプロセス内のnotificationsは
+                        // 前回の成功時点のものに過ぎず、その間にログアウト・別ユーザーの
+                        // ログインが起きている可能性がある)ため、.copy()で前の一覧を
+                        // 残さずここで確実にクリアする。
+                        _uiState.value = NotificationsUiState(
                             isLoading = false,
-                            isRefreshing = false,
-                            isOffline = false,
                             error = result.error.toNotificationErrorMessage(),
                         )
                         result.error.printStackTrace()
@@ -107,10 +109,8 @@ class NotificationsViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
+                _uiState.value = NotificationsUiState(
                     isLoading = false,
-                    isRefreshing = false,
-                    isOffline = false,
                     error = e.toNotificationErrorMessage(),
                 )
             }

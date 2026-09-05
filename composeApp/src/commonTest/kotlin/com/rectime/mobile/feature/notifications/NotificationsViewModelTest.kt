@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.CancellationException
@@ -30,6 +31,9 @@ class NotificationsViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        // CacheGenerationはプロセス全体で共有されるため、テスト間で値が
+        // 漏れないようリセットする。
+        CacheGeneration.resetForTest()
     }
 
     @AfterTest
@@ -253,6 +257,36 @@ class NotificationsViewModelTest {
     }
 
     @Test
+    fun failedRefreshWithNoCacheAvailableClearsPreviouslyLoadedNotifications() = runTest(testDispatcher) {
+        // キャッシュも通信も両方失敗しFailedになった場合、既にロード済みの一覧を
+        // .copy()で残してはならない。この一覧は別ユーザーのログイン等で既に
+        // 無効になっている可能性があるため(CacheGeneration参照)。
+        var callCount = 0
+        val gateway = FakeGateway { limit, offset ->
+            callCount++
+            if (callCount == 1) {
+                page(listOf(notification(1)), total = 1, limit, offset)
+            } else {
+                throw IllegalStateException("接続できません")
+            }
+        }
+        val viewModel = NotificationsViewModel(
+            NotificationFeedStore(gateway, LocalCache(LoadCacheAlwaysFailsKeyValueStore())),
+            readStore(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(1), viewModel.uiState.value.notifications.map(UserNotification::id))
+
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.notifications.isEmpty())
+        assertEquals(LOAD_FAILED_MESSAGE, state.error)
+        assertFalse(state.isOffline)
+    }
+
+    @Test
     fun cancellationIsNotReportedAsError() = runTest(testDispatcher) {
         val gateway = FakeGateway { _, _ -> throw CancellationException("画面を離れた") }
         val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
@@ -315,6 +349,21 @@ class NotificationsViewModelTest {
 
         override suspend fun clear() {
             values.clear()
+        }
+    }
+
+    // 初回ロードはfetchLive成功時にsaveCacheのみが呼ばれるためgetStringには
+    // 影響しない。refresh失敗時のloadCache()だけを確実に失敗させ、
+    // Failed(キャッシュ無し)経路をテストするためのフェイク。
+    private class LoadCacheAlwaysFailsKeyValueStore : KeyValueStore {
+        override suspend fun getString(key: String): String? = error("cache read failed")
+
+        override suspend fun putString(key: String, value: String) {
+            // no-op
+        }
+
+        override suspend fun clear() {
+            // no-op
         }
     }
 }

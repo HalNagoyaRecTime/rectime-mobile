@@ -2,6 +2,7 @@ package com.rectime.mobile.core.cache
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -10,6 +11,13 @@ import kotlin.test.assertNull
 private data class Sample(val id: Int, val name: String)
 
 class LocalCacheTest {
+    @BeforeTest
+    fun resetSharedState() {
+        // CacheGenerationはプロセス全体で共有されるため、テスト間で値が
+        // 漏れないようリセットする。
+        CacheGeneration.resetForTest()
+    }
+
     @Test
     fun saveThenLoadRoundTripsAValue() = runTest {
         val cache = LocalCache(InMemoryKeyValueStore())
@@ -54,6 +62,16 @@ class LocalCacheTest {
         cache.clearAll()
 
         assertNull(cache.load<Sample>("key"))
+    }
+
+    @Test
+    fun clearAllBumpsCacheGenerationSoInFlightFetchesDoNotWriteStaleDataBack() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val generationBefore = CacheGeneration.value
+
+        cache.clearAll()
+
+        assertEquals(generationBefore + 1, CacheGeneration.value)
     }
 }
 
