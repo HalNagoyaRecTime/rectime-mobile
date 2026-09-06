@@ -312,7 +312,5 @@ private fun ContactSection(modifier: Modifier = Modifier) {
         )
         Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
         ProductionCredits()
-
     }
-
 }
