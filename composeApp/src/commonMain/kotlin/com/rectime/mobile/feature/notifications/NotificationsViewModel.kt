@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.util.nowMinuteStateFlow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -72,8 +73,8 @@ class NotificationsViewModel(
 
                     is CachedFetchResult.Cached -> {
                         // セッション切れ・取得失敗(404)はオフライン表示で隠さず、エラーを優先する。
-                        val statusCode = (result.error as? NotificationApiException)?.statusCode
-                        if (statusCode == 401 || statusCode == 404) {
+                        val errorCode = (result.error as? HttpStatusException)?.code
+                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 isRefreshing = false,
@@ -195,8 +196,8 @@ class NotificationDetailViewModel(
 
                     is CachedFetchResult.Cached -> {
                         // 削除済み(404)の古いキャッシュを誤表示し続けないようにする。
-                        val statusCode = (result.error as? NotificationApiException)?.statusCode
-                        if (statusCode == 401 || statusCode == 404) {
+                        val errorCode = (result.error as? HttpStatusException)?.code
+                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
                             _uiState.value = NotificationDetailUiState(
                                 isLoading = false,
                                 error = result.error.toNotificationErrorMessage(),
@@ -249,9 +250,12 @@ class NotificationDetailViewModel(
 }
 
 private fun Exception.toNotificationErrorMessage(): String = when {
-    this is NotificationApiException && statusCode == 401 ->
+    this is HttpStatusException && code == "UNAUTHORIZED" ->
         "ログイン情報の有効期限が切れました"
-    this is NotificationApiException && statusCode == 404 ->
+    this is HttpStatusException && code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND") ->
         "通知が見つかりません"
     else -> "通知の取得に失敗しました"
 }
+
+private fun String?.isNotificationNotFoundOrUnauthorized(): Boolean =
+    this == "UNAUTHORIZED" || this == "NOTIFICATION_NOT_FOUND" || this == "NOT_FOUND"

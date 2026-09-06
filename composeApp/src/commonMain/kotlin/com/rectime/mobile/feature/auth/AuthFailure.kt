@@ -3,11 +3,13 @@ package com.rectime.mobile.feature.auth
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.serialization.json.JsonElement
 
 class AuthApiException(
     val statusCode: Int,
     val errorCode: String? = null,
     message: String = "Auth API request failed: HTTP $statusCode",
+    val details: JsonElement? = null,
 ) : IllegalStateException(message)
 
 internal object AuthSessionInvalidationHandler {

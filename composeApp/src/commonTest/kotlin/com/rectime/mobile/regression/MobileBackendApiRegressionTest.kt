@@ -2,9 +2,9 @@ package com.rectime.mobile.regression
 
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.notifications.NotificationApi
-import com.rectime.mobile.feature.notifications.NotificationApiException
 import com.rectime.mobile.feature.schedule.EventsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -87,10 +87,10 @@ class MobileBackendApiRegressionTest {
             apiBaseUrl,
         )
 
-        val error = assertFailsWith<NotificationApiException> { api.getNotifications() }
+        val error = assertFailsWith<HttpStatusException> { api.getNotifications() }
 
-        assertEquals(500, error.statusCode)
-        assertEquals(responseBody, error.responseBody)
+        assertEquals(HttpStatusCode.InternalServerError, error.status)
+        assertEquals("UNKNOWN_API_ERROR", error.code)
         assertFalse(error.message.orEmpty().contains(responseBody))
     }
 
