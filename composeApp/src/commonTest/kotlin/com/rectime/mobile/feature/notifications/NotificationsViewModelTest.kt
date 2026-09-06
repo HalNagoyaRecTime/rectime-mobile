@@ -287,6 +287,40 @@ class NotificationsViewModelTest {
     }
 
     @Test
+    fun failedRefreshDoesNotResetAlreadyReadNotificationIds() = runTest(testDispatcher) {
+        // Failed経路で_uiStateをNotificationsUiState(...)で丸ごと作り直すと、
+        // NotificationReadStoreが別管理するreadIdsまで巻き込まれて空に戻ってしまい、
+        // 既読済みの通知が電波復帰時のrefresh失敗などで未読扱いに戻ってしまう不具合の
+        // 回帰テスト。初回ロードを成功させてreadIdsが_uiStateへ反映された状態にしてから
+        // refreshを失敗させ、readStoreの再emitに頼らずとも保持されることを確認する。
+        val store = readStore()
+        store.markRead(1)
+
+        var callCount = 0
+        val gateway = FakeGateway { limit, offset ->
+            callCount++
+            if (callCount == 1) {
+                page(listOf(notification(1)), total = 1, limit, offset)
+            } else {
+                throw IllegalStateException("接続できません")
+            }
+        }
+        val viewModel = NotificationsViewModel(
+            NotificationFeedStore(gateway, LocalCache(LoadCacheAlwaysFailsKeyValueStore())),
+            store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(setOf(1), viewModel.uiState.value.readIds)
+
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.notifications.isEmpty())
+        assertEquals(setOf(1), state.readIds)
+    }
+
+    @Test
     fun cancellationIsNotReportedAsError() = runTest(testDispatcher) {
         val gateway = FakeGateway { _, _ -> throw CancellationException("画面を離れた") }
         val viewModel = NotificationsViewModel(feedStore(gateway), readStore())

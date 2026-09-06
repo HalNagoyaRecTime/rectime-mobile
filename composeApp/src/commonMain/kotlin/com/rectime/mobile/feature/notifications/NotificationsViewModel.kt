@@ -98,10 +98,13 @@ class NotificationsViewModel(
                         // 有効なキャッシュが無い(=このプロセス内のnotificationsは
                         // 前回の成功時点のものに過ぎず、その間にログアウト・別ユーザーの
                         // ログインが起きている可能性がある)ため、.copy()で前の一覧を
-                        // 残さずここで確実にクリアする。
+                        // 残さずここで確実にクリアする。ただしreadIdsはNotificationReadStore
+                        // が別途管理する既読状態であり通信結果とは無関係のため、ここで
+                        // 巻き込んでリセットしてしまうと既読済み通知が未読に戻ってしまう。
                         _uiState.value = NotificationsUiState(
                             isLoading = false,
                             error = result.error.toNotificationErrorMessage(),
+                            readIds = _uiState.value.readIds,
                         )
                         result.error.printStackTrace()
                     }
@@ -112,6 +115,7 @@ class NotificationsViewModel(
                 _uiState.value = NotificationsUiState(
                     isLoading = false,
                     error = e.toNotificationErrorMessage(),
+                    readIds = _uiState.value.readIds,
                 )
             }
         }
