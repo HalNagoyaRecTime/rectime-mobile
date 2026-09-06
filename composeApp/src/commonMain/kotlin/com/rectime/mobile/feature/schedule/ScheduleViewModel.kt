@@ -10,6 +10,7 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.util.nowMinuteStateFlow
@@ -67,7 +68,11 @@ class ScheduleViewModel(
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
-                        _events.value = toTimelineEvents(result.value)
+                        val timelineResult = toTimelineEvents(result.value)
+                        _events.value = timelineResult.events
+                        if (timelineResult.skippedCount > 0) {
+                            error = skippedEventsMessage(timelineResult.skippedCount)
+                        }
                         isOffline = false
                     }
 
@@ -80,7 +85,8 @@ class ScheduleViewModel(
                             error = "ログイン情報の有効期限が切れました"
                             isOffline = false
                         } else {
-                            _events.value = toTimelineEvents(result.value)
+                            val timelineResult = toTimelineEvents(result.value)
+                            _events.value = timelineResult.events
                             isOffline = true
                             // 401以外の理由での フォールバックは「オフライン」として静かに
                             // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
@@ -116,21 +122,37 @@ class ScheduleViewModel(
         }
     }
 
-    private fun toTimelineEvents(body: EventsResponse): List<TimelineEvent> {
+    private fun toTimelineEvents(body: EventsResponse): TimelineResult {
+        var skippedCount = 0
         val timelineEvents = body.events.mapNotNull {
-            val timelineEvent = it.toTimelineEvent()
+            val timelineEvent = runCatching(it::toTimelineEvent).getOrElse { error ->
+                skippedCount++
+                if (isDebugBuild) {
+                    println(
+                        "ScheduleViewModel: event ${it.eventId} has an invalid time " +
+                            "(${it.startTime} - ${it.endTime}): ${error.message}",
+                    )
+                }
+                return@mapNotNull null
+            }
 
             // end <= start(不正データ・日跨ぎ)は0分に潰さず、原因が追えるようログを
             // 出しつつ除外する。durationMinutes=0のカードはUI上の高さが0以下になり
             // 実質見えなくなるだけで、原因調査ができなくなるため。
             if (timelineEvent.durationMinutes <= 0) {
-                println("ScheduleViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                skippedCount++
+                if (isDebugBuild) {
+                    println("ScheduleViewModel: skipping event ${it.eventId} with invalid time range (${it.startTime} - ${it.endTime})")
+                }
                 return@mapNotNull null
             }
 
             timelineEvent
         }
-        return assignLanes(timelineEvents)
+        return TimelineResult(
+            events = assignLanes(timelineEvents),
+            skippedCount = skippedCount,
+        )
     }
 
     override fun onCleared() {
@@ -138,3 +160,11 @@ class ScheduleViewModel(
         client.close()
     }
 }
+
+private data class TimelineResult(
+    val events: List<TimelineEvent>,
+    val skippedCount: Int,
+)
+
+private fun skippedEventsMessage(skippedCount: Int): String =
+    "一部の予定を表示できませんでした（${skippedCount}件）"

@@ -2,6 +2,9 @@
 
 package com.rectime.mobile.feature.notifications
 
+import platform.Foundation.NSURL
+import platform.UIKit.UIApplication
+import platform.UIKit.UIApplicationOpenSettingsURLString
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionBadge
@@ -71,6 +74,15 @@ private class IosNotificationPermissionController(
                     }
             }
         }
+    }
+
+    override fun openSystemSettings() {
+        val url = NSURL.URLWithString(UIApplicationOpenSettingsURLString) ?: return
+        UIApplication.sharedApplication.openURL(
+            url = url,
+            options = emptyMap<Any?, Any>(),
+            completionHandler = null,
+        )
     }
 }
 

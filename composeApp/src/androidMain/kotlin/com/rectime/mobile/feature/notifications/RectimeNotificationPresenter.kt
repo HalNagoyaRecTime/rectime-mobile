@@ -47,7 +47,7 @@ object RectimeNotificationPresenter {
         try {
             NotificationManagerCompat.from(context).notify(notificationId, androidNotification)
         } catch (_: SecurityException) {
-            // Permission can be revoked after the check above and before notify() executes.
+            // 上のチェックとnotify()実行の間に、権限が取り消される場合がある。
         }
     }
 

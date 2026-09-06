@@ -1,6 +1,5 @@
 package com.rectime.mobile.feature.auth
 
-import com.rectime.mobile.core.network.HttpStatusException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -170,6 +169,7 @@ class AuthApiTest {
                     headers = jsonHeaders,
                 )
             },
+            baseUrl = "https://api.example.test",
         )
 
         val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
@@ -384,10 +384,11 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.currentUser("access-token")
         }
 
+        assertEquals(401, error.statusCode)
         assertEquals("token expired", error.message)
     }
 
@@ -476,10 +477,11 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.refresh(storedSession)
         }
 
+        assertEquals(401, error.statusCode)
         assertEquals("refresh token revoked", error.message)
     }
 

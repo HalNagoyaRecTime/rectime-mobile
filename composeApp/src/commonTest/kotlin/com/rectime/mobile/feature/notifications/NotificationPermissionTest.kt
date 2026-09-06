@@ -62,12 +62,24 @@ class NotificationPermissionTest {
         assertEquals(listOf("persisted", "requested"), events)
     }
 
+    @Test
+    fun systemSettingsCanBeOpenedAfterInitialRequestIsDenied() = runTest {
+        val controller = FakeNotificationPermissionController(NotificationPermissionStatus.Denied)
+        val startup = NotificationPermissionStartup(controller, InMemoryKeyValueStore(requested = true))
+
+        assertEquals(NotificationPermissionStatus.Denied, startup.getStatus())
+        startup.openSystemSettings()
+
+        assertEquals(1, controller.openSettingsCount)
+    }
+
     private class FakeNotificationPermissionController(
         initialStatus: NotificationPermissionStatus = NotificationPermissionStatus.NotDetermined,
         private val onRequest: () -> Unit = {},
     ) : NotificationPermissionController {
         var status = initialStatus
         var requestCount = 0
+        var openSettingsCount = 0
 
         override suspend fun getStatus(): NotificationPermissionStatus = status
 
@@ -76,6 +88,10 @@ class NotificationPermissionTest {
             onRequest()
             status = NotificationPermissionStatus.Granted
             return status
+        }
+
+        override fun openSystemSettings() {
+            openSettingsCount += 1
         }
     }
 

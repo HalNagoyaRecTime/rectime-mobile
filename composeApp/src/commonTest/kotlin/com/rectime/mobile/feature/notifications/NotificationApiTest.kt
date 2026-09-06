@@ -34,7 +34,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com/",
-            accessTokenProvider = { "access-token" },
         )
 
         val page = api.getNotifications(limit = 20, offset = 40)
@@ -44,8 +43,6 @@ class NotificationApiTest {
             "https://api.example.com/api/v1/me/notifications?limit=20&offset=40",
             request.url.toString(),
         )
-        assertEquals("Bearer access-token", request.headers[HttpHeaders.Authorization])
-        assertEquals("mobile", request.headers["X-Client-Type"])
         assertEquals(1, page.notifications.size)
         assertEquals(12, page.notifications.single().id)
         assertEquals("玉入れ", page.notifications.single().relatedEvent?.name)
@@ -68,7 +65,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         val notification = api.getNotification(15)
@@ -90,7 +86,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         val error = assertFailsWith<NotificationApiException> {
@@ -99,24 +94,6 @@ class NotificationApiTest {
 
         assertEquals(404, error.statusCode)
         assertEquals("""{"error":"notification not found"}""", error.responseBody)
-    }
-
-    @Test
-    fun requestFailsBeforeNetworkWhenSessionTokenIsMissing() = runTest {
-        val client = mockClient {
-            error("Network request must not be sent")
-        }
-        val api = NotificationApi(
-            client = client,
-            baseUrl = "https://api.example.com",
-            accessTokenProvider = { null },
-        )
-
-        val error = assertFailsWith<NotificationApiException> {
-            api.getNotifications()
-        }
-
-        assertEquals(401, error.statusCode)
     }
 
     @Test
@@ -133,7 +110,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         val page = api.getNotifications()
@@ -157,7 +133,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         val error = assertFailsWith<NotificationApiException> {
@@ -168,29 +143,10 @@ class NotificationApiTest {
     }
 
     @Test
-    fun requestFailsBeforeNetworkWhenSessionTokenIsBlank() = runTest {
-        val client = mockClient {
-            error("Network request must not be sent")
-        }
-        val api = NotificationApi(
-            client = client,
-            baseUrl = "https://api.example.com",
-            accessTokenProvider = { "   " },
-        )
-
-        val error = assertFailsWith<NotificationApiException> {
-            api.getNotification(15)
-        }
-
-        assertEquals(401, error.statusCode)
-    }
-
-    @Test
     fun outOfRangePagingParametersAreRejectedBeforeNetwork() = runTest {
         val api = NotificationApi(
             client = mockClient { error("Network request must not be sent") },
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         assertFailsWith<IllegalArgumentException> { api.getNotifications(limit = 0) }
@@ -203,7 +159,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = mockClient { error("Network request must not be sent") },
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         assertFailsWith<IllegalArgumentException> { api.getNotification(0) }
