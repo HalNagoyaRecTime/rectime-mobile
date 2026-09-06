@@ -1,0 +1,25 @@
+name: Request Dependabot Review
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+
+permissions:
+  contents: read
+
+jobs:
+  request-review:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Teamへレビューを依頼
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_PAT }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api \
+            --method POST \
+            "repos/${{ github.repository }}/pulls/${PR_NUMBER}/requested_reviewers" \
+            -f "team_reviewers[]=rectime-mobile"
