@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.notifications
 
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.feature.auth.AuthSessionStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -67,8 +68,11 @@ internal object AndroidPushTokenRegistrar {
     private fun logFailure(error: Throwable) {
         if (error is CancellationException) throw error
         when (error) {
-            is FirebaseTokenRegistrationException ->
-                Log.w(TAG, "FCM token registration failed: HTTP ${error.statusCode}")
+            is HttpStatusException ->
+                Log.w(
+                    TAG,
+                    "FCM token registration failed: HTTP ${error.status.value} (${error.code})",
+                )
             else ->
                 Log.w(TAG, "FCM token registration failed", error)
         }

@@ -201,7 +201,7 @@ class EventsResponseTest {
     @Test
     fun rejectsErrorPayload() {
         assertFailsWith<SerializationException> {
-            json.decodeFromString<EventsResponse>("""{"error":{"message":"Internal Server Error"}}""")
+            json.decodeFromString<EventsResponse>("""{"error":{"code":"INTERNAL_SERVER_ERROR","message":"Internal Server Error"}}""")
         }
     }
 

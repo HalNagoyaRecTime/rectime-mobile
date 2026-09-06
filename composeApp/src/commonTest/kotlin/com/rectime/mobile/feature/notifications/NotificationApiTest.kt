@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.network.HttpStatusException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -34,6 +35,7 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com/",
+            accessTokenProvider = { "access-token" },
         )
 
         val page = api.getNotifications(limit = 20, offset = 40)
@@ -43,6 +45,8 @@ class NotificationApiTest {
             "https://api.example.com/api/v1/me/notifications?limit=20&offset=40",
             request.url.toString(),
         )
+        assertEquals("Bearer access-token", request.headers[HttpHeaders.Authorization])
+        assertEquals("mobile", request.headers["X-Client-Type"])
         assertEquals(1, page.notifications.size)
         assertEquals(12, page.notifications.single().id)
         assertEquals("玉入れ", page.notifications.single().relatedEvent?.name)
@@ -65,6 +69,7 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
         )
 
         val notification = api.getNotification(15)
@@ -78,7 +83,7 @@ class NotificationApiTest {
     fun getNotificationExposesBackendStatus() = runTest {
         val client = mockClient {
             respond(
-                content = """{"error":"notification not found"}""",
+                content = """{"error":{"code":"NOTIFICATION_NOT_FOUND","message":"Notification not found"}}""",
                 status = HttpStatusCode.NotFound,
                 headers = jsonHeaders,
             )
@@ -86,14 +91,35 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
         )
 
-        val error = assertFailsWith<NotificationApiException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.getNotification(999)
         }
 
-        assertEquals(404, error.statusCode)
-        assertEquals("""{"error":"notification not found"}""", error.responseBody)
+        assertEquals(HttpStatusCode.NotFound, error.status)
+        assertEquals("NOTIFICATION_NOT_FOUND", error.code)
+        assertEquals("Notification not found", error.message)
+    }
+
+    @Test
+    fun requestFailsBeforeNetworkWhenSessionTokenIsMissing() = runTest {
+        val client = mockClient {
+            error("Network request must not be sent")
+        }
+        val api = NotificationApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { null },
+        )
+
+        val error = assertFailsWith<HttpStatusException> {
+            api.getNotifications()
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, error.status)
+        assertEquals("UNAUTHORIZED", error.code)
     }
 
     @Test
@@ -110,6 +136,7 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
         )
 
         val page = api.getNotifications()
@@ -125,7 +152,7 @@ class NotificationApiTest {
     fun getNotificationsExposesBackendStatusOnServerError() = runTest {
         val client = mockClient {
             respond(
-                content = """{"error":"internal server error"}""",
+                content = """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"Internal server error"}}""",
                 status = HttpStatusCode.InternalServerError,
                 headers = jsonHeaders,
             )
@@ -133,13 +160,34 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = client,
             baseUrl = "https://api.example.com",
+            accessTokenProvider = { "access-token" },
         )
 
-        val error = assertFailsWith<NotificationApiException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.getNotifications()
         }
 
-        assertEquals(500, error.statusCode)
+        assertEquals(HttpStatusCode.InternalServerError, error.status)
+        assertEquals("INTERNAL_SERVER_ERROR", error.code)
+    }
+
+    @Test
+    fun requestFailsBeforeNetworkWhenSessionTokenIsBlank() = runTest {
+        val client = mockClient {
+            error("Network request must not be sent")
+        }
+        val api = NotificationApi(
+            client = client,
+            baseUrl = "https://api.example.com",
+            accessTokenProvider = { "   " },
+        )
+
+        val error = assertFailsWith<HttpStatusException> {
+            api.getNotification(15)
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, error.status)
+        assertEquals("UNAUTHORIZED", error.code)
     }
 
     @Test
@@ -268,7 +316,7 @@ class MyEventsApiTest {
     fun getMyEventIdsExposesBackendStatusOnUnauthorized() = runTest {
         val client = mockClient {
             respond(
-                content = """{"error":"unauthorized"}""",
+                content = """{"error":{"code":"UNAUTHORIZED","message":"Authentication required"}}""",
                 status = HttpStatusCode.Unauthorized,
                 headers = jsonHeaders,
             )
@@ -279,17 +327,18 @@ class MyEventsApiTest {
             accessTokenProvider = { "access-token" },
         )
 
-        val error = assertFailsWith<NotificationApiException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.getMyEventIds()
         }
-        assertEquals(401, error.statusCode)
+        assertEquals(HttpStatusCode.Unauthorized, error.status)
+        assertEquals("UNAUTHORIZED", error.code)
     }
 
     @Test
     fun getMyEventIdsExposesBackendStatusOnServerError() = runTest {
         val client = mockClient {
             respond(
-                content = """{"error":"internal server error"}""",
+                content = """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"Internal server error"}}""",
                 status = HttpStatusCode.InternalServerError,
                 headers = jsonHeaders,
             )
@@ -300,10 +349,11 @@ class MyEventsApiTest {
             accessTokenProvider = { "access-token" },
         )
 
-        val error = assertFailsWith<NotificationApiException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.getMyEventIds()
         }
-        assertEquals(500, error.statusCode)
+        assertEquals(HttpStatusCode.InternalServerError, error.status)
+        assertEquals("INTERNAL_SERVER_ERROR", error.code)
     }
 
     @Test
@@ -317,10 +367,11 @@ class MyEventsApiTest {
             accessTokenProvider = { null },
         )
 
-        val error = assertFailsWith<NotificationApiException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.getMyEventIds()
         }
-        assertEquals(401, error.statusCode)
+        assertEquals(HttpStatusCode.Unauthorized, error.status)
+        assertEquals("UNAUTHORIZED", error.code)
     }
 
     @Test
@@ -334,10 +385,11 @@ class MyEventsApiTest {
             accessTokenProvider = { "   " },
         )
 
-        val error = assertFailsWith<NotificationApiException> {
+        val error = assertFailsWith<HttpStatusException> {
             api.getMyEventIds()
         }
-        assertEquals(401, error.statusCode)
+        assertEquals(HttpStatusCode.Unauthorized, error.status)
+        assertEquals("UNAUTHORIZED", error.code)
     }
 
     private fun mockClient(

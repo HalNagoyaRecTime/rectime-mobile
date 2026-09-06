@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -85,6 +86,9 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
+            // currentUser()と同様、明示的な非2xxのみAuthApiExceptionとして扱う。
+            // AuthViewModel側で401をセッション失効と判定するため、2xxの本文不正は
+            // 別の例外型のままにする。
             throw response.toAuthApiException(body, "セッション更新に失敗しました")
         }
 
@@ -128,11 +132,15 @@ private fun io.ktor.client.statement.HttpResponse.toAuthApiException(
     body: String,
     fallbackMessage: String,
 ): AuthApiException {
-    val parsed = decodeBody<ApiErrorResponse>(body)
+    // AuthViewModelはAuthApiExceptionだけを401によるセッション失効候補として
+    // 扱う。エラー本文の解析は共通パーサーに寄せ、APIのcode/status/messageを
+    // 保持したまま認証機能の例外へ明示的に写像する。
+    val parsed = apiErrorException(status, body, fallbackMessage)
     return AuthApiException(
         statusCode = status.value,
-        errorCode = parsed?.error?.code,
-        message = parsed?.error?.message ?: parsed?.message ?: fallbackMessage,
+        errorCode = parsed.code,
+        message = parsed.message ?: fallbackMessage,
+        details = parsed.details,
     )
 }
 
@@ -194,16 +202,4 @@ private data class AuthUserResponse(
     val isStudent: Boolean = false,
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
-)
-
-@Serializable
-private data class ApiErrorResponse(
-    val message: String? = null,
-    val error: ApiErrorDetail? = null,
-)
-
-@Serializable
-private data class ApiErrorDetail(
-    val code: String? = null,
-    val message: String? = null,
 )

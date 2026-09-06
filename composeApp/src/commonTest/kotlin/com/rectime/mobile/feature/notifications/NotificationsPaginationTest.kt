@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.network.HttpStatusException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -120,14 +121,14 @@ class NotificationsPaginationTest {
     @Test
     fun fetchAllNotificationsPropagatesGatewayFailure() = runTest {
         val gateway = FakeNotificationGateway { _, _ ->
-            throw NotificationApiException(statusCode = 401)
+            throw notificationApiError(statusCode = 401)
         }
 
-        val error = assertFailsWith<NotificationApiException> {
+        val error = assertFailsWith<HttpStatusException> {
             fetchAllNotifications(gateway = gateway, pageSize = 100)
         }
 
-        assertEquals(401, error.statusCode)
+        assertEquals(401, error.status.value)
     }
 
     private fun notification(id: Int) = UserNotification(

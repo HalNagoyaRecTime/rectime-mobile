@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.feature.auth.AuthSessionStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -62,8 +63,11 @@ object IosPushTokenRegistrar {
             println("[IosPushTokenRegistrar] FCM token registration completed")
         } catch (error: CancellationException) {
             throw error
-        } catch (error: FirebaseTokenRegistrationException) {
-            println("[IosPushTokenRegistrar] FCM token registration failed: HTTP ${error.statusCode}")
+        } catch (error: HttpStatusException) {
+            println(
+                "[IosPushTokenRegistrar] FCM token registration failed: " +
+                    "HTTP ${error.status.value} (${error.code})",
+            )
         } catch (error: Throwable) {
             println("[IosPushTokenRegistrar] FCM token registration failed: ${error::class.simpleName}")
         } finally {

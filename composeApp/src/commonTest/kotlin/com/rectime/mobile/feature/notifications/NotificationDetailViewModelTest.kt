@@ -91,7 +91,7 @@ class NotificationDetailViewModelTest {
         var callCount = 0
         val gateway = FakeGateway { id ->
             callCount++
-            if (callCount == 1) throw NotificationApiException(statusCode = 500) else notification(id)
+            if (callCount == 1) throw notificationApiError(statusCode = 500) else notification(id)
         }
         val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
         testDispatcher.scheduler.advanceUntilIdle()
@@ -112,7 +112,7 @@ class NotificationDetailViewModelTest {
         var callCount = 0
         val gateway = FakeGateway { id ->
             callCount++
-            if (callCount == 1) throw NotificationApiException(statusCode = 500)
+            if (callCount == 1) throw notificationApiError(statusCode = 500)
             gate.await()
             notification(id)
         }
@@ -159,7 +159,7 @@ class NotificationDetailViewModelTest {
 
     @Test
     fun notFoundResponseReportsMissingNotification() = runTest(testDispatcher) {
-        val gateway = FakeGateway { throw NotificationApiException(statusCode = 404) }
+        val gateway = FakeGateway { throw notificationApiError(statusCode = 404) }
         val viewModel = NotificationDetailViewModel(notificationId = 999, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -172,7 +172,7 @@ class NotificationDetailViewModelTest {
 
     @Test
     fun unauthorizedResponseReportsExpiredSession() = runTest(testDispatcher) {
-        val gateway = FakeGateway { throw NotificationApiException(statusCode = 401) }
+        val gateway = FakeGateway { throw notificationApiError(statusCode = 401) }
         val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -197,7 +197,7 @@ class NotificationDetailViewModelTest {
         var callCount = 0
         val gateway = FakeGateway { id ->
             callCount++
-            if (callCount == 1) notification(id) else throw NotificationApiException(statusCode = 404)
+            if (callCount == 1) notification(id) else throw notificationApiError(statusCode = 404)
         }
         val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
         testDispatcher.scheduler.advanceUntilIdle()
@@ -269,7 +269,7 @@ class NotificationDetailViewModelTest {
 
     @Test
     fun notificationIsNotMarkedAsReadWhenLoadFails() = runTest(testDispatcher) {
-        val gateway = FakeGateway { throw NotificationApiException(statusCode = 404) }
+        val gateway = FakeGateway { throw notificationApiError(statusCode = 404) }
         val readStore = readStore()
         NotificationDetailViewModel(
             notificationId = 15,
@@ -378,7 +378,7 @@ class NotificationDetailViewModelTest {
             endTime = "0945",
         )
         val gateway = FakeGateway { notification(it).copy(relatedEvent = relatedEvent) }
-        val myEventsGateway = FakeMyEventsGateway { throw NotificationApiException(statusCode = 500) }
+        val myEventsGateway = FakeMyEventsGateway { throw notificationApiError(statusCode = 500) }
         val viewModel = NotificationDetailViewModel(
             notificationId = 15,
             gateway = gateway,

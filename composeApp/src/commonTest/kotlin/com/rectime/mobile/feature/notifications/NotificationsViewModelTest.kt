@@ -119,7 +119,7 @@ class NotificationsViewModelTest {
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
             callCount++
-            if (callCount == 1) throw NotificationApiException(statusCode = 500)
+            if (callCount == 1) throw notificationApiError(statusCode = 500)
             gate.await()
             page(listOf(notification(1)), total = 1, limit, offset)
         }
@@ -143,7 +143,7 @@ class NotificationsViewModelTest {
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
             callCount++
-            if (callCount == 1) throw NotificationApiException(statusCode = 500)
+            if (callCount == 1) throw notificationApiError(statusCode = 500)
             page(listOf(notification(1)), total = 1, limit, offset)
         }
         val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
@@ -185,7 +185,7 @@ class NotificationsViewModelTest {
 
     @Test
     fun unauthorizedResponseReportsExpiredSession() = runTest(testDispatcher) {
-        val gateway = FakeGateway { _, _ -> throw NotificationApiException(statusCode = 401) }
+        val gateway = FakeGateway { _, _ -> throw notificationApiError(statusCode = 401) }
         val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -199,7 +199,7 @@ class NotificationsViewModelTest {
 
     @Test
     fun notFoundResponseReportsMissingNotification() = runTest(testDispatcher) {
-        val gateway = FakeGateway { _, _ -> throw NotificationApiException(statusCode = 404) }
+        val gateway = FakeGateway { _, _ -> throw notificationApiError(statusCode = 404) }
         val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
@@ -210,7 +210,7 @@ class NotificationsViewModelTest {
     @Test
     fun otherFailuresReportGenericMessage() = runTest(testDispatcher) {
         val failures = listOf(
-            { throw NotificationApiException(statusCode = 500) },
+            { throw notificationApiError(statusCode = 500) },
             { throw IllegalStateException("接続できません") },
         )
 

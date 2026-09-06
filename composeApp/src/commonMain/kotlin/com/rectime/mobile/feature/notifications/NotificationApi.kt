@@ -1,15 +1,19 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -24,6 +28,7 @@ interface NotificationGateway {
 class NotificationApi(
     private val client: HttpClient = createAppHttpClient(),
     baseUrl: String = apiBaseUrl,
+    private val accessTokenProvider: () -> String? = { SessionTokenHolder.accessToken },
 ) : NotificationGateway {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/me/notifications"
 
@@ -32,6 +37,7 @@ class NotificationApi(
         require(offset >= 0) { "Offset must not be negative" }
 
         val response = client.get(endpoint) {
+            addMobileAuthorization()
             parameter("limit", limit)
             parameter("offset", offset)
         }
@@ -42,17 +48,27 @@ class NotificationApi(
     override suspend fun getNotification(notificationId: Int): UserNotification {
         require(notificationId > 0) { "Notification ID must be positive" }
 
-        val response = client.get("$endpoint/$notificationId")
+        val response = client.get("$endpoint/$notificationId") {
+            addMobileAuthorization()
+        }
         ensureSuccess(response)
         return response.body<NotificationResponse>().toModel()
     }
 
+    private fun HttpRequestBuilder.addMobileAuthorization() {
+        val accessToken = accessTokenProvider()?.takeIf(String::isNotBlank)
+            ?: throw HttpStatusException(
+                status = HttpStatusCode.Unauthorized,
+                code = "UNAUTHORIZED",
+                detail = "Authentication required",
+            )
+        header("X-Client-Type", "mobile")
+        header(HttpHeaders.Authorization, "Bearer $accessToken")
+    }
+
     private suspend fun ensureSuccess(response: io.ktor.client.statement.HttpResponse) {
         if (response.status.value !in 200..299) {
-            throw NotificationApiException(
-                statusCode = response.status.value,
-                responseBody = response.bodyAsText(),
-            )
+            throw apiErrorException(response.status, response.bodyAsText())
         }
     }
 
@@ -60,11 +76,6 @@ class NotificationApi(
         client.close()
     }
 }
-
-class NotificationApiException(
-    val statusCode: Int,
-    val responseBody: String = "",
-) : IllegalStateException("Notification API request failed: HTTP $statusCode")
 
 interface MyEventsGateway {
     suspend fun getMyEventIds(): Set<Int>
@@ -82,14 +93,15 @@ class MyEventsApi(
         val response = client.get(endpoint) {
             header("X-Client-Type", "mobile")
             val accessToken = accessTokenProvider()?.takeIf(String::isNotBlank)
-                ?: throw NotificationApiException(statusCode = 401)
+                ?: throw HttpStatusException(
+                    status = HttpStatusCode.Unauthorized,
+                    code = "UNAUTHORIZED",
+                    detail = "Authentication required",
+                )
             header(HttpHeaders.Authorization, "Bearer $accessToken")
         }
         if (response.status.value !in 200..299) {
-            throw NotificationApiException(
-                statusCode = response.status.value,
-                responseBody = response.bodyAsText(),
-            )
+            throw apiErrorException(response.status, response.bodyAsText())
         }
         return response.body<MyEventsResponse>().events.map { it.eventId }.toSet()
     }

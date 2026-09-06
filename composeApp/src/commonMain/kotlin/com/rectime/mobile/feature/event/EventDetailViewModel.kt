@@ -11,10 +11,12 @@ import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.core.network.GatheringMemberResponse
 import com.rectime.mobile.core.network.GatheringResponse
 import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.network.toModel
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
@@ -54,7 +56,9 @@ class EventDetailViewModel(
                     val result = fetchWithCacheFallback(
                         fetchLive = {
                             val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId")
-                            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+                            if (!response.status.isSuccess()) {
+                                throw apiErrorException(response.status, response.bodyAsText())
+                            }
                             response.body<EventDetailResponse>()
                         },
                         loadCache = { cache.load<EventDetailResponse>(eventCacheKey) },
@@ -133,7 +137,9 @@ class EventDetailViewModel(
         val result = fetchWithCacheFallback(
             fetchLive = {
                 val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId/gatherings")
-                if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+                if (!response.status.isSuccess()) {
+                    throw apiErrorException(response.status, response.bodyAsText())
+                }
                 response.body<List<GatheringResponse>>()
             },
             loadCache = { cache.load<List<GatheringResponse>>(gatheringCacheKey) },
@@ -205,7 +211,9 @@ class EventDetailViewModel(
     private suspend fun isAttending(gatheringId: Int, userId: Int): Boolean? {
         return try {
             val response = httpClient.get("$apiBaseUrl/api/v1/gatherings/$gatheringId/members")
-            if (!response.status.isSuccess()) throw HttpStatusException(response.status)
+            if (!response.status.isSuccess()) {
+                throw apiErrorException(response.status, response.bodyAsText())
+            }
             response.body<List<GatheringMemberResponse>>().any { it.userId == userId }
         } catch (e: CancellationException) {
             throw e
