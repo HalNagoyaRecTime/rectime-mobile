@@ -86,6 +86,9 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
+            // currentUser()と同様、明示的な非2xxのみAuthApiExceptionとして扱う。
+            // AuthViewModel側で401をセッション失効と判定するため、2xxの本文不正は
+            // 別の例外型のままにする。
             throw response.toAuthApiException(body, "セッション更新に失敗しました")
         }
 
