@@ -10,10 +10,20 @@ permissions:
   contents: read
 
 jobs:
-  add-to-project:
+  add-regular-pr-to-project:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/add-to-project@v2
         with:
           project-url: https://github.com/orgs/HalNagoyaRecTime/projects/1
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+
+  add-dependabot-pr-to-project:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@v2
+        with:
+          project-url: https://github.com/orgs/HalNagoyaRecTime/projects/1
+          github-token: ${{ secrets.DEPENDABOT_PAT }}
