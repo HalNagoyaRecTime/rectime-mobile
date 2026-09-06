@@ -1,6 +1,5 @@
 package com.rectime.mobile.feature.auth
 
-import com.rectime.mobile.core.network.HttpStatusException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -60,11 +59,12 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
         }
 
-        assertEquals("INVALID_CLIENT_TYPE", error.code)
+        assertEquals(400, error.statusCode)
+        assertEquals("INVALID_CLIENT_TYPE", error.errorCode)
         assertEquals("invalid client type", error.message)
     }
 
@@ -80,11 +80,12 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
         }
 
-        assertEquals("UNKNOWN_API_ERROR", error.code)
+        assertEquals(502, error.statusCode)
+        assertEquals("UNKNOWN_API_ERROR", error.errorCode)
         assertEquals("認証 URL の取得に失敗しました", error.message)
     }
 
@@ -172,6 +173,7 @@ class AuthApiTest {
                     headers = jsonHeaders,
                 )
             },
+            baseUrl = "https://api.example.test",
         )
 
         val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
@@ -250,11 +252,12 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.exchangeCode("auth-code", "state-abc", "verifier-123")
         }
 
-        assertEquals("STATE_MISMATCH", error.code)
+        assertEquals(401, error.statusCode)
+        assertEquals("STATE_MISMATCH", error.errorCode)
         assertEquals("state mismatch", error.message)
     }
 
@@ -387,11 +390,12 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.currentUser("access-token")
         }
 
-        assertEquals("UNAUTHORIZED", error.code)
+        assertEquals("UNAUTHORIZED", error.errorCode)
+        assertEquals(401, error.statusCode)
         assertEquals("token expired", error.message)
     }
 
@@ -480,11 +484,12 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.refresh(storedSession)
         }
 
-        assertEquals("REFRESH_TOKEN_REVOKED", error.code)
+        assertEquals("REFRESH_TOKEN_REVOKED", error.errorCode)
+        assertEquals(401, error.statusCode)
         assertEquals("refresh token revoked", error.message)
     }
 
@@ -540,11 +545,12 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.logout(storedSession)
         }
 
-        assertEquals("SESSION_NOT_FOUND", error.code)
+        assertEquals(404, error.statusCode)
+        assertEquals("SESSION_NOT_FOUND", error.errorCode)
         assertEquals("session not found", error.message)
     }
 

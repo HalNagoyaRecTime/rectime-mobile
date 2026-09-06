@@ -71,7 +71,9 @@ fun decodeAuthSession(value: String): AuthSession? {
                 classRoomName = classRoomName,
                 role = role,
             ),
-        )
+        ).takeIf { session ->
+            session.accessToken.isNotBlank() && session.refreshTokenId.isNotBlank()
+        }
     }.getOrNull()
 }
 

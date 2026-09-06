@@ -21,23 +21,24 @@ import kotlinx.serialization.json.JsonNamingStrategy
 
 class AuthApi(
     private val client: HttpClient = createAppHttpClient(),
+    private val baseUrl: String = apiBaseUrl,
 ) {
     suspend fun requestAuthUrl(state: String, codeChallenge: String): String {
-        val response = client.get("$apiBaseUrl/api/v1/auth/microsoft/login") {
+        val response = client.get("$baseUrl/api/v1/auth/microsoft/login") {
             header("X-Client-Type", "mobile")
             header("X-State", state)
             header("X-PKCE-Code-Challenge", codeChallenge)
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw apiErrorException(response.status, body, "認証 URL の取得に失敗しました")
+            throw response.toAuthApiException(body, "認証 URL の取得に失敗しました")
         }
         return decodeBody<AuthUrlResponse>(body)?.authUrl
             ?: throw IllegalStateException("認証 URL のレスポンスが不正です")
     }
 
     suspend fun exchangeCode(code: String, state: String, codeVerifier: String): AuthSession {
-        val response = client.post("$apiBaseUrl/api/v1/auth/microsoft/token") {
+        val response = client.post("$baseUrl/api/v1/auth/microsoft/token") {
             header("X-Client-Type", "mobile")
             contentType(ContentType.Application.Json)
             setBody(
@@ -48,7 +49,7 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw apiErrorException(response.status, body, "トークン交換に失敗しました")
+            throw response.toAuthApiException(body, "トークン交換に失敗しました")
         }
 
         val parsed = decodeBody<AuthSessionResponse>(body)
@@ -58,40 +59,34 @@ class AuthApi(
             refreshTokenId = parsed.refreshTokenId
                 ?: throw IllegalStateException("refresh_token_id がありません"),
             expiresIn = parsed.expiresIn ?: 0L,
-            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(),
+            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(baseUrl),
         )
     }
 
     suspend fun currentUser(accessToken: String): AuthUser {
-        val response = client.get("$apiBaseUrl/api/v1/auth/me") {
+        val response = client.get("$baseUrl/api/v1/auth/me") {
             header("X-Client-Type", "mobile")
             header(HttpHeaders.Authorization, "Bearer $accessToken")
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            // サーバーが明示的に非2xxを返した場合のみHttpStatusExceptionを投げる。
-            // 2xxなのにレスポンス本文の解析に失敗した場合(下のnullチェック)は
-            // 別の例外型のままにし、AuthViewModelが「セッションが本当に無効」と
-            // 誤認しないようにする。
-            throw apiErrorException(response.status, body, "セッション確認に失敗しました")
+            throw response.toAuthApiException(body, "セッション確認に失敗しました")
         }
 
         val user = decodeBody<UserEnvelope>(body)?.user
             ?: throw IllegalStateException("ユーザー情報のレスポンスが不正です")
-        return user.toAuthUser()
+        return user.toAuthUser(baseUrl)
     }
 
     suspend fun refresh(session: AuthSession): AuthSession {
-        val response = client.post("$apiBaseUrl/api/v1/auth/refresh") {
+        val response = client.post("$baseUrl/api/v1/auth/refresh") {
             header("X-Client-Type", "mobile")
             contentType(ContentType.Application.Json)
             setBody(json.encodeToString(RefreshRequest(refreshTokenId = session.refreshTokenId)))
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            // currentUser()と同様、明示的な非2xxのみHttpStatusExceptionにする
-            // (AuthViewModel側でセッション失効かどうかの判定に使うため)。
-            throw apiErrorException(response.status, body, "セッション更新に失敗しました")
+            throw response.toAuthApiException(body, "セッション更新に失敗しました")
         }
 
         val parsed = decodeBody<AuthSessionResponse>(body)
@@ -104,7 +99,7 @@ class AuthApi(
     }
 
     suspend fun logout(session: AuthSession) {
-        val response = client.post("$apiBaseUrl/api/v1/auth/logout") {
+        val response = client.post("$baseUrl/api/v1/auth/logout") {
             header("X-Client-Type", "mobile")
             header(HttpHeaders.Authorization, "Bearer ${session.accessToken}")
             contentType(ContentType.Application.Json)
@@ -112,7 +107,7 @@ class AuthApi(
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
-            throw apiErrorException(response.status, body, "ログアウトに失敗しました")
+            throw response.toAuthApiException(body, "ログアウトに失敗しました")
         }
     }
 
@@ -130,13 +125,29 @@ private val json = Json {
 private inline fun <reified T> decodeBody(body: String): T? =
     runCatching { json.decodeFromString<T>(body) }.getOrNull()
 
-private fun AuthUserResponse.toAuthUser(): AuthUser {
+private fun io.ktor.client.statement.HttpResponse.toAuthApiException(
+    body: String,
+    fallbackMessage: String,
+): AuthApiException {
+    // AuthViewModelはAuthApiExceptionだけを401によるセッション失効候補として
+    // 扱う。エラー本文の解析は共通パーサーに寄せ、APIのcode/status/messageを
+    // 保持したまま認証機能の例外へ明示的に写像する。
+    val parsed = apiErrorException(status, body, fallbackMessage)
+    return AuthApiException(
+        statusCode = status.value,
+        errorCode = parsed.code,
+        message = parsed.message ?: fallbackMessage,
+        details = parsed.details,
+    )
+}
+
+private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
     return AuthUser(
         id = id,
         email = email,
         displayName = displayName,
         avatarUrl = avatarUrl?.let {
-            val base = if (it.startsWith("http")) it else "$apiBaseUrl$it"
+            val base = if (it.startsWith("http")) it else "$baseUrl$it"
             if (!avatarUpdatedAt.isNullOrBlank()) "$base?v=$avatarUpdatedAt" else base
         },
         avatarUpdatedAt = avatarUpdatedAt,

@@ -195,7 +195,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = mockClient { error("Network request must not be sent") },
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         assertFailsWith<IllegalArgumentException> { api.getNotifications(limit = 0) }
@@ -208,7 +207,6 @@ class NotificationApiTest {
         val api = NotificationApi(
             client = mockClient { error("Network request must not be sent") },
             baseUrl = "https://api.example.com",
-            accessTokenProvider = { "access-token" },
         )
 
         assertFailsWith<IllegalArgumentException> { api.getNotification(0) }
