@@ -1,6 +1,5 @@
 package com.rectime.mobile.feature.auth
 
-import com.rectime.mobile.core.network.HttpStatusException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -53,17 +52,19 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"error":{"message":"invalid client type"}}""",
+                    content = """{"error":{"code":"INVALID_CLIENT_TYPE","message":"invalid client type"}}""",
                     status = HttpStatusCode.BadRequest,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<AuthApiException> {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
         }
 
+        assertEquals(400, error.statusCode)
+        assertEquals("INVALID_CLIENT_TYPE", error.errorCode)
         assertEquals("invalid client type", error.message)
     }
 
@@ -79,10 +80,12 @@ class AuthApiTest {
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<AuthApiException> {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
         }
 
+        assertEquals(502, error.statusCode)
+        assertEquals("UNKNOWN_API_ERROR", error.errorCode)
         assertEquals("認証 URL の取得に失敗しました", error.message)
     }
 
@@ -170,6 +173,7 @@ class AuthApiTest {
                     headers = jsonHeaders,
                 )
             },
+            baseUrl = "https://api.example.test",
         )
 
         val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
@@ -237,21 +241,23 @@ class AuthApiTest {
     // ---- exchangeCode 異常系 ----
 
     @Test
-    fun exchangeCodeUsesFlatErrorMessageWhenStateIsRejected() = runTest {
+    fun exchangeCodeUsesApiErrorMessageWhenStateIsRejected() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"message":"state mismatch"}""",
+                    content = """{"error":{"code":"STATE_MISMATCH","message":"state mismatch"}}""",
                     status = HttpStatusCode.Unauthorized,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<AuthApiException> {
             api.exchangeCode("auth-code", "state-abc", "verifier-123")
         }
 
+        assertEquals(401, error.statusCode)
+        assertEquals("STATE_MISMATCH", error.errorCode)
         assertEquals("state mismatch", error.message)
     }
 
@@ -377,17 +383,19 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"error":{"message":"token expired"}}""",
+                    content = """{"error":{"code":"UNAUTHORIZED","message":"token expired"}}""",
                     status = HttpStatusCode.Unauthorized,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.currentUser("access-token")
         }
 
+        assertEquals("UNAUTHORIZED", error.errorCode)
+        assertEquals(401, error.statusCode)
         assertEquals("token expired", error.message)
     }
 
@@ -469,17 +477,19 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"error":{"message":"refresh token revoked"}}""",
+                    content = """{"error":{"code":"REFRESH_TOKEN_REVOKED","message":"refresh token revoked"}}""",
                     status = HttpStatusCode.Unauthorized,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<HttpStatusException> {
+        val error = assertFailsWith<AuthApiException> {
             api.refresh(storedSession)
         }
 
+        assertEquals("REFRESH_TOKEN_REVOKED", error.errorCode)
+        assertEquals(401, error.statusCode)
         assertEquals("refresh token revoked", error.message)
     }
 
@@ -528,17 +538,19 @@ class AuthApiTest {
         val api = AuthApi(
             mockClient {
                 respond(
-                    content = """{"message":"session not found"}""",
+                    content = """{"error":{"code":"SESSION_NOT_FOUND","message":"session not found"}}""",
                     status = HttpStatusCode.NotFound,
                     headers = jsonHeaders,
                 )
             },
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<AuthApiException> {
             api.logout(storedSession)
         }
 
+        assertEquals(404, error.statusCode)
+        assertEquals("SESSION_NOT_FOUND", error.errorCode)
         assertEquals("session not found", error.message)
     }
 

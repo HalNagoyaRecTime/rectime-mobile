@@ -5,14 +5,16 @@ import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.util.nowMinuteStateFlow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-
-private const val NOTIFICATIONS_CACHE_KEY = "notifications_v1"
+import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
 
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
@@ -21,11 +23,12 @@ data class NotificationsUiState(
     val error: String? = null,
     // trueのとき、notificationsは通信失敗時にローカルキャッシュから復元した前回取得分。
     val isOffline: Boolean = false,
+    val readIds: Set<Int> = emptySet(),
 )
 
 class NotificationsViewModel(
-    private val gateway: NotificationGateway = NotificationApi(),
-    private val cache: LocalCache = LocalCache(),
+    private val feedStore: NotificationFeedStore = NotificationFeedStore.shared,
+    private val readStore: NotificationReadStore = NotificationReadStore.shared,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(NotificationsUiState(isLoading = true))
     val uiState: StateFlow<NotificationsUiState> = _uiState.asStateFlow()
@@ -34,6 +37,12 @@ class NotificationsViewModel(
 
     init {
         loadNotifications(isRefresh = false)
+        viewModelScope.launch {
+            readStore.restore()
+            readStore.readIds.collect { readIds ->
+                _uiState.value = _uiState.value.copy(readIds = readIds)
+            }
+        }
     }
 
     fun refresh() {
@@ -51,24 +60,21 @@ class NotificationsViewModel(
         )
         loadJob = viewModelScope.launch {
             try {
-                when (
-                    val result = fetchWithCacheFallback(
-                        fetchLive = { fetchAllNotifications(gateway) },
-                        loadCache = { cache.load<List<UserNotification>>(NOTIFICATIONS_CACHE_KEY) },
-                        saveCache = { cache.save(NOTIFICATIONS_CACHE_KEY, it) },
-                    )
-                ) {
+                when (val result = feedStore.load(force = isRefresh)) {
                     is CachedFetchResult.Fresh -> {
-                        _uiState.value = NotificationsUiState(
+                        _uiState.value = _uiState.value.copy(
                             notifications = result.value,
                             isLoading = false,
+                            isRefreshing = false,
+                            isOffline = false,
+                            error = null,
                         )
                     }
 
                     is CachedFetchResult.Cached -> {
                         // セッション切れ・取得失敗(404)はオフライン表示で隠さず、エラーを優先する。
-                        val statusCode = (result.error as? NotificationApiException)?.statusCode
-                        if (statusCode == 401 || statusCode == 404) {
+                        val errorCode = (result.error as? HttpStatusException)?.code
+                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
                                 isRefreshing = false,
@@ -76,10 +82,12 @@ class NotificationsViewModel(
                                 error = result.error.toNotificationErrorMessage(),
                             )
                         } else {
-                            _uiState.value = NotificationsUiState(
+                            _uiState.value = _uiState.value.copy(
                                 notifications = result.value,
                                 isLoading = false,
+                                isRefreshing = false,
                                 isOffline = true,
+                                error = null,
                             )
                             // 401/404以外の理由でのフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
@@ -109,11 +117,6 @@ class NotificationsViewModel(
             }
         }
     }
-
-    override fun onCleared() {
-        super.onCleared()
-        gateway.close()
-    }
 }
 
 internal suspend fun fetchAllNotifications(
@@ -137,6 +140,7 @@ internal suspend fun fetchAllNotifications(
 data class NotificationDetailUiState(
     val notification: UserNotification? = null,
     val isLoading: Boolean = true,
+    val isParticipatingInRelatedEvent: Boolean = false,
     val error: String? = null,
     val isOffline: Boolean = false,
 )
@@ -145,7 +149,13 @@ class NotificationDetailViewModel(
     private val notificationId: Int,
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),
+    private val readStore: NotificationReadStore = NotificationReadStore.shared,
+    private val myEventsGateway: MyEventsGateway = MyEventsApi(),
+    private val clock: Clock = Clock.System,
+    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
 ) : ViewModel() {
+    val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
+
     private val _uiState = MutableStateFlow(NotificationDetailUiState())
     val uiState: StateFlow<NotificationDetailUiState> = _uiState.asStateFlow()
 
@@ -175,26 +185,32 @@ class NotificationDetailViewModel(
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
+                        val isParticipating = fetchIsParticipating(result.value)
                         _uiState.value = NotificationDetailUiState(
                             notification = result.value,
                             isLoading = false,
+                            isParticipatingInRelatedEvent = isParticipating,
                         )
+                        readStore.markRead(notificationId)
                     }
 
                     is CachedFetchResult.Cached -> {
                         // 削除済み(404)の古いキャッシュを誤表示し続けないようにする。
-                        val statusCode = (result.error as? NotificationApiException)?.statusCode
-                        if (statusCode == 401 || statusCode == 404) {
+                        val errorCode = (result.error as? HttpStatusException)?.code
+                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
                             _uiState.value = NotificationDetailUiState(
                                 isLoading = false,
                                 error = result.error.toNotificationErrorMessage(),
                             )
                         } else {
+                            val isParticipating = fetchIsParticipating(result.value)
                             _uiState.value = NotificationDetailUiState(
                                 notification = result.value,
                                 isLoading = false,
                                 isOffline = true,
+                                isParticipatingInRelatedEvent = isParticipating,
                             )
+                            readStore.markRead(notificationId)
                             // 401/404以外の理由でのフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
                             result.error.printStackTrace()
@@ -220,16 +236,26 @@ class NotificationDetailViewModel(
         }
     }
 
+    private suspend fun fetchIsParticipating(notification: UserNotification): Boolean {
+        val eventId = notification.relatedEvent?.id ?: return false
+        val myEventIds = runCatching { myEventsGateway.getMyEventIds() }.getOrDefault(emptySet())
+        return eventId in myEventIds
+    }
+
     override fun onCleared() {
         super.onCleared()
         gateway.close()
+        myEventsGateway.close()
     }
 }
 
 private fun Exception.toNotificationErrorMessage(): String = when {
-    this is NotificationApiException && statusCode == 401 ->
+    this is HttpStatusException && code == "UNAUTHORIZED" ->
         "ログイン情報の有効期限が切れました"
-    this is NotificationApiException && statusCode == 404 ->
+    this is HttpStatusException && code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND") ->
         "通知が見つかりません"
     else -> "通知の取得に失敗しました"
 }
+
+private fun String?.isNotificationNotFoundOrUnauthorized(): Boolean =
+    this == "UNAUTHORIZED" || this == "NOTIFICATION_NOT_FOUND" || this == "NOT_FOUND"

@@ -3,10 +3,10 @@ package com.rectime.mobile.app.navigation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.rectime.mobile.feature.calendar.CalendarScreen
+import com.rectime.mobile.feature.schedule.ScheduleScreen
 
 class NavigationController(
-    initialRoot: Screen = CalendarScreen
+    initialRoot: Screen = ScheduleScreen
 ) {
     var state by mutableStateOf(NavigationState(rootScreen = initialRoot))
         private set

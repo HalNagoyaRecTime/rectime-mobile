@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.network.mobileAuthHeaders
 import io.ktor.client.HttpClient
@@ -14,7 +15,8 @@ import kotlinx.serialization.Serializable
 
 class FirebaseTokenApi(
     private val client: HttpClient = createAppHttpClient(),
-    baseUrl: String = apiBaseUrl,
+    private val baseUrl: String = apiBaseUrl,
+    private val headersProvider: (String, String) -> Map<String, String>? = ::mobileAuthHeaders,
 ) {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/firebase-tokens"
 
@@ -29,7 +31,7 @@ class FirebaseTokenApi(
             // accessTokenをこのリクエストにのみ明示的に付与する。ログアウト直後に
             // FCMのトークンリフレッシュが走った場合でも、他のAPIリクエストへ古い
             // トークンが漏れ出さないようにするため。
-            mobileAuthHeaders(endpoint, accessToken)?.forEach { (name, value) ->
+            headersProvider(endpoint, accessToken)?.forEach { (name, value) ->
                 header(name, value)
             }
             contentType(ContentType.Application.Json)
@@ -40,13 +42,8 @@ class FirebaseTokenApi(
                 ),
             )
         }
-        val responseBody = response.bodyAsText()
-
         if (response.status.value !in 200..299) {
-            throw FirebaseTokenRegistrationException(
-                statusCode = response.status.value,
-                responseBody = responseBody,
-            )
+            throw apiErrorException(response.status, response.bodyAsText())
         }
     }
 
@@ -60,10 +57,5 @@ internal data class RegisterFirebaseTokenRequest(
     val fcmToken: String,
     val platform: String,
 )
-
-class FirebaseTokenRegistrationException(
-    val statusCode: Int,
-    val responseBody: String,
-) : IllegalStateException("Firebase token registration failed: HTTP $statusCode")
 
 private const val ANDROID_PLATFORM = "android"

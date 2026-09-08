@@ -1,2 +1,3 @@
 sdk.dir=<your-android-sdk-path>
-API_BASE_URL=http://10.0.2.2:8787
+API_BASE_URL=<shared-debug-api-url>
+RELEASE_API_BASE_URL=<shared-release-api-url>

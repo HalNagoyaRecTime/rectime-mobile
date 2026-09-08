@@ -5,6 +5,8 @@
 xcuserdata
 !src/**/build/
 local.properties
+iosApp/Configuration/Local.xcconfig
+/docs/api-environments.md
 .idea
 .claude
 .DS_Store
@@ -29,3 +31,17 @@ composeApp/google-services.json
 
 # Developer-specific Xcode signing and API settings.
 iosApp/Configuration/Config.xcconfig
+iosApp/Configuration/Local.xcconfig
+
+# Firebase iOS configuration and signing credentials must stay local or in CI secrets.
+**/GoogleService-Info.plist
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+
+# Environment files may contain API keys or deployment credentials.
+.env
+.env.*
+!.env.example
+!.env.*.example

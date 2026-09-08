@@ -30,6 +30,7 @@ fun NavigationHost(
     navigationController: NavigationController,
     session: AuthSession,
     onLogout: () -> Unit,
+    hasUnreadNotifications: Boolean,
 ) {
     val state = navigationController.state
     val coroutineScope = rememberCoroutineScope()
@@ -115,6 +116,7 @@ fun NavigationHost(
             navigationController = navigationController,
             session = session,
             onLogout = onLogout,
+            hasUnreadNotifications = hasUnreadNotifications,
         )
 
         // Layer 2: Push Layer (above Root+BottomNav, all sources)

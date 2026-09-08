@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="rectime_auth.xml" />
+    <exclude domain="sharedpref" path="rectime_cache.xml" />
+</full-backup-content>
