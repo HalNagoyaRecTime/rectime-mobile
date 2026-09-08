@@ -33,7 +33,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Run commonTest on JVM target
         run: ./gradlew :composeApp:jvmTest
@@ -56,7 +56,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Setup iOS Config
         run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
