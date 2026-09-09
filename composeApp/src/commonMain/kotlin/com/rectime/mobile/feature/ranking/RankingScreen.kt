@@ -37,6 +37,9 @@ object RankingScreen : Screen {
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+        val topThree = uiState.rankingItems.filter { it.rank <= 3 }
+        val others = uiState.rankingItems.filter { it.rank > 3 }
+
         RootScreenScaffold(
             title = "ランキング",
             onTrailingClick = { /* TODO: 表示切替機能を実装予定 */ },
@@ -49,10 +52,30 @@ object RankingScreen : Screen {
                 )
             },
         ) {
-            items(uiState.rankingItems) { item ->
+            item {
+                PodiumSection(topThree = topThree)
+            }
+
+            item {
+                Text(
+                    text = "順位のヘッダー(仮)",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                )
+            }
+
+            items(others) { item ->
                 RankingRow(item = item)
             }
         }
+    }
+}
+
+@Composable
+private fun PodiumSection(topThree: List<RankingItem>) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = "表彰台エリア(仮、topThreeが${topThree.size}件)")
     }
 }
 

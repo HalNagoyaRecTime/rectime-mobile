@@ -9,11 +9,13 @@ class RankingViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(
         RankingUiState(
             rankingItems = listOf(
-                RankingItem(1, "Aクラス", 100),
-                RankingItem(2, "Aクラス", 100),
-                RankingItem(3, "Aクラス", 100),
-                RankingItem(4, "Aクラス", 100),
-                RankingItem(5, "Aクラス", 100),
+                RankingItem(1, "Aクラス", 700),
+                RankingItem(2, "Bクラス", 600),
+                RankingItem(3, "Cクラス", 500),
+                RankingItem(4, "Dクラス", 400),
+                RankingItem(5, "Eクラス", 300, isMyTeam = true),
+                RankingItem(6, "Fクラス", 200),
+                RankingItem(7, "Gクラス", 100),
             )
         )
     )
