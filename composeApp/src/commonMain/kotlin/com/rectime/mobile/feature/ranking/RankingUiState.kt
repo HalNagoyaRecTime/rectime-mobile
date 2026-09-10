@@ -9,4 +9,5 @@ data class RankingItem(
 
 data class RankingUiState(
     val rankingItems: List<RankingItem> = emptyList(),
+    val isRefreshing: Boolean = false,
 )
