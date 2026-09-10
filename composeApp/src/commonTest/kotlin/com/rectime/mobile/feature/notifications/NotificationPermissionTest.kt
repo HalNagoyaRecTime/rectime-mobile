@@ -8,6 +8,26 @@ import kotlinx.coroutines.test.runTest
 
 class NotificationPermissionTest {
     @Test
+    fun grantedStatusDescribesAsAllowed() {
+        assertEquals("通知は許可されています", NotificationPermissionStatus.Granted.description())
+    }
+
+    @Test
+    fun notDeterminedStatusDescribesPermissionChoice() {
+        assertEquals("通知の許可を選択してください", NotificationPermissionStatus.NotDetermined.description())
+    }
+
+    @Test
+    fun deniedStatusDescribesSystemSettings() {
+        assertEquals("端末の設定で通知を許可してください", NotificationPermissionStatus.Denied.description())
+    }
+
+    @Test
+    fun unavailableStatusDescribesUnsupportedSettings() {
+        assertEquals("この端末では通知設定を確認できません", NotificationPermissionStatus.Unavailable.description())
+    }
+
+    @Test
     fun permissionIsRequestedOnlyOnce() = runTest {
         val store = InMemoryKeyValueStore()
         val controller = FakeNotificationPermissionController()
