@@ -12,7 +12,7 @@ class RankingViewModel : ViewModel() {
                 RankingItem(1, "Aクラス", 700),
                 RankingItem(2, "Bクラス", 600),
                 RankingItem(3, "Cクラス", 500),
-                RankingItem(4, "Dクラス", 400),
+                RankingItem(4, "Dクラス・とても長い名前のチーム", 400),
                 RankingItem(5, "Eクラス", 300, isMyTeam = true),
                 RankingItem(6, "Fクラス", 200),
                 RankingItem(7, "Gクラス", 100),
