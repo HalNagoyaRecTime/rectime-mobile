@@ -11,6 +11,13 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    ignore:
+      # 2.11.0 以降は AGP 9.1 以上 と compileSdk 37 以上 を要求し、
+      # AGP 8.13 / compileSdk 36 の現状では checkDebugAarMetadata が落ちる。
+      - dependency-name: "org.jetbrains.androidx.lifecycle:*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     groups:
       gradle-patch-updates:
         applies-to: "version-updates"
