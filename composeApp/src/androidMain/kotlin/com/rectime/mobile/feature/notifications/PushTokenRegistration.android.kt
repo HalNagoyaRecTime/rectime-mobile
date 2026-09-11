@@ -55,7 +55,7 @@ internal object AndroidPushTokenRegistrar {
             val api = FirebaseTokenApi()
             runCatching {
                 try {
-                    api.register(fcmToken = fcmToken, accessToken = accessToken)
+                    api.register(fcmToken, FirebasePlatform.Android, accessToken)
                 } finally {
                     api.close()
                 }

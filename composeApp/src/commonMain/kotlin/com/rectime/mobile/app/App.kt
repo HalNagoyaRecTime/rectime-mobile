@@ -31,6 +31,7 @@ import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
@@ -39,7 +40,7 @@ import okio.Path.Companion.toPath
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
 @Preview
-fun App() {
+fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     val configurationError = apiBaseUrlConfigurationError
     if (configurationError != null) {
         AppTheme(themeStateHolder = remember { ThemeStateHolder() }) {
@@ -93,6 +94,9 @@ fun App() {
     )
 
     val authState by authViewModel.uiState.collectAsState()
+    LaunchedEffect(notificationPermissionStartup) {
+        notificationPermissionStartup?.requestIfNeeded()
+    }
     var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
@@ -149,6 +153,7 @@ fun App() {
                     session = session,
                     onLogout = onLogout,
                     hasUnreadNotifications = hasUnreadNotifications,
+                    notificationPermissionStartup = notificationPermissionStartup,
                 )
             }
         }
