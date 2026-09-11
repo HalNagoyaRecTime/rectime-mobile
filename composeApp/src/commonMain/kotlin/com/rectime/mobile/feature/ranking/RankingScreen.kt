@@ -1,7 +1,9 @@
 package com.rectime.mobile.feature.ranking
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -37,9 +43,12 @@ import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.List
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
+import kotlin.time.Duration.Companion.milliseconds
 
 object RankingScreen : Screen {
     override val key: String = "ranking"
@@ -51,18 +60,53 @@ object RankingScreen : Screen {
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val lazyListState = rememberLazyListState()
+        var hasAutoScrolled by remember { mutableStateOf(false) }
 
-        // 画面が表示されたら、一度だけ実行する
         LaunchedEffect(uiState.rankingItems) {
-            val myTeamIndex = uiState.rankingItems.indexOfFirst { it.isMyTeam }
-            if (myTeamIndex >= 0) {
-                // 画面の中央あたりに来るよう、少し上にずらして表示する
-                //lazyListState.scrollToItem(index = 0, scrollOffset = targetScrollPx.toInt())
+            if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
+                val myTeamIndex = uiState.rankingItems.indexOfFirst { it.isMyTeam }
+                if (myTeamIndex >= 0) {
+                    // まず一位のチームを見せる
+                    lazyListState.scrollToItem(index = 0)
+                    delay(300.milliseconds)
+
+                    // 自チーム行が実際にレイアウトされるまで待つ
+                    val myTeamItemInfo = snapshotFlow {
+                        lazyListState.layoutInfo.visibleItemsInfo
+                            .firstOrNull { it.index == myTeamIndex }
+                    }.first { it != null }!!
+
+                    val layoutInfo = lazyListState.layoutInfo
+
+                    // リスト内で実際にコンテンツを表示できる範囲
+                    val viewportStart = layoutInfo.viewportStartOffset
+                    val viewportEnd = layoutInfo.viewportEndOffset
+
+                    // viewportの中央位置
+                    val viewportCenter =
+                        viewportStart + (viewportEnd - viewportStart) / 2
+
+                    // 自チーム行の中央位置
+                    val itemCenter =
+                        myTeamItemInfo.offset + myTeamItemInfo.size / 2
+
+                    // 自チーム行の中央とviewport中央との差
+                    val scrollDistancePx =
+                        itemCenter - viewportCenter
+
+                    // 差の分だけアニメーションで補正
+                    lazyListState.animateScrollBy(
+                        value = scrollDistancePx.toFloat(),
+                        animationSpec = tween(durationMillis = 1500)
+                    )
+                }
+                hasAutoScrolled = true
             }
         }
 
         RootScreenScaffold(
             title = "ランキング",
+            lazyListState = lazyListState,
             onTrailingClick = { /* TODO: 表示切替機能を実装予定 */ },
             trailing = {
                 if (uiState.isRefreshing) {
