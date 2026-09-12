@@ -2,6 +2,7 @@ package com.rectime.mobile.core.cache
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -9,6 +10,13 @@ import kotlin.test.assertIs
 import kotlin.test.fail
 
 class CachedFetchTest {
+    @BeforeTest
+    fun resetSharedState() {
+        // CacheGenerationはプロセス全体で共有されるため、テスト間で値が
+        // 漏れないようリセットする。
+        CacheGeneration.resetForTest()
+    }
+
     @Test
     fun freshResultIsReturnedAndSavedToCacheOnSuccess() = runTest {
         var saved: String? = null
@@ -100,5 +108,79 @@ class CachedFetchTest {
 
         assertFalse(loadCacheCalled)
         assertFalse(saveCacheCalled)
+    }
+
+    @Test
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileFetchLiveIsInFlightAndSucceeds() = runTest {
+        // ログアウト・新規ログイン等で、通信中にLocalCache.clearAll()が別画面から
+        // 呼ばれた場合、この通信の結果(前ユーザー/前セッションのものである可能性が
+        // ある)はキャッシュへ書き戻すだけでなく、呼び出し元(画面)へ返して
+        // 表示させてもならない。書き込みだけ止めてもFreshとして返せば、
+        // 呼び出し元の画面に前ユーザーのデータが表示されてしまうため。
+        var saveCacheCalled = false
+
+        val result = fetchWithCacheFallback(
+            fetchLive = {
+                CacheGeneration.bump()
+                "live-value"
+            },
+            loadCache = { fail("loadCache should not be called in this scenario") },
+            saveCache = { saveCacheCalled = true },
+        )
+
+        assertIs<CachedFetchResult.Failed>(result)
+        assertFalse(saveCacheCalled)
+    }
+
+    @Test
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileSaveCacheIsInFlight() = runTest {
+        // fetchLive自体は世代が変わる前に完了していても、その後のsaveCache()実行中に
+        // clearAll()が走った場合、呼び出し元へFreshとして返してはならない
+        // (saveCacheもsuspend関数のため、その内部で中断点を挟む可能性がある)。
+        val result = fetchWithCacheFallback(
+            fetchLive = { "live-value" },
+            loadCache = { fail("loadCache should not be called in this scenario") },
+            saveCache = { CacheGeneration.bump() },
+        )
+
+        assertIs<CachedFetchResult.Failed>(result)
+    }
+
+    @Test
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileFetchLiveIsInFlightAndFails() = runTest {
+        // fetchLive失敗時のキャッシュフォールバック経路でも同様に、通信中に
+        // clearAll()が走った場合はloadCache()の結果を呼び出し元へ返してはならない。
+        val liveError = IllegalStateException("network down")
+
+        val result = fetchWithCacheFallback(
+            fetchLive = {
+                CacheGeneration.bump()
+                throw liveError
+            },
+            loadCache = { fail("loadCache should not be called in this scenario") },
+            saveCache = { fail("saveCache should not be called on failure") },
+        )
+
+        assertIs<CachedFetchResult.Failed>(result)
+    }
+
+    @Test
+    fun resultIsDiscardedAsFailedWhenClearAllRunsWhileLoadCacheIsInFlight() = runTest {
+        // fetchLiveは開始時点の世代のまま失敗し、その後のloadCache()実行中に
+        // clearAll()が走るケース。loadCache()自体は(まだ消去中/消去直前の)
+        // 前セッションのデータを返してしまう可能性があるため、それを呼び出し元へ
+        // 返してはならない。
+        val liveError = IllegalStateException("network down")
+
+        val result = fetchWithCacheFallback(
+            fetchLive = { throw liveError },
+            loadCache = {
+                CacheGeneration.bump()
+                "stale-cached-value"
+            },
+            saveCache = { fail("saveCache should not be called on failure") },
+        )
+
+        assertIs<CachedFetchResult.Failed>(result)
     }
 }
