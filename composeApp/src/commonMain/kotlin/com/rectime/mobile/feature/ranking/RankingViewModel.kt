@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 private const val RANKING_CACHE_KEY = "rankings_v1"
 
 class RankingViewModel(
+    private val myTeamId: Int? = null,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
 ): ViewModel() {
@@ -57,7 +58,7 @@ class RankingViewModel(
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = RankingUiState(
                             isLoading = false,
-                            rankingItems = result.value.items.toModelList(),
+                            rankingItems = result.value.items.toModelList(myTeamId),
                             isOffline = false,
                         )
                     }
@@ -80,7 +81,7 @@ class RankingViewModel(
                             else -> {
                                 _uiState.value = RankingUiState(
                                     isLoading = false,
-                                    rankingItems = result.value.items.toModelList(),
+                                    rankingItems = result.value.items.toModelList(myTeamId),
                                     isOffline = true,
                                 )
                                 // 401/404以外の理由でのフォールバックは「オフライン」として

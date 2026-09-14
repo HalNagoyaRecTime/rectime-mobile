@@ -5,4 +5,4 @@ import com.rectime.mobile.core.model.UserProfile
 
 val LocalUserProfile = staticCompositionLocalOf<UserProfile?> { null }
 
-fun AuthUser.toUserProfile(): UserProfile = UserProfile(id = id)
+fun AuthUser.toUserProfile(): UserProfile = UserProfile(id = id, teamId = teamId)

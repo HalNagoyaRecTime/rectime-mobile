@@ -26,13 +26,13 @@ data class RankingsResponse(
         @SerialName("scores")
         val scores: Int,
     ) {
-        fun toModel() = RankingItem(
+        fun toModel(myTeamId: Int? = null) = RankingItem(
             rank = rank,
             teamName = teamName,
             score = scores,
-            isMyTeam = false,
+            isMyTeam = myTeamId != null && teamId == myTeamId,
         )
     }
 }
 
-fun List<RankingsResponse.Ranking>.toModelList() = map { it.toModel() }
+fun List<RankingsResponse.Ranking>.toModelList(myTeamId: Int? = null) = map { it.toModel(myTeamId) }

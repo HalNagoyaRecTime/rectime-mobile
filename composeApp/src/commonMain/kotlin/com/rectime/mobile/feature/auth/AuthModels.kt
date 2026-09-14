@@ -8,6 +8,8 @@ data class AuthUser(
     val avatarUpdatedAt: String? = null,
     val studentIdNumber: String? = null,
     val classRoomName: String? = null,
+    val classRoomId: Int? = null,
+    val teamId: Int? = null,
     val role: Role? = null,
 )
 
