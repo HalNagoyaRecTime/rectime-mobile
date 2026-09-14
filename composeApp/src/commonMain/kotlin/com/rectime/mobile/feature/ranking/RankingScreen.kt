@@ -129,13 +129,13 @@ private fun RankingRow(item: RankingItem) {
         Spacer(modifier = Modifier.width(12.dp))
 
         MarqueeText(
-            text = item.className,
+            text = item.teamName,
             modifier = Modifier.weight(1f),
             color = AppTheme.colors.textPrimary,
         )
 
         Text(
-            text = "${item.point}pt",
+            text = "${item.score}pt",
             color = AppTheme.colors.textPrimary,
         )
     }

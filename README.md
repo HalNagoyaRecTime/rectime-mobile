@@ -40,7 +40,7 @@ Android版のビルドには、Firebase Consoleから取得した設定ファイ
 composeApp/google-services.json
 ```
 
-`google-services.json`はGitの管理対象外です。コミットしないでください。
+`composeApp/google-services.json`はGitの管理対象外です。コミットしないでください。
 CIでAndroid版をビルドする場合は、Repository Secretなどに保存した内容からビルド時に同じパスへ生成してください。
 
 ### iOSローカル設定

@@ -6,19 +6,13 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
-import com.rectime.mobile.core.network.EventDetailResponse
-import com.rectime.mobile.core.network.HttpStatusException
-import com.rectime.mobile.core.network.RankingsResponse
-import com.rectime.mobile.core.network.apiErrorException
-import com.rectime.mobile.core.network.createAppHttpClient
-import com.rectime.mobile.core.network.toModel
+import com.rectime.mobile.core.network.*
 import com.rectime.mobile.feature.event.EventDetailUiState
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpStatusCode
-import io.ktor.http.isSuccess
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +20,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 private const val RANKING_CACHE_KEY = "rankings_v1"
-class RankingViewModel (
+
+class RankingViewModel(
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
 ): ViewModel() {
@@ -66,33 +61,27 @@ class RankingViewModel (
     val uiState: StateFlow<RankingUiState> = _uiState.asStateFlow()
     fun fetchRankings() {
         viewModelScope.launch {
-            _uiState.value = RankingUiState(isLoading = true)
+            _uiState.value = RankingUiState(isLoading = true,)
 
             try {
                 when (
                     val result = fetchWithCacheFallback(
                         fetchLive = {
-                            val response = httpClient.get("$apiBaseUrl/api/v1/ranking/")
+                            val response = httpClient.get("$apiBaseUrl/api/v1/ranking")
                             if (!response.status.isSuccess()) {
                                 throw apiErrorException(response.status, response.bodyAsText())
                             }
-                            response.body< RankingsResponse >()
+                            response.body<RankingsResponse>()
                         },
-                        loadCache = { cache.load<EventDetailResponse>(eventCacheKey) },
-                        saveCache = { cache.save(eventCacheKey, it) },
+                        loadCache = { cache.load<RankingsResponse>(RANKING_CACHE_KEY) },
+                        saveCache = { cache.save(RANKING_CACHE_KEY, it) },
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
-                        // イベント自体は最新でも、呼び出し情報(gathering)は別APIの
-                        // 個別キャッシュにフォールバックしている可能性があるため、
-                        // その結果に応じてisOfflineを立てる。
-                        val (gatherings, gatheringIsOffline) = fetchGatherings()
-                        _uiState.value = EventDetailUiState(
+                        _uiState.value = RankingUiState(
                             isLoading = false,
-                            eventDetail = result.value.toModel(),
-                            gatherings = gatherings,
-                            attendingGatheringId = resolveAttendingGatheringId(gatherings),
-                            isOffline = gatheringIsOffline,
+                            rankingItems = result.value.items.toModelList(),
+                            isOffline = false,
                         )
                     }
 
@@ -101,24 +90,20 @@ class RankingViewModel (
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
                         when (status) {
-                            HttpStatusCode.NotFound -> _uiState.value = EventDetailUiState(
+                            HttpStatusCode.NotFound -> _uiState.value = RankingUiState(
                                 isLoading = false,
-                                error = "イベントが見つかりません",
+                                error = "ランキング一覧が見つかりません",
                             )
 
-                            HttpStatusCode.Unauthorized -> _uiState.value = EventDetailUiState(
+                            HttpStatusCode.Unauthorized -> _uiState.value = RankingUiState(
                                 isLoading = false,
                                 error = "ログイン情報の有効期限が切れました",
                             )
 
                             else -> {
-                                // イベント自体が既にオフライン(キャッシュ)なので、gatheringも
-                                // 通信を試みず直接キャッシュから読む(通信タイムアウトの二重待ちを避ける)。
-                                _uiState.value = EventDetailUiState(
+                                _uiState.value = RankingUiState(
                                     isLoading = false,
-                                    eventDetail = result.value.toModel(),
-                                    gatherings = fetchGatheringsFromCacheOnly(),
-                                    attendingGatheringId = loadAttendingGatheringIdFromCache(),
+                                    rankingItems = result.value.items.toModelList(),
                                     isOffline = true,
                                 )
                                 // 401/404以外の理由でのフォールバックは「オフライン」として
@@ -130,7 +115,7 @@ class RankingViewModel (
 
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
-                        _uiState.value = EventDetailUiState(
+                        _uiState.value = RankingUiState(
                             isLoading = false,
                             error = when ((result.error as? HttpStatusException)?.status) {
                                 HttpStatusCode.NotFound -> "イベントが見つかりません"
@@ -146,8 +131,7 @@ class RankingViewModel (
             } catch (e: Exception) {
                 e.printStackTrace()
                 _uiState.value = RankingUiState(
-                    isLoading = false,
-                    error = "ランキングの取得に失敗しました"
+                    error = "ランキングの取得に失敗しました",
                 )
             }
         }
