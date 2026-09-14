@@ -5,7 +5,6 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -25,6 +24,7 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.RootScreenScaffold
+import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
@@ -34,7 +34,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private val RankingRowHeight = 64.dp
 
-object RankingScreen: Screen {
+object RankingScreen : Screen {
     override val key: String = "ranking"
 
     @Composable
@@ -94,7 +94,7 @@ object RankingScreen: Screen {
         ) {
             when {
                 uiState.error != null && uiState.rankingItems.isEmpty() -> item {
-                    RankingMessage(
+                    StatusMessage(
                         message = uiState.error.orEmpty(),
                         actionLabel = "再取得",
                         onAction = { viewModel.fetchRankings() },
@@ -106,31 +106,6 @@ object RankingScreen: Screen {
                         RankingRow(item = item)
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RankingMessage(
-    message: String,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = message,
-            color = AppTheme.colors.textSecondary,
-        )
-        if (actionLabel != null && onAction != null) {
-            Button(onClick = onAction) {
-                Text(actionLabel)
             }
         }
     }
