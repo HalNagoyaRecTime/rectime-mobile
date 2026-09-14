@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +51,8 @@ import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
 import kotlin.time.Duration.Companion.milliseconds
 
+private val RankingRowHeight = 64.dp
+
 object RankingScreen : Screen {
     override val key: String = "ranking"
 
@@ -61,43 +64,25 @@ object RankingScreen : Screen {
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val lazyListState = rememberLazyListState()
         var hasAutoScrolled by remember { mutableStateOf(false) }
+        val density = LocalDensity.current
 
         LaunchedEffect(uiState.rankingItems) {
             if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
                 val myTeamIndex = uiState.rankingItems.indexOfFirst { it.isMyTeam }
                 if (myTeamIndex >= 0) {
-                    // まず一位のチームを見せる
                     lazyListState.scrollToItem(index = 0)
                     delay(300.milliseconds)
 
-                    // 自チーム行が実際にレイアウトされるまで待つ
-                    val myTeamItemInfo = snapshotFlow {
-                        lazyListState.layoutInfo.visibleItemsInfo
-                            .firstOrNull { it.index == myTeamIndex }
-                    }.first { it != null }!!
+                    val itemHeightPx = with(receiver = density) { RankingRowHeight.toPx() }
+                    val viewportHeightPx = lazyListState.layoutInfo.viewportSize.height.toFloat()
 
-                    val layoutInfo = lazyListState.layoutInfo
+                    val predictedItemOffset = myTeamIndex * itemHeightPx
+                    val extraOffsetPx = with(density) { 100.dp.toPx() }  // 微調整用、仮の値
+                    val targetScrollPx = predictedItemOffset - (viewportHeightPx / 2f) + (itemHeightPx / 2f) + extraOffsetPx
 
-                    // リスト内で実際にコンテンツを表示できる範囲
-                    val viewportStart = layoutInfo.viewportStartOffset
-                    val viewportEnd = layoutInfo.viewportEndOffset
-
-                    // viewportの中央位置
-                    val viewportCenter =
-                        viewportStart + (viewportEnd - viewportStart) / 2
-
-                    // 自チーム行の中央位置
-                    val itemCenter =
-                        myTeamItemInfo.offset + myTeamItemInfo.size / 2
-
-                    // 自チーム行の中央とviewport中央との差
-                    val scrollDistancePx =
-                        itemCenter - viewportCenter
-
-                    // 差の分だけアニメーションで補正
                     lazyListState.animateScrollBy(
-                        value = scrollDistancePx.toFloat(),
-                        animationSpec = tween(durationMillis = 1500)
+                        value = targetScrollPx,
+                        animationSpec = tween(durationMillis = 1500),
                     )
                 }
                 hasAutoScrolled = true
@@ -139,6 +124,7 @@ private fun RankingRow(item: RankingItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(RankingRowHeight)
             .background(
                 color = if (item.isMyTeam) {
                     AppTheme.colors.surfaceAccent  // 自分のチームのハイライト色(仮)
