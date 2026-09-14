@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.delay
@@ -35,8 +36,9 @@ object RankingScreen: Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
+        val myTeamId = LocalUserProfile.current?.teamId
         val viewModel: RankingViewModel = viewModel {
-            RankingViewModel()
+            RankingViewModel(myTeamId = myTeamId)
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val lazyListState = rememberLazyListState()
@@ -62,8 +64,11 @@ object RankingScreen: Screen {
                         value = targetScrollPx,
                         animationSpec = tween(durationMillis = 1500),
                     )
+                    // 所属チーム情報がランキングより遅れて届いた場合に備え、対象行が
+                    // 見つかった時だけ完了扱いにする。見つからない間は次回の更新で
+                    // 再度スクロールを試みる。
+                    hasAutoScrolled = true
                 }
-                hasAutoScrolled = true
             }
         }
 
