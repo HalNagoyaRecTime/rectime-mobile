@@ -2,25 +2,13 @@ package com.rectime.mobile.feature.ranking
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,7 +27,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private val RankingRowHeight = 64.dp
 
-object RankingScreen : Screen {
+object RankingScreen: Screen {
     override val key: String = "ranking"
 
     @Composable
@@ -67,7 +55,9 @@ object RankingScreen : Screen {
         RootScreenScaffold(
             title = "ランキング",
             lazyListState = lazyListState,
-            onTrailingClick = { /* TODO: 表示切替機能を実装予定 */ },
+            onTrailingClick = {
+                viewModel.fetchRankings()
+            },
             trailing = {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(
@@ -104,7 +94,7 @@ private fun RankingRow(item: RankingItem) {
                 color = if (item.isMyTeam) {
                     AppTheme.colors.surfaceAccent  // 自分のチームのハイライト色(仮)
                 } else {
-                    androidx.compose.ui.graphics.Color.Transparent
+                    Color.Transparent
                 },
             )
             .padding(vertical = 12.dp),
@@ -115,7 +105,7 @@ private fun RankingRow(item: RankingItem) {
             modifier = Modifier
                 .width(4.dp)
                 .height(32.dp)
-                .background(color = accentColor ?: androidx.compose.ui.graphics.Color.Transparent)
+                .background(color = accentColor ?: Color.Transparent)
         )
 
         Spacer(modifier = Modifier.width(16.dp))
@@ -152,7 +142,7 @@ private fun rankAccentColor(rank: Int): Color? = when (rank) {
 private fun MarqueeText(
     text: String,
     modifier: Modifier = Modifier,
-    color: androidx.compose.ui.graphics.Color = AppTheme.colors.textPrimary,
+    color: Color = AppTheme.colors.textPrimary,
 ) {
     Text(
         text = text,
