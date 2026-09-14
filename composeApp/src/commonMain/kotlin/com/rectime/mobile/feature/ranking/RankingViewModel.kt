@@ -31,7 +31,7 @@ class RankingViewModel(
     initialMyTeamId: Int? = null,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
-): ViewModel() {
+) : ViewModel() {
     private val _uiState = MutableStateFlow(
         RankingUiState(
             isLoading = true
@@ -102,15 +102,12 @@ class RankingViewModel(
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
                         when (status) {
-                            HttpStatusCode.NotFound -> _uiState.value = RankingUiState(
-                                isLoading = false,
-                                error = "ランキング一覧が見つかりません",
-                            )
-
-                            HttpStatusCode.Unauthorized -> _uiState.value = RankingUiState(
-                                isLoading = false,
-                                error = "ログイン情報の有効期限が切れました",
-                            )
+                            HttpStatusCode.NotFound, HttpStatusCode.Unauthorized -> {
+                                _uiState.value = RankingUiState(
+                                    isLoading = false,
+                                    error = rankingErrorMessage(status),
+                                )
+                            }
 
                             else -> {
                                 _uiState.value = RankingUiState(
@@ -129,11 +126,7 @@ class RankingViewModel(
                         result.error.printStackTrace()
                         _uiState.value = RankingUiState(
                             isLoading = false,
-                            error = when ((result.error as? HttpStatusException)?.status) {
-                                HttpStatusCode.NotFound -> "ランキング一覧が見つかりません"
-                                HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
-                                else -> "ランキング情報の取得に失敗しました"
-                            },
+                            error = rankingErrorMessage((result.error as? HttpStatusException)?.status),
                         )
                     }
                 }
@@ -153,4 +146,10 @@ class RankingViewModel(
         super.onCleared()
         httpClient.close()
     }
+}
+
+private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status) {
+    HttpStatusCode.NotFound -> "ランキング一覧が見つかりません"
+    HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
+    else -> "ランキング情報の取得に失敗しました"
 }
