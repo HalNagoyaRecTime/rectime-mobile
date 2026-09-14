@@ -4,13 +4,28 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,12 +53,18 @@ object RankingScreen: Screen {
     override fun Content(navigationController: NavigationController) {
         val myTeamId = LocalUserProfile.current?.teamId
         val viewModel: RankingViewModel = viewModel {
-            RankingViewModel(myTeamId = myTeamId)
+            RankingViewModel(initialMyTeamId = myTeamId)
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val lazyListState = rememberLazyListState()
         var hasAutoScrolled by remember { mutableStateOf(false) }
         val density = LocalDensity.current
+
+        // セッションのユーザー情報が後から更新されteamIdが変わった場合でも、
+        // 生成済みのViewModelにハイライト対象を反映させる。
+        LaunchedEffect(myTeamId) {
+            viewModel.updateMyTeamId(myTeamId)
+        }
 
         LaunchedEffect(uiState.rankingItems) {
             if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
@@ -95,8 +116,45 @@ object RankingScreen: Screen {
                 }
             },
         ) {
-            items(uiState.rankingItems) { item ->
-                RankingRow(item = item)
+            when {
+                uiState.error != null && uiState.rankingItems.isEmpty() -> item {
+                    RankingMessage(
+                        message = uiState.error.orEmpty(),
+                        actionLabel = "再取得",
+                        onAction = { viewModel.fetchRankings() },
+                    )
+                }
+
+                else -> {
+                    items(uiState.rankingItems) { item ->
+                        RankingRow(item = item)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RankingMessage(
+    message: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = message,
+            color = AppTheme.colors.textSecondary,
+        )
+        if (actionLabel != null && onAction != null) {
+            Button(onClick = onAction) {
+                Text(actionLabel)
             }
         }
     }
