@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.ranking
 
 data class RankingItem(
     val rank: Int,
+    val teamId: Int,
     val teamName: String,
     val score: Int,
     val isMyTeam: Boolean = false,

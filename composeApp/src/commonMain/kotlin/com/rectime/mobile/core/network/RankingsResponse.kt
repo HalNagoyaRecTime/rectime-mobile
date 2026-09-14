@@ -28,6 +28,7 @@ data class RankingsResponse(
     ) {
         fun toModel(myTeamId: Int? = null) = RankingItem(
             rank = rank,
+            teamId = teamId,
             teamName = teamName,
             score = scores,
             isMyTeam = myTeamId != null && teamId == myTeamId,

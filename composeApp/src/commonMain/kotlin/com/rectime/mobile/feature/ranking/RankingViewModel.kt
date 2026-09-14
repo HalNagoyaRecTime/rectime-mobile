@@ -6,22 +6,29 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
-import com.rectime.mobile.core.network.*
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
+import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.network.RankingsResponse
+import com.rectime.mobile.core.network.apiErrorException
+import com.rectime.mobile.core.network.createAppHttpClient
+import com.rectime.mobile.core.network.toModelList
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val RANKING_CACHE_KEY = "rankings_v1"
 
 class RankingViewModel(
-    private val myTeamId: Int? = null,
+    initialMyTeamId: Int? = null,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
 ): ViewModel() {
@@ -33,13 +40,40 @@ class RankingViewModel(
 
     val uiState: StateFlow<RankingUiState> = _uiState.asStateFlow()
 
+    // ログイン中のユーザーが後から解決される(セッションのユーザー情報が
+    // 再取得で更新される)場合があるため、コンストラクタでの固定値ではなく
+    // updateMyTeamIdで差し替え可能にしている。
+    private var myTeamId: Int? = initialMyTeamId
+
+    private var fetchJob: Job? = null
+
     init {
         fetchRankings()
     }
 
+    // 所属チームIDが取得済みのランキングより後から解決した場合に、既に表示中の
+    // 行のisMyTeamを再計算する。再取得はせず、保持しているteamIdとの比較のみで
+    // ハイライト・自動スクロール対象を更新する。
+    fun updateMyTeamId(myTeamId: Int?) {
+        if (this.myTeamId == myTeamId) return
+        this.myTeamId = myTeamId
+        _uiState.update { state ->
+            state.copy(
+                rankingItems = state.rankingItems.map { item ->
+                    item.copy(isMyTeam = myTeamId != null && item.teamId == myTeamId)
+                },
+            )
+        }
+    }
+
     fun fetchRankings() {
-        viewModelScope.launch {
-            _uiState.value = RankingUiState(isLoading = true)
+        // 更新ボタンの連打で複数の取得が同時に走ると、後から届いた新しい結果を
+        // 古い結果が上書きしてしまうため、前回分をキャンセルしてから開始する。
+        fetchJob?.cancel()
+        fetchJob = viewModelScope.launch {
+            // 手動更新時に一覧が一瞬空にならないよう、既存のrankingItemsは
+            // 保持したままローディング状態にする。
+            _uiState.update { it.copy(isLoading = true, error = null) }
 
             try {
                 when (
@@ -96,9 +130,9 @@ class RankingViewModel(
                         _uiState.value = RankingUiState(
                             isLoading = false,
                             error = when ((result.error as? HttpStatusException)?.status) {
-                                HttpStatusCode.NotFound -> "イベントが見つかりません"
+                                HttpStatusCode.NotFound -> "ランキング一覧が見つかりません"
                                 HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
-                                else -> "イベント情報の取得に失敗しました"
+                                else -> "ランキング情報の取得に失敗しました"
                             },
                         )
                     }
@@ -113,5 +147,10 @@ class RankingViewModel(
                 )
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        httpClient.close()
     }
 }
