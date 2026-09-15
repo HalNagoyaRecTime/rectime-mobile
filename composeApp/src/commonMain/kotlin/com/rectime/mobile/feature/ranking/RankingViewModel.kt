@@ -60,7 +60,7 @@ class RankingViewModel(
         _uiState.update { state ->
             state.copy(
                 rankingItems = state.rankingItems.map { item ->
-                    item.copy(isMyTeam = myTeamId != null && item.teamId == myTeamId)
+                    item.copy(isMyTeam = isMyRankingTeam(item.teamId, myTeamId))
                 },
             )
         }
@@ -72,8 +72,9 @@ class RankingViewModel(
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
             // 手動更新時に一覧が一瞬空にならないよう、既存のrankingItemsは
-            // 保持したままローディング状態にする。
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            // 保持したままローディング状態にする。isOfflineは今回の結果が
+            // 出るまで意味を持たないため、古い表示を引きずらないようリセットする。
+            _uiState.update { it.copy(isLoading = true, error = null, isOffline = false) }
 
             try {
                 when (
@@ -101,47 +102,39 @@ class RankingViewModel(
                         // 削除済み(404)・セッション切れ(401)の古いキャッシュを誤表示しないよう、
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
-                        when (status) {
-                            HttpStatusCode.NotFound, HttpStatusCode.Unauthorized -> {
-                                _uiState.value = RankingUiState(
-                                    isLoading = false,
-                                    error = rankingErrorMessage(status),
-                                )
-                            }
-
-                            else -> {
-                                _uiState.value = RankingUiState(
-                                    isLoading = false,
-                                    rankingItems = result.value.items.toModelList(myTeamId),
-                                    isOffline = true,
-                                )
-                                // 401/404以外の理由でのフォールバックは「オフライン」として
-                                // 静かに隠れてしまうため、原因を追えるようログには残す。
-                                result.error.printStackTrace()
-                            }
+                        if (status.clearsStaleRankingData()) {
+                            _uiState.value = RankingUiState(
+                                isLoading = false,
+                                error = rankingErrorMessage(status),
+                            )
+                        } else {
+                            _uiState.value = RankingUiState(
+                                isLoading = false,
+                                rankingItems = result.value.items.toModelList(myTeamId),
+                                isOffline = true,
+                            )
+                            // 401/404以外の理由でのフォールバックは「オフライン」として
+                            // 静かに隠れてしまうため、原因を追えるようログには残す。
+                            result.error.printStackTrace()
                         }
                     }
 
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
                         val status = (result.error as? HttpStatusException)?.status
-                        when (status) {
-                            HttpStatusCode.NotFound, HttpStatusCode.Unauthorized -> {
-                                // 削除済み・セッション切れは、直前まで表示していた一覧が
-                                // あっても誤表示しないよう明示的に消す。
-                                _uiState.value = RankingUiState(
-                                    isLoading = false,
-                                    error = rankingErrorMessage(status),
-                                )
-                            }
-
-                            else -> {
-                                // キャッシュも使えない一時的な通信障害等では、直前まで表示
-                                // していた一覧を消さずに残し、エラーは上位(画面側)で
-                                // 一時的に知らせる。
-                                _uiState.update {
-                                    it.copy(isLoading = false, error = rankingErrorMessage(status))
-                                }
+                        if (status.clearsStaleRankingData()) {
+                            // 削除済み・セッション切れは、直前まで表示していた一覧が
+                            // あっても誤表示しないよう明示的に消す。
+                            _uiState.value = RankingUiState(
+                                isLoading = false,
+                                error = rankingErrorMessage(status),
+                            )
+                        } else {
+                            // キャッシュも使えない一時的な通信障害等では、直前まで表示
+                            // していた一覧を消さずに残し、エラーは上位(画面側)で
+                            // 一時的に知らせる。
+                            _uiState.update {
+                                it.copy(isLoading = false, error = rankingErrorMessage(status))
                             }
                         }
                     }
@@ -152,7 +145,7 @@ class RankingViewModel(
             } catch (e: Exception) {
                 e.printStackTrace()
                 _uiState.update {
-                    it.copy(isLoading = false, error = "ランキングの取得に失敗しました")
+                    it.copy(isLoading = false, error = rankingErrorMessage(null))
                 }
             }
         }
@@ -169,3 +162,8 @@ private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status)
     HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
     else -> "ランキング情報の取得に失敗しました"
 }
+
+// 削除済み(404)・セッション切れ(401)は、キャッシュや直前の表示内容が
+// あっても誤表示しないよう一覧を消してエラーを優先する対象。
+private fun HttpStatusCode?.clearsStaleRankingData(): Boolean =
+    this == HttpStatusCode.NotFound || this == HttpStatusCode.Unauthorized

@@ -55,6 +55,7 @@ object RankingScreen : Screen {
             RankingViewModel(initialMyTeamId = myTeamId)
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+        val hasRankingItems = uiState.rankingItems.isNotEmpty()
         val lazyListState = rememberLazyListState()
         val snackbarHostState = remember { SnackbarHostState() }
         var hasAutoScrolled by remember { mutableStateOf(false) }
@@ -70,7 +71,7 @@ object RankingScreen : Screen {
         // スナックバーで一時的に知らせる(空の状態からの失敗は下のStatusMessageが担当)。
         LaunchedEffect(uiState.error) {
             val message = uiState.error
-            if (message != null && uiState.rankingItems.isNotEmpty()) {
+            if (message != null && hasRankingItems) {
                 snackbarHostState.showSnackbar(message)
             }
         }
@@ -127,7 +128,7 @@ object RankingScreen : Screen {
             },
         ) {
             when {
-                uiState.error != null && uiState.rankingItems.isEmpty() -> item {
+                uiState.error != null && !hasRankingItems -> item {
                     StatusMessage(
                         message = uiState.error.orEmpty(),
                         actionLabel = "再取得",
