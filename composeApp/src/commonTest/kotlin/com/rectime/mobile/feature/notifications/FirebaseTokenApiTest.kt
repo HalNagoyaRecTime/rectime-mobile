@@ -44,7 +44,11 @@ class FirebaseTokenApiTest {
         }
         val api = testApi(client)
 
-        api.register(fcmToken = "firebase-token", accessToken = "access-token")
+        api.register(
+            fcmToken = "firebase-token",
+            platform = FirebasePlatform.Android,
+            accessToken = "access-token",
+        )
 
         val request = requireNotNull(capturedRequest)
         assertEquals("$testBaseUrl/api/v1/firebase-tokens", request.url.toString())
@@ -78,7 +82,11 @@ class FirebaseTokenApiTest {
         }
         val api = testApi(client)
 
-        api.register(fcmToken = "firebase-token", accessToken = "stale-persisted-token")
+        api.register(
+            fcmToken = "firebase-token",
+            platform = FirebasePlatform.Android,
+            accessToken = "stale-persisted-token",
+        )
 
         val request = requireNotNull(capturedRequest)
         // リクエストには渡されたaccessTokenが使われる。
@@ -94,20 +102,24 @@ class FirebaseTokenApiTest {
     fun registerExposesBackendFailureWithoutLeakingItIntoMessage() = runTest {
         val client = mockAppHttpClient {
             respond(
-                content = """{"error":{"code":"UNAUTHORIZED","message":"Authentication required"}}""",
-                status = HttpStatusCode.Unauthorized,
+                content = """{"error":{"code":"SERVICE_UNAVAILABLE","message":"Service unavailable"}}""",
+                status = HttpStatusCode.ServiceUnavailable,
                 headers = jsonHeaders,
             )
         }
         val api = testApi(client)
 
         val error = assertFailsWith<HttpStatusException> {
-            api.register(fcmToken = "firebase-token", accessToken = "expired-token")
+            api.register(
+                fcmToken = "firebase-token",
+                platform = FirebasePlatform.Android,
+                accessToken = "expired-token",
+            )
         }
 
-        assertEquals(HttpStatusCode.Unauthorized, error.status)
-        assertEquals("UNAUTHORIZED", error.code)
-        assertEquals("Authentication required", error.message)
+        assertEquals(HttpStatusCode.ServiceUnavailable, error.status)
+        assertEquals("SERVICE_UNAVAILABLE", error.code)
+        assertEquals("Service unavailable", error.message)
         assertFalse(error.message.orEmpty().contains("expired-token"))
         assertFalse(error.message.orEmpty().contains("firebase-token"))
     }
@@ -120,11 +132,45 @@ class FirebaseTokenApiTest {
         )
 
         assertFailsWith<IllegalArgumentException> {
-            api.register(fcmToken = "  ", accessToken = "access-token")
+            api.register(
+                fcmToken = "  ",
+                platform = FirebasePlatform.Android,
+                accessToken = "access-token",
+            )
         }
         assertFailsWith<IllegalArgumentException> {
-            api.register(fcmToken = "firebase-token", accessToken = "")
+            api.register(
+                fcmToken = "firebase-token",
+                platform = FirebasePlatform.Android,
+                accessToken = "",
+            )
         }
+    }
+
+    @Test
+    fun registerSendsIosPlatform() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val api = FirebaseTokenApi(
+            client = mockAppHttpClient { request ->
+                capturedRequest = request
+                respond(
+                    content = """{"firebase_token_id":1}""",
+                    status = HttpStatusCode.OK,
+                    headers = jsonHeaders,
+                )
+            },
+            baseUrl = testBaseUrl,
+        )
+
+        api.register(
+            fcmToken = "ios-firebase-token",
+            platform = FirebasePlatform.Ios,
+            accessToken = "access-token",
+        )
+
+        val body = (requireNotNull(capturedRequest).body as TextContent).text
+        assertTrue(body.contains(""""fcmToken":"ios-firebase-token""""))
+        assertTrue(body.contains(""""platform":"ios""""))
     }
 
     @Test
@@ -136,7 +182,11 @@ class FirebaseTokenApiTest {
         }
         val api = FirebaseTokenApi(client = client, baseUrl = "https://external.example")
 
-        api.register(fcmToken = "firebase-token", accessToken = "access-token")
+        api.register(
+            fcmToken = "firebase-token",
+            platform = FirebasePlatform.Android,
+            accessToken = "access-token",
+        )
 
         val request = requireNotNull(capturedRequest)
         assertFalse(request.headers.contains(HttpHeaders.Authorization))

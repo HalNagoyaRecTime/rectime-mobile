@@ -20,7 +20,11 @@ class FirebaseTokenApi(
 ) {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/firebase-tokens"
 
-    suspend fun register(fcmToken: String, accessToken: String) {
+    suspend fun register(
+        fcmToken: String,
+        platform: FirebasePlatform,
+        accessToken: String,
+    ) {
         require(fcmToken.isNotBlank()) { "FCM token must not be blank" }
         require(accessToken.isNotBlank()) { "Access token must not be blank" }
 
@@ -38,7 +42,7 @@ class FirebaseTokenApi(
             setBody(
                 RegisterFirebaseTokenRequest(
                     fcmToken = fcmToken,
-                    platform = ANDROID_PLATFORM,
+                    platform = platform.wireValue,
                 ),
             )
         }
@@ -52,10 +56,13 @@ class FirebaseTokenApi(
     }
 }
 
+enum class FirebasePlatform(val wireValue: String) {
+    Ios("ios"),
+    Android("android"),
+}
+
 @Serializable
 internal data class RegisterFirebaseTokenRequest(
     val fcmToken: String,
     val platform: String,
 )
-
-private const val ANDROID_PLATFORM = "android"

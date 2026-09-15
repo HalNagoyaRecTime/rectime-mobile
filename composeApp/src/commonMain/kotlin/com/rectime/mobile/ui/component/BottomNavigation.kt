@@ -50,6 +50,7 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.DrawableResource
@@ -107,6 +108,7 @@ fun BottomNavigationBar(
     session: AuthSession,
     onLogout: () -> Unit,
     hasUnreadNotifications: Boolean,
+    notificationPermissionStartup: NotificationPermissionStartup?,
     modifier: Modifier = Modifier,
 ) {
     val items = listOf(
@@ -124,7 +126,11 @@ fun BottomNavigationBar(
         showBadge = hasUnreadNotifications,
     ),
     NavigationItemConfig(
-        SettingsScreen(session = session, onLogout = onLogout),
+        SettingsScreen(
+            session = session,
+            onLogout = onLogout,
+            notificationPermissionStartup = notificationPermissionStartup,
+        ),
         "設定",
         Res.drawable.ic_settings_outline,
         Res.drawable.ic_settings_fill,
