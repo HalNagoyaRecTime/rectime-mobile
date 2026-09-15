@@ -14,6 +14,7 @@ import com.rectime.mobile.core.network.toModelList
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 private const val RANKING_CACHE_KEY = "rankings_v1"
+private const val RANKING_PAGE_SIZE = 100
 
 class RankingViewModel(
     initialMyTeamId: Int? = null,
@@ -79,13 +81,7 @@ class RankingViewModel(
             try {
                 when (
                     val result = fetchWithCacheFallback(
-                        fetchLive = {
-                            val response = httpClient.get("$apiBaseUrl/api/v1/ranking")
-                            if (!response.status.isSuccess()) {
-                                throw apiErrorException(response.status, response.bodyAsText())
-                            }
-                            response.body<RankingsResponse>()
-                        },
+                        fetchLive = { fetchAllRankings(httpClient) },
                         loadCache = { cache.load<RankingsResponse>(RANKING_CACHE_KEY) },
                         saveCache = { cache.save(RANKING_CACHE_KEY, it) },
                     )
@@ -155,6 +151,28 @@ class RankingViewModel(
         super.onCleared()
         httpClient.close()
     }
+}
+
+// バックエンドはlimit/offset省略時、既定件数(50件)しか返さない。チーム数が
+// それを超えても取りこぼさないよう、totalに達するまでページングして全件集める。
+private suspend fun fetchAllRankings(httpClient: HttpClient): RankingsResponse {
+    val items = mutableListOf<RankingsResponse.Ranking>()
+    var offset = 0
+
+    do {
+        val response = httpClient.get("$apiBaseUrl/api/v1/ranking") {
+            parameter("limit", RANKING_PAGE_SIZE)
+            parameter("offset", offset)
+        }
+        if (!response.status.isSuccess()) {
+            throw apiErrorException(response.status, response.bodyAsText())
+        }
+        val page = response.body<RankingsResponse>()
+        items += page.items
+        offset += page.items.size
+    } while (page.items.isNotEmpty() && offset < page.total)
+
+    return RankingsResponse(items = items, total = offset, limit = RANKING_PAGE_SIZE, offset = 0)
 }
 
 private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status) {
