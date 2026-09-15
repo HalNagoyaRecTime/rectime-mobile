@@ -124,10 +124,26 @@ class RankingViewModel(
 
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
-                        _uiState.value = RankingUiState(
-                            isLoading = false,
-                            error = rankingErrorMessage((result.error as? HttpStatusException)?.status),
-                        )
+                        val status = (result.error as? HttpStatusException)?.status
+                        when (status) {
+                            HttpStatusCode.NotFound, HttpStatusCode.Unauthorized -> {
+                                // 削除済み・セッション切れは、直前まで表示していた一覧が
+                                // あっても誤表示しないよう明示的に消す。
+                                _uiState.value = RankingUiState(
+                                    isLoading = false,
+                                    error = rankingErrorMessage(status),
+                                )
+                            }
+
+                            else -> {
+                                // キャッシュも使えない一時的な通信障害等では、直前まで表示
+                                // していた一覧を消さずに残し、エラーは上位(画面側)で
+                                // 一時的に知らせる。
+                                _uiState.update {
+                                    it.copy(isLoading = false, error = rankingErrorMessage(status))
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -135,9 +151,9 @@ class RankingViewModel(
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.value = RankingUiState(
-                    error = "ランキングの取得に失敗しました",
-                )
+                _uiState.update {
+                    it.copy(isLoading = false, error = "ランキングの取得に失敗しました")
+                }
             }
         }
     }
