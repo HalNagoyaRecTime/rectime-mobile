@@ -1,6 +1,7 @@
 package com.rectime.mobile.core.network
 
 import com.rectime.mobile.feature.ranking.RankingItem
+import com.rectime.mobile.feature.ranking.isMyRankingTeam
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -31,7 +32,7 @@ data class RankingsResponse(
             teamId = teamId,
             teamName = teamName,
             score = scores,
-            isMyTeam = myTeamId != null && teamId == myTeamId,
+            isMyTeam = isMyRankingTeam(teamId, myTeamId),
         )
     }
 }
