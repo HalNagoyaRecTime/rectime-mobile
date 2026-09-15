@@ -354,7 +354,7 @@ class AuthApiTest {
     }
 
     @Test
-    fun currentUserMapsClassRoomIdAndTeamId() = runTest {
+    fun currentUserMapsTeamIdAndIgnoresUnknownClassRoomId() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -378,12 +378,11 @@ class AuthApiTest {
 
         val user = api.currentUser("access-token")
 
-        assertEquals(12, user.classRoomId)
         assertEquals(34, user.teamId)
     }
 
     @Test
-    fun currentUserMapsClassRoomIdAndTeamIdAsNullWhenAbsent() = runTest {
+    fun currentUserMapsTeamIdAsNullWhenAbsent() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -405,7 +404,6 @@ class AuthApiTest {
 
         val user = api.currentUser("access-token")
 
-        assertNull(user.classRoomId)
         assertNull(user.teamId)
     }
 

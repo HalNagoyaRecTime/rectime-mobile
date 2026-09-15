@@ -28,7 +28,6 @@ class AuthSessionCodecTest {
                 avatarUpdatedAt = "2026-07-31",
                 studentIdNumber = "55024",
                 classRoomName = "1年Aクラス",
-                classRoomId = 12,
                 teamId = 34,
                 role = Role.Student,
             ),
@@ -103,7 +102,7 @@ class AuthSessionCodecTest {
         assertEquals(null, decoded?.user?.classRoomName)
     }
     @Test
-    fun decodeRestoresLegacyElevenPartSessionWithoutClassRoomIdAndTeamId() {
+    fun decodeRestoresLegacyElevenPartSessionWithoutTeamId() {
         val legacyEncoded = listOf(
             "token123", "refresh456", "3600",
             "6", "test@example.com", "テスト太郎",
@@ -116,7 +115,6 @@ class AuthSessionCodecTest {
         assertEquals("6", decoded?.user?.id)
         assertEquals(Role.Student, decoded?.user?.role)
         assertEquals("1年Aクラス", decoded?.user?.classRoomName)
-        assertNull(decoded?.user?.classRoomId)
         assertNull(decoded?.user?.teamId)
     }
 

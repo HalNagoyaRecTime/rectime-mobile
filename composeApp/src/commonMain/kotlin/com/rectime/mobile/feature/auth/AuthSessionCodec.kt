@@ -13,7 +13,6 @@ fun encodeAuthSession(session: AuthSession): String =
         session.user.studentIdNumber ?: "",
         session.user.classRoomName ?: "",
         session.user.role?.name ?: "",
-        session.user.classRoomId?.toString() ?: "",
         session.user.teamId?.toString() ?: "",
     ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
 
@@ -34,7 +33,7 @@ fun decodePendingAuth(value: String): PendingAuth? {
 
 fun decodeAuthSession(value: String): AuthSession? {
     val parts = value.split(".")
-    if (parts.size !in setOf(6, 8, 9, 11, 13)) return null
+    if (parts.size !in setOf(6, 8, 9, 11, 12)) return null
 
     return runCatching {
         val avatarUrl = if (parts.size >= 8) {
@@ -55,14 +54,11 @@ fun decodeAuthSession(value: String): AuthSession? {
         } else null
         val role = when (parts.size) {
             9 -> Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
-            11, 13 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
+            11, 12 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
             else -> null
         }
-        val classRoomId = if (parts.size == 13) {
+        val teamId = if (parts.size == 12) {
             parts[11].decodeBase64UrlToString().toIntOrNull()
-        } else null
-        val teamId = if (parts.size == 13) {
-            parts[12].decodeBase64UrlToString().toIntOrNull()
         } else null
 
         AuthSession(
@@ -77,7 +73,6 @@ fun decodeAuthSession(value: String): AuthSession? {
                 avatarUpdatedAt = avatarUpdatedAt,
                 studentIdNumber = studentIdNumber,
                 classRoomName = classRoomName,
-                classRoomId = classRoomId,
                 teamId = teamId,
                 role = role,
             ),

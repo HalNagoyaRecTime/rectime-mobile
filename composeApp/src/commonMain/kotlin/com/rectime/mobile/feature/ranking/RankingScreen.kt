@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +56,7 @@ object RankingScreen : Screen {
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val lazyListState = rememberLazyListState()
+        val snackbarHostState = remember { SnackbarHostState() }
         var hasAutoScrolled by remember { mutableStateOf(false) }
         val density = LocalDensity.current
 
@@ -62,6 +64,15 @@ object RankingScreen : Screen {
         // 生成済みのViewModelにハイライト対象を反映させる。
         LaunchedEffect(myTeamId) {
             viewModel.updateMyTeamId(myTeamId)
+        }
+
+        // 一覧が既に表示されている状態での取得失敗は、全画面エラーで隠さず
+        // スナックバーで一時的に知らせる(空の状態からの失敗は下のStatusMessageが担当)。
+        LaunchedEffect(uiState.error) {
+            val message = uiState.error
+            if (message != null && uiState.rankingItems.isNotEmpty()) {
+                snackbarHostState.showSnackbar(message)
+            }
         }
 
         LaunchedEffect(uiState.rankingItems) {
@@ -94,6 +105,7 @@ object RankingScreen : Screen {
         RootScreenScaffold(
             title = "ランキング",
             lazyListState = lazyListState,
+            snackbarHostState = snackbarHostState,
             onTrailingClick = {
                 viewModel.fetchRankings()
             },
@@ -124,6 +136,20 @@ object RankingScreen : Screen {
                 }
 
                 else -> {
+                    if (uiState.isOffline) {
+                        item {
+                            Text(
+                                text = "オフライン表示中(前回取得した内容です)",
+                                color = AppTheme.colors.textSecondary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = AppTheme.layout.screenHorizontalPadding,
+                                        vertical = 8.dp,
+                                    ),
+                            )
+                        }
+                    }
                     items(uiState.rankingItems) { item ->
                         RankingRow(item = item)
                     }

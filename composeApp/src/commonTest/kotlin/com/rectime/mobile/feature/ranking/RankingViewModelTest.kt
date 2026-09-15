@@ -27,6 +27,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -158,6 +159,104 @@ class RankingViewModelTest {
         assertEquals(1, requestCount)
     }
 
+    @Test
+    fun fetchRankingsClearsListAndShowsErrorWhenCachedResultIs404() = runTest(testDispatcher) {
+        var requestCount = 0
+        val viewModel = buildViewModel(
+            client = mockClient {
+                requestCount++
+                if (requestCount == 1) {
+                    respondJson(rankingsJsonOf(RankingFixture(1, 10, "チームA", 100)))
+                } else {
+                    respond(content = "", status = HttpStatusCode.NotFound, headers = jsonHeaders)
+                }
+            },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // 削除済み(404)は、キャッシュに残っていた一覧を誤表示せず消す。
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertEquals("ランキング一覧が見つかりません", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun fetchRankingsClearsListAndShowsErrorWhenCachedResultIs401() = runTest(testDispatcher) {
+        var requestCount = 0
+        val viewModel = buildViewModel(
+            client = mockClient {
+                requestCount++
+                if (requestCount == 1) {
+                    respondJson(rankingsJsonOf(RankingFixture(1, 10, "チームA", 100)))
+                } else {
+                    respond(content = "", status = HttpStatusCode.Unauthorized, headers = jsonHeaders)
+                }
+            },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // セッション切れ(401)は、キャッシュに残っていた一覧を誤表示せず消す。
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertEquals("ログイン情報の有効期限が切れました", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun fetchRankingsFallsBackToCachedListAndMarksOfflineOnOtherErrors() = runTest(testDispatcher) {
+        var requestCount = 0
+        val viewModel = buildViewModel(
+            client = mockClient {
+                requestCount++
+                if (requestCount == 1) {
+                    respondJson(rankingsJsonOf(RankingFixture(1, 10, "チームA", 100)))
+                } else {
+                    respond(content = "", status = HttpStatusCode.InternalServerError, headers = jsonHeaders)
+                }
+            },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // 401/404以外の理由でキャッシュへフォールバックする場合は、一覧を残しつつ
+        // isOfflineだけを立てる(エラーメッセージは出さない)。
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+        assertTrue(viewModel.uiState.value.isOffline)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun fetchRankingsPreservesListWhenRefetchFailsWithNoUsableCache() = runTest(testDispatcher) {
+        var requestCount = 0
+        val viewModel = buildViewModel(
+            cache = LocalCache(NeverPersistingKeyValueStore()),
+            client = mockClient {
+                requestCount++
+                if (requestCount == 1) {
+                    respondJson(rankingsJsonOf(RankingFixture(1, 10, "チームA", 100)))
+                } else {
+                    respond(content = "", status = HttpStatusCode.InternalServerError, headers = jsonHeaders)
+                }
+            },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // キャッシュも使えない完全な失敗では、直前まで表示していた一覧を消さない。
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+        assertEquals("ランキング情報の取得に失敗しました", viewModel.uiState.value.error)
+    }
+
     private fun buildViewModel(
         client: HttpClient,
         initialMyTeamId: Int? = null,
@@ -199,6 +298,17 @@ class RankingViewModelTest {
         override suspend fun clear() {
             values.clear()
         }
+    }
+
+    // 「保存はできるが、後で読み出すと必ず失われている(キャッシュ消失)」状況を
+    // シミュレートするためのフェイク。CachedFetchResult.Failed経路(loadCacheが
+    // 何も返さない)を、事前のsaveCache成功有無に関わらず強制的に発生させる。
+    private class NeverPersistingKeyValueStore : KeyValueStore {
+        override suspend fun getString(key: String): String? = null
+
+        override suspend fun putString(key: String, value: String) = Unit
+
+        override suspend fun clear() = Unit
     }
 
     private data class RankingFixture(
