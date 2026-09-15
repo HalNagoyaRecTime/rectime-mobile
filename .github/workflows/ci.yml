@@ -128,6 +128,7 @@ jobs:
       # GoogleService-Info.plist が無い場合は実行時に FCM を無効化する作りのため、ビルド検証では配置しない。
       # 署名しないため、entitlements や署名設定はこのジョブでは検証されない。
       - name: Build app for iOS Simulator
+        id: build-ios-app
         run: |
           xcodebuild build \
             -project iosApp/iosApp.xcodeproj \
@@ -138,8 +139,9 @@ jobs:
             -resultBundlePath build/ios-build.xcresult \
             CODE_SIGNING_ALLOWED=NO
 
+      # xcresult はビルドステップで生成されるため、ビルドステップが失敗した場合のみ保存する
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: failure() && steps.build-ios-app.outcome == 'failure'
         with:
           name: ios-build-result
           path: build/ios-build.xcresult
