@@ -354,6 +354,60 @@ class AuthApiTest {
     }
 
     @Test
+    fun currentUserMapsTeamIdAndIgnoresUnknownClassRoomId() = runTest {
+        val api = AuthApi(
+            mockClient {
+                respond(
+                    content = """
+                        {
+                          "user": {
+                            "id": "6",
+                            "email": "test@example.com",
+                            "display_name": "テスト太郎",
+                            "class_room_id": 12,
+                            "team_id": 34,
+                            "is_student": true
+                          }
+                        }
+                    """.trimIndent(),
+                    status = HttpStatusCode.OK,
+                    headers = jsonHeaders,
+                )
+            },
+        )
+
+        val user = api.currentUser("access-token")
+
+        assertEquals(34, user.teamId)
+    }
+
+    @Test
+    fun currentUserMapsTeamIdAsNullWhenAbsent() = runTest {
+        val api = AuthApi(
+            mockClient {
+                respond(
+                    content = """
+                        {
+                          "user": {
+                            "id": "9",
+                            "email": "staff@example.com",
+                            "display_name": "職員花子",
+                            "is_staff": true
+                          }
+                        }
+                    """.trimIndent(),
+                    status = HttpStatusCode.OK,
+                    headers = jsonHeaders,
+                )
+            },
+        )
+
+        val user = api.currentUser("access-token")
+
+        assertNull(user.teamId)
+    }
+
+    @Test
     fun currentUserPrefersTeacherWhenStaffAndTeacherAreBothTrue() = runTest {
         val api = AuthApi(
             mockClient {

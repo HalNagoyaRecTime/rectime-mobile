@@ -4,24 +4,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,10 +24,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -40,12 +33,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.RootScreenScaffold
+import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.theme.AppTheme
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.List
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
@@ -58,13 +50,31 @@ object RankingScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
+        val myTeamId = LocalUserProfile.current?.teamId
         val viewModel: RankingViewModel = viewModel {
-            RankingViewModel()
+            RankingViewModel(initialMyTeamId = myTeamId)
         }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+        val hasRankingItems = uiState.rankingItems.isNotEmpty()
         val lazyListState = rememberLazyListState()
+        val snackbarHostState = remember { SnackbarHostState() }
         var hasAutoScrolled by remember { mutableStateOf(false) }
         val density = LocalDensity.current
+
+        // セッションのユーザー情報が後から更新されteamIdが変わった場合でも、
+        // 生成済みのViewModelにハイライト対象を反映させる。
+        LaunchedEffect(myTeamId) {
+            viewModel.updateMyTeamId(myTeamId)
+        }
+
+        // 一覧が既に表示されている状態での取得失敗は、全画面エラーで隠さず
+        // スナックバーで一時的に知らせる(空の状態からの失敗は下のStatusMessageが担当)。
+        LaunchedEffect(uiState.error) {
+            val message = uiState.error
+            if (message != null && hasRankingItems) {
+                snackbarHostState.showSnackbar(message)
+            }
+        }
 
         LaunchedEffect(uiState.rankingItems) {
             if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
@@ -78,23 +88,30 @@ object RankingScreen : Screen {
 
                     val predictedItemOffset = myTeamIndex * itemHeightPx
                     val extraOffsetPx = with(density) { 100.dp.toPx() }  // 微調整用、仮の値
-                    val targetScrollPx = predictedItemOffset - (viewportHeightPx / 2f) + (itemHeightPx / 2f) + extraOffsetPx
+                    val targetScrollPx =
+                        predictedItemOffset - (viewportHeightPx / 2f) + (itemHeightPx / 2f) + extraOffsetPx
 
                     lazyListState.animateScrollBy(
                         value = targetScrollPx,
                         animationSpec = tween(durationMillis = 1500),
                     )
+                    // 所属チーム情報がランキングより遅れて届いた場合に備え、対象行が
+                    // 見つかった時だけ完了扱いにする。見つからない間は次回の更新で
+                    // 再度スクロールを試みる。
+                    hasAutoScrolled = true
                 }
-                hasAutoScrolled = true
             }
         }
 
         RootScreenScaffold(
             title = "ランキング",
             lazyListState = lazyListState,
-            onTrailingClick = { /* TODO: 表示切替機能を実装予定 */ },
+            snackbarHostState = snackbarHostState,
+            onTrailingClick = {
+                viewModel.fetchRankings()
+            },
             trailing = {
-                if (uiState.isRefreshing) {
+                if (uiState.isLoading) {
                     CircularProgressIndicator(
                         color = AppTheme.colors.textPrimary,
                         strokeWidth = 2.dp,
@@ -110,8 +127,40 @@ object RankingScreen : Screen {
                 }
             },
         ) {
-            items(uiState.rankingItems) { item ->
-                RankingRow(item = item)
+            when {
+                uiState.error != null && !hasRankingItems -> item {
+                    StatusMessage(
+                        message = uiState.error.orEmpty(),
+                        actionLabel = "再取得",
+                        onAction = { viewModel.fetchRankings() },
+                    )
+                }
+
+                // 通信自体は成功したが、まだ得点が登録されておらず一覧が空の場合。
+                // エラーではないため、上のStatusMessageとは別に空データ用の案内を出す。
+                !uiState.isLoading && !hasRankingItems -> item {
+                    StatusMessage(message = "ランキングデータはまだありません")
+                }
+
+                else -> {
+                    if (uiState.isOffline) {
+                        item {
+                            Text(
+                                text = "オフライン表示中(前回取得した内容です)",
+                                color = AppTheme.colors.textSecondary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = AppTheme.layout.screenHorizontalPadding,
+                                        vertical = 8.dp,
+                                    ),
+                            )
+                        }
+                    }
+                    items(uiState.rankingItems) { item ->
+                        RankingRow(item = item)
+                    }
+                }
             }
         }
     }
@@ -129,7 +178,7 @@ private fun RankingRow(item: RankingItem) {
                 color = if (item.isMyTeam) {
                     AppTheme.colors.surfaceAccent  // 自分のチームのハイライト色(仮)
                 } else {
-                    androidx.compose.ui.graphics.Color.Transparent
+                    Color.Transparent
                 },
             )
             .padding(vertical = 12.dp),
@@ -140,7 +189,7 @@ private fun RankingRow(item: RankingItem) {
             modifier = Modifier
                 .width(4.dp)
                 .height(32.dp)
-                .background(color = accentColor ?: androidx.compose.ui.graphics.Color.Transparent)
+                .background(color = accentColor ?: Color.Transparent)
         )
 
         Spacer(modifier = Modifier.width(16.dp))
@@ -154,13 +203,13 @@ private fun RankingRow(item: RankingItem) {
         Spacer(modifier = Modifier.width(12.dp))
 
         MarqueeText(
-            text = item.className,
+            text = item.teamName,
             modifier = Modifier.weight(1f),
             color = AppTheme.colors.textPrimary,
         )
 
         Text(
-            text = "${item.point}pt",
+            text = "${item.score}pt",
             color = AppTheme.colors.textPrimary,
         )
     }
@@ -177,7 +226,7 @@ private fun rankAccentColor(rank: Int): Color? = when (rank) {
 private fun MarqueeText(
     text: String,
     modifier: Modifier = Modifier,
-    color: androidx.compose.ui.graphics.Color = AppTheme.colors.textPrimary,
+    color: Color = AppTheme.colors.textPrimary,
 ) {
     Text(
         text = text,
