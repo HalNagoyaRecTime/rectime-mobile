@@ -69,6 +69,34 @@ class RankingViewModelTest {
     }
 
     @Test
+    fun fetchRankingsFetchesSubsequentPagesUntilTotalIsCollected() = runTest(testDispatcher) {
+        val requestedOffsets = mutableListOf<Int>()
+        val viewModel = buildViewModel(
+            client = mockClient { request ->
+                val offset = request.url.parameters["offset"]?.toInt() ?: 0
+                requestedOffsets += offset
+                if (offset == 0) {
+                    respondJson(
+                        rankingsJsonOf(
+                            RankingFixture(1, 10, "チームA", 100),
+                            RankingFixture(2, 20, "チームB", 90),
+                            total = 3,
+                        ),
+                    )
+                } else {
+                    respondJson(rankingsJsonOf(RankingFixture(3, 30, "チームC", 80), total = 3))
+                }
+            },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // 1ページ目のtotalが件数を上回っている間は、offsetを進めて次ページを取りに行く。
+        assertEquals(listOf(0, 2), requestedOffsets)
+        val teamIds = viewModel.uiState.value.rankingItems.map { it.teamId }.toSet()
+        assertEquals(setOf(10, 20, 30), teamIds)
+    }
+
+    @Test
     fun manualRefetchKeepsPreviousItemsVisibleWhileLoading() = runTest(testDispatcher) {
         var requestCount = 0
         val gate = CompletableDeferred<Unit>()
@@ -321,7 +349,7 @@ class RankingViewModelTest {
     private companion object {
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
 
-        fun rankingsJsonOf(vararg items: RankingFixture): String {
+        fun rankingsJsonOf(vararg items: RankingFixture, total: Int = items.size): String {
             val itemsJson = items.joinToString(",") { item ->
                 """
                 {
@@ -332,7 +360,7 @@ class RankingViewModelTest {
                 }
                 """.trimIndent()
             }
-            return """{"items":[$itemsJson],"total":${items.size},"limit":50,"offset":0}"""
+            return """{"items":[$itemsJson],"total":$total,"limit":50,"offset":0}"""
         }
     }
 }
