@@ -1,7 +1,6 @@
 package com.rectime.mobile.core.network
 
-import com.rectime.mobile.feature.ranking.RankingItem
-import com.rectime.mobile.feature.ranking.isMyRankingTeam
+import com.rectime.mobile.core.model.RankingEntry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -27,14 +26,13 @@ data class RankingsResponse(
         @SerialName("scores")
         val scores: Int,
     ) {
-        fun toModel(myTeamId: Int? = null) = RankingItem(
+        fun toModel() = RankingEntry(
             rank = rank,
             teamId = teamId,
             teamName = teamName,
             score = scores,
-            isMyTeam = isMyRankingTeam(teamId, myTeamId),
         )
     }
 }
 
-fun List<RankingsResponse.Ranking>.toModelList(myTeamId: Int? = null) = map { it.toModel(myTeamId) }
+fun List<RankingsResponse.Ranking>.toModelList(): List<RankingEntry> = map { it.toModel() }

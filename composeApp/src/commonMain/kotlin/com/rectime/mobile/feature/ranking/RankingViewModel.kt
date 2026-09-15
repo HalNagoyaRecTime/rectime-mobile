@@ -89,7 +89,7 @@ class RankingViewModel(
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = RankingUiState(
                             isLoading = false,
-                            rankingItems = result.value.items.toModelList(myTeamId),
+                            rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
                             isOffline = false,
                         )
                     }
@@ -106,7 +106,7 @@ class RankingViewModel(
                         } else {
                             _uiState.value = RankingUiState(
                                 isLoading = false,
-                                rankingItems = result.value.items.toModelList(myTeamId),
+                                rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
                                 isOffline = true,
                             )
                             // 401/404以外の理由でのフォールバックは「オフライン」として

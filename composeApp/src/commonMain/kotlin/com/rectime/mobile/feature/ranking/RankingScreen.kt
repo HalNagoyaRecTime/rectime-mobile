@@ -114,6 +114,12 @@ object RankingScreen : Screen {
                     )
                 }
 
+                // 通信自体は成功したが、まだ得点が登録されておらず一覧が空の場合。
+                // エラーではないため、上のStatusMessageとは別に空データ用の案内を出す。
+                !uiState.isLoading && !hasRankingItems -> item {
+                    StatusMessage(message = "ランキングデータはまだありません")
+                }
+
                 else -> {
                     if (uiState.isOffline) {
                         item {

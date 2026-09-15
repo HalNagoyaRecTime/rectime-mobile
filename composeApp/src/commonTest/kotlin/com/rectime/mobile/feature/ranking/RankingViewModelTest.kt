@@ -69,6 +69,21 @@ class RankingViewModelTest {
     }
 
     @Test
+    fun fetchRankingsResultsInEmptyListWithNoErrorWhenResponseHasNoItems() = runTest(testDispatcher) {
+        val viewModel = buildViewModel(
+            client = mockClient { respondJson(rankingsJsonOf()) },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // 200レスポンスでitemsが空の場合はエラーではないため、errorを立てない。
+        // 画面側はこの状態(rankingItemsが空 かつ error == null)を「データなし」として扱う。
+        val state = viewModel.uiState.value
+        assertTrue(state.rankingItems.isEmpty())
+        assertFalse(state.isLoading)
+        assertNull(state.error)
+    }
+
+    @Test
     fun fetchRankingsFetchesSubsequentPagesUntilTotalIsCollected() = runTest(testDispatcher) {
         val requestedOffsets = mutableListOf<Int>()
         val viewModel = buildViewModel(

@@ -2,44 +2,38 @@ package com.rectime.mobile.core.network
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 
 class RankingsResponseTest {
     @Test
-    fun toModelMarksIsMyTeamWhenTeamIdMatchesMyTeamId() {
-        val ranking = ranking(teamId = 34)
+    fun toModelMapsAllFields() {
+        val ranking = ranking(rank = 3, teamId = 34, teamName = "チームA", scores = 70)
 
-        assertEquals(true, ranking.toModel(myTeamId = 34).isMyTeam)
+        val entry = ranking.toModel()
+
+        assertEquals(3, entry.rank)
+        assertEquals(34, entry.teamId)
+        assertEquals("チームA", entry.teamName)
+        assertEquals(70, entry.score)
     }
 
     @Test
-    fun toModelDoesNotMarkIsMyTeamWhenTeamIdDiffersFromMyTeamId() {
-        val ranking = ranking(teamId = 34)
+    fun toModelListMapsEachItem() {
+        val rankings = listOf(
+            ranking(rank = 1, teamId = 1, teamName = "チームA", scores = 100),
+            ranking(rank = 2, teamId = 2, teamName = "チームB", scores = 90),
+        )
 
-        assertFalse(ranking.toModel(myTeamId = 99).isMyTeam)
+        val entries = rankings.toModelList()
+
+        assertEquals(listOf(1, 2), entries.map { it.teamId })
+        assertEquals(listOf("チームA", "チームB"), entries.map { it.teamName })
     }
 
-    @Test
-    fun toModelDoesNotMarkIsMyTeamWhenMyTeamIdIsNull() {
-        val ranking = ranking(teamId = 34)
-
-        assertFalse(ranking.toModel(myTeamId = null).isMyTeam)
-    }
-
-    @Test
-    fun toModelListAppliesMyTeamIdToEachItem() {
-        val rankings = listOf(ranking(teamId = 1), ranking(teamId = 2))
-
-        val models = rankings.toModelList(myTeamId = 2)
-
-        assertFalse(models[0].isMyTeam)
-        assertEquals(true, models[1].isMyTeam)
-    }
-
-    private fun ranking(teamId: Int) = RankingsResponse.Ranking(
-        rank = 1,
-        teamId = teamId,
-        teamName = "チーム",
-        scores = 100,
-    )
+    private fun ranking(rank: Int = 1, teamId: Int, teamName: String = "チーム", scores: Int = 100) =
+        RankingsResponse.Ranking(
+            rank = rank,
+            teamId = teamId,
+            teamName = teamName,
+            scores = scores,
+        )
 }
