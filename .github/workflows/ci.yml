@@ -91,3 +91,56 @@ jobs:
 
       - name: Assemble debug APK
         run: ./gradlew :composeApp:assembleDebug
+
+  build-ios:
+    name: Build (iOS)
+    # macos-latest は将来別の OS を指すため、Xcode 26 系を持つ macOS 26 (arm64) に固定する
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      # Kotlin 2.4.x の互換表に載っている Xcode 26.4 系を使う。
+      # パッチ更新で旧パッチは置き換えられるため、パッチ番号を含まないパスを指定する。
+      # Kotlin を更新する際は互換表を確認し、ここも見直すこと。
+      DEVELOPER_DIR: /Applications/Xcode_26.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify Xcode
+        run: |
+          if [ ! -d "$DEVELOPER_DIR" ]; then
+            echo "::error::$DEVELOPER_DIR が見つかりません。ランナーイメージの Xcode 一覧を確認してください"
+            ls -d /Applications/Xcode*
+            exit 1
+          fi
+          xcodebuild -version
+
+      # Xcode のビルドフェーズから embedAndSignAppleFrameworkForXcode が呼ばれるため、JDK と Gradle が必要
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Setup iOS Config
+        run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
+
+      # GoogleService-Info.plist が無い場合は実行時に FCM を無効化する作りのため、ビルド検証では配置しない。
+      # 署名しないため、entitlements や署名設定はこのジョブでは検証されない。
+      - name: Build app for iOS Simulator
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -disableAutomaticPackageResolution \
+            -resultBundlePath build/ios-build.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ios-build-result
+          path: build/ios-build.xcresult
+          retention-days: 7
