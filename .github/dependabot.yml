@@ -4,13 +4,17 @@ updates:
   - package-ecosystem: "gradle"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
       time: "10:00"
       timezone: "Asia/Tokyo"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
     ignore:
       # 2.11.0 以降は AGP 9.1 以上 と compileSdk 37 以上 を要求し、
       # AGP 8.13 / compileSdk 36 の現状では checkDebugAarMetadata が落ちる。
@@ -32,13 +36,17 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
       time: "10:20"
       timezone: "Asia/Tokyo"
     cooldown:
       default-days: 7
     open-pull-requests-limit: 3
+    allow:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
     groups:
       actions-minor-and-patch:
         applies-to: "version-updates"
