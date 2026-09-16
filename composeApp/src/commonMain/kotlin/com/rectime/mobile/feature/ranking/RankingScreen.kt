@@ -29,7 +29,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -45,7 +44,6 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.List
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
@@ -73,17 +71,24 @@ object RankingScreen : Screen {
                     lazyListState.scrollToItem(index = 0)
                     delay(300.milliseconds)
 
-                    val itemHeightPx = with(receiver = density) { RankingRowHeight.toPx() }
-                    val viewportHeightPx = lazyListState.layoutInfo.viewportSize.height.toFloat()
+                    lazyListState.animateScrollToItem(index = myTeamIndex)
 
-                    val predictedItemOffset = myTeamIndex * itemHeightPx
-                    val extraOffsetPx = with(density) { 100.dp.toPx() }  // 微調整用、仮の値
-                    val targetScrollPx = predictedItemOffset - (viewportHeightPx / 2f) + (itemHeightPx / 2f) + extraOffsetPx
+                    val myTeamItemInfo = lazyListState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.index == myTeamIndex }
 
-                    lazyListState.animateScrollBy(
-                        value = targetScrollPx,
-                        animationSpec = tween(durationMillis = 1500),
-                    )
+                    if (myTeamItemInfo != null) {
+                        val layoutInfo = lazyListState.layoutInfo
+                        val viewportStart = layoutInfo.viewportStartOffset
+                        val viewportEnd = layoutInfo.viewportEndOffset
+                        val viewportCenter = viewportStart + (viewportEnd - viewportStart) / 2
+                        val itemCenter = myTeamItemInfo.offset + myTeamItemInfo.size / 2
+                        val scrollDistancePx = itemCenter - viewportCenter
+
+                        lazyListState.animateScrollBy(
+                            value = scrollDistancePx.toFloat(),
+                            animationSpec = tween(durationMillis = 800),
+                        )
+                    }
                 }
                 hasAutoScrolled = true
             }
