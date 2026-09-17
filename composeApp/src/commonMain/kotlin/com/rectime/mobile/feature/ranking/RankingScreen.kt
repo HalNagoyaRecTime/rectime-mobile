@@ -71,24 +71,7 @@ object RankingScreen : Screen {
                     lazyListState.scrollToItem(index = 0)
                     delay(300.milliseconds)
 
-                    lazyListState.animateScrollToItem(index = myTeamIndex)
-
-                    val myTeamItemInfo = lazyListState.layoutInfo.visibleItemsInfo
-                        .firstOrNull { it.index == myTeamIndex }
-
-                    if (myTeamItemInfo != null) {
-                        val layoutInfo = lazyListState.layoutInfo
-                        val viewportStart = layoutInfo.viewportStartOffset
-                        val viewportEnd = layoutInfo.viewportEndOffset
-                        val viewportCenter = viewportStart + (viewportEnd - viewportStart) / 2
-                        val itemCenter = myTeamItemInfo.offset + myTeamItemInfo.size / 2
-                        val scrollDistancePx = itemCenter - viewportCenter
-
-                        lazyListState.animateScrollBy(
-                            value = scrollDistancePx.toFloat(),
-                            animationSpec = tween(durationMillis = 800),
-                        )
-                    }
+                    lazyListState.animateScrollToItem(index = (myTeamIndex - 4).coerceAtLeast(0))
                 }
                 hasAutoScrolled = true
             }
