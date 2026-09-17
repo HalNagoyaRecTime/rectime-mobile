@@ -22,6 +22,13 @@ updates:
         update-types:
           - "version-update:semver-minor"
           - "version-update:semver-major"
+      # Material3 1.13 は compileSdk 37 / AGP 9.1 以上を要求し、
+      # compileSdk 36 / AGP 8.13.2 の現状では Android CI が失敗する。
+      # Compose と Android ツールチェーンを協調移行するまで除外する。
+      - dependency-name: "org.jetbrains.compose.material3:material3"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-major"
     groups:
       gradle-patch-updates:
         applies-to: "version-updates"
