@@ -13,6 +13,7 @@ fun encodeAuthSession(session: AuthSession): String =
         session.user.studentIdNumber ?: "",
         session.user.classRoomName ?: "",
         session.user.role?.name ?: "",
+        session.user.teamId?.toString() ?: "",
     ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
 
 fun encodePendingAuth(pending: PendingAuth): String =
@@ -32,7 +33,7 @@ fun decodePendingAuth(value: String): PendingAuth? {
 
 fun decodeAuthSession(value: String): AuthSession? {
     val parts = value.split(".")
-    if (parts.size != 6 && parts.size != 8 && parts.size != 9 && parts.size != 11) return null
+    if (parts.size !in setOf(6, 8, 9, 11, 12)) return null
 
     return runCatching {
         val avatarUrl = if (parts.size >= 8) {
@@ -43,19 +44,22 @@ fun decodeAuthSession(value: String): AuthSession? {
             val s = parts[7].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
         } else null
-        val studentIdNumber = if (parts.size == 11) {
+        val studentIdNumber = if (parts.size >= 11) {
             val s = parts[8].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
         } else null
-        val classRoomName = if (parts.size == 11) {
+        val classRoomName = if (parts.size >= 11) {
             val s = parts[9].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
         } else null
         val role = when (parts.size) {
             9 -> Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
-            11 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
+            11, 12 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
             else -> null
         }
+        val teamId = if (parts.size == 12) {
+            parts[11].decodeBase64UrlToString().toIntOrNull()
+        } else null
 
         AuthSession(
             accessToken = parts[0].decodeBase64UrlToString(),
@@ -69,6 +73,7 @@ fun decodeAuthSession(value: String): AuthSession? {
                 avatarUpdatedAt = avatarUpdatedAt,
                 studentIdNumber = studentIdNumber,
                 classRoomName = classRoomName,
+                teamId = teamId,
                 role = role,
             ),
         ).takeIf { session ->
