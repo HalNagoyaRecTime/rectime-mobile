@@ -1,18 +1,15 @@
 name: CI
 
 on:
+  # ブランチ名のprefixに依存せず、Stack PRも含めたすべてのPRで実行する。
+  # PR作成時とPRへのpush時に実行されるため、push側でfeatureブランチを対象にすると二重実行になる。
   pull_request:
-    branches:
-      - develop
-      - develop-v2
-      - main
-      - 'feature/**'
   push:
     branches:
       - develop
       - develop-v2
       - main
-      - 'feature/**'
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
