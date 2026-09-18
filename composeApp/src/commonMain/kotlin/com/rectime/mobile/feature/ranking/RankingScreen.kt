@@ -1,9 +1,7 @@
 package com.rectime.mobile.feature.ranking
 
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,7 +60,6 @@ object RankingScreen : Screen {
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val lazyListState = rememberLazyListState()
         var hasAutoScrolled by remember { mutableStateOf(false) }
-        val density = LocalDensity.current
 
         LaunchedEffect(uiState.rankingItems) {
             if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
