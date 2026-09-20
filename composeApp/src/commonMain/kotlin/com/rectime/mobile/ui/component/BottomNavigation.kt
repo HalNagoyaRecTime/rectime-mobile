@@ -59,6 +59,8 @@ import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_notification_fill
 import rectime_mobile.composeapp.generated.resources.ic_notification_outline
+import rectime_mobile.composeapp.generated.resources.ic_ranking_fill
+import rectime_mobile.composeapp.generated.resources.ic_ranking_outline
 import rectime_mobile.composeapp.generated.resources.ic_schedule_fill
 import rectime_mobile.composeapp.generated.resources.ic_schedule_outline
 import rectime_mobile.composeapp.generated.resources.ic_settings_fill
@@ -122,8 +124,8 @@ fun BottomNavigationBar(
     NavigationItemConfig(
         RankingScreen,
         "ランキング",
-        Res.drawable.ic_settings_outline,
-        Res.drawable.ic_settings_fill,
+        Res.drawable.ic_ranking_outline,
+        Res.drawable.ic_ranking_fill,
     ),
     NavigationItemConfig(
         NotificationsScreen,

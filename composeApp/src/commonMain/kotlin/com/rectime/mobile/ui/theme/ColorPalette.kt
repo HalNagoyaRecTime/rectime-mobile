@@ -83,6 +83,11 @@ data class AppColorTokens(
     val textMapModal: Color,
     val textSettingModalHeader: Color,
     val textSettingModalBody: Color,
+    // ランキング画面
+    val rankingGoldAccent: Color,
+    val rankingSilverAccent: Color,
+    val rankingBronzeAccent: Color,
+    val rankingMyTeamHighlight: Color,
 )
 
 private val defaultLight = AppColorTokens(
@@ -166,6 +171,11 @@ private val defaultLight = AppColorTokens(
     textMapModal = Color(0xFF808080),
     textSettingModalHeader = Color(0xFF333333),
     textSettingModalBody = Color(0xFF999999),
+    //ランキング画面
+    rankingGoldAccent = Color(0xFFF2C230),
+    rankingSilverAccent = Color(0xFFA8C5B8),
+    rankingBronzeAccent = Color(0xFFC98A2C),
+    rankingMyTeamHighlight = Color(0x33FF4000),
 )
 
 internal fun appColors(themeId: ThemeId): AppColorTokens = when (themeId) {
