@@ -7,7 +7,8 @@ Firebase ConsoleでBundle ID `com.rectime.mobile.Rectimemobile` のiOSアプリ�
 iosApp/iosApp/GoogleService-Info.plist
 ```
 
-このファイルはGit管理しない。CIでは同じパスに復元する。
+このファイルはGit管理しない。ビルド検証のCI（build-ios）では配置しない（実行時にFCMが無効になるだけでビルドには影響しない）。
+配布用ビルドを行うCIを追加する場合は、同じパスに復元する。
 
 Firebase ConsoleのCloud Messaging設定には、Apple Push Notification Authentication Key
 （`.p8`、Key ID、Team ID）を登録する。Apple Developer側では同じBundle IDのApp IDで
