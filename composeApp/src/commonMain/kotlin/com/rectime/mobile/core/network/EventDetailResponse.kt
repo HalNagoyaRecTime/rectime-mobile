@@ -1,8 +1,22 @@
 package com.rectime.mobile.core.network
 
 import com.rectime.mobile.core.model.EventDetail
+import com.rectime.mobile.core.model.EventVenue
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+
+@Serializable
+data class EventVenueResponse(
+    @SerialName("venue_id")
+    val venueId: Int,
+    @SerialName("venue_name")
+    val venueName: String,
+)
+
+fun EventVenueResponse.toModel(): EventVenue = EventVenue(
+    venueId = venueId,
+    venueName = venueName,
+)
 
 @Serializable
 data class EventDetailResponse(
@@ -12,6 +26,8 @@ data class EventDetailResponse(
     val eventName: String,
     @SerialName("venue")
     val venue: String,
+    @SerialName("venues")
+    val venues: List<EventVenueResponse> = emptyList(),
     @SerialName("start_time")
     val startTime: String,
     @SerialName("end_time")
@@ -25,6 +41,7 @@ fun EventDetailResponse.toModel(): EventDetail {
         eventId = eventId,
         eventName = eventName,
         venue = venue,
+        venues = venues.map { it.toModel() },
         startTime = startTime,
         endTime = endTime,
         ruleText = ruleText,
