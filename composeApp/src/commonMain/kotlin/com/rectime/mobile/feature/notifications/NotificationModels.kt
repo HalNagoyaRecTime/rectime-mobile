@@ -1,5 +1,8 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.model.EventVenue
+import com.rectime.mobile.core.network.EventVenueResponse
+import com.rectime.mobile.core.network.toModel
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -18,6 +21,7 @@ data class NotificationRelatedEvent(
     val id: Int,
     val name: String,
     val venue: String,
+    val venues: List<EventVenue> = emptyList(),
     val startTime: String,
     val endTime: String,
 )
@@ -58,6 +62,7 @@ internal data class NotificationRelatedEventResponse(
     @SerialName("event_name")
     val eventName: String,
     val venue: String,
+    val venues: List<EventVenueResponse> = emptyList(),
     @SerialName("start_time")
     val startTime: String,
     @SerialName("end_time")
@@ -82,6 +87,7 @@ internal fun NotificationResponse.toModel() = UserNotification(
             id = it.eventId,
             name = it.eventName,
             venue = it.venue,
+            venues = it.venues.map { v -> v.toModel() },
             startTime = it.startTime,
             endTime = it.endTime,
         )
