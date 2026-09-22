@@ -35,6 +35,7 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rectime.mobile.core.model.venueDisplayText
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -177,7 +178,7 @@ private fun NotificationRelatedEventLink(
     EventCard(
         time = "${event.startTime.toShortFormattedTime()}-${event.endTime.toShortFormattedTime()}",
         title = event.name,
-        court = event.venue,
+        court = venueDisplayText(event.venue,event.venues),
         isLive = isEventLiveAt(event.startTime, event.endTime, nowMinute),
         isParticipating = isParticipating,
         onClick = onClick,
