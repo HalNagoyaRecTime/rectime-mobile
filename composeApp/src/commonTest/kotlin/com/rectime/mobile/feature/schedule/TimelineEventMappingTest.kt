@@ -1,8 +1,11 @@
 package com.rectime.mobile.feature.schedule
 
+import com.rectime.mobile.core.model.EventVenue
+import com.rectime.mobile.core.network.EventVenueResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 
 class TimelineEventMappingTest {
 
@@ -63,6 +66,25 @@ class TimelineEventMappingTest {
         assertEquals("玉入れ", timelineEvent.title)
     }
 
+    @Test
+    fun mapsVenuesToTimelineEvent() {
+        val timelineEvent = eventResponse(
+            venues = listOf(EventVenueResponse(venueId = 1, venueName = "第1体育館")),
+        ).toTimelineEvent()
+
+        assertEquals(
+            listOf(EventVenue(venueId = 1, venueName = "第1体育館")),
+            timelineEvent.venues,
+        )
+    }
+
+    @Test
+    fun mapsEmptyVenuesListToEmptyList() {
+        val timelineEvent = eventResponse().toTimelineEvent()
+
+        assertTrue(timelineEvent.venues.isEmpty())
+    }
+
     // ---- 異常系 ----
 
     @Test
@@ -118,6 +140,7 @@ class TimelineEventMappingTest {
         eventId: Int = 1,
         eventName: String = "玉入れ",
         venue: String = "第1体育館",
+        venues: List<EventVenueResponse> = emptyList(),
         startTime: String = "0930",
         endTime: String = "1045",
         ruleText: String? = "3分間で玉を投げ入れる",
@@ -126,6 +149,7 @@ class TimelineEventMappingTest {
         eventName = eventName,
         ruleText = ruleText,
         venue = venue,
+        venues = venues,
         startTime = startTime,
         endTime = endTime,
         createdAt = "2026-04-01T00:00:00Z",

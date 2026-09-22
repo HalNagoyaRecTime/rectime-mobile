@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.schedule
 
+import com.rectime.mobile.core.network.EventVenueResponse
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -25,6 +26,9 @@ class EventsResponseTest {
                   "event_name": "綱引き",
                   "rule_text": "8人1組で綱を引く",
                   "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -47,6 +51,10 @@ class EventsResponseTest {
         assertEquals("綱引き", event.eventName)
         assertEquals("8人1組で綱を引く", event.ruleText)
         assertEquals("グラウンド", event.venue)
+        assertEquals(
+            listOf(EventVenueResponse(venueId = 5, venueName = "グラウンド")),
+            event.venues,
+        )
         assertEquals("1030", event.startTime)
         assertEquals("1100", event.endTime)
         assertEquals("2026-04-01T00:00:00Z", event.createdAt)
@@ -84,6 +92,61 @@ class EventsResponseTest {
         )
 
         assertNull(decoded.events.single().ruleText)
+    }
+
+    @Test
+    fun decodesPayloadWithoutVenuesKey() {
+        val decoded = json.decodeFromString<EventsResponse>(
+            """
+        {
+          "events": [
+            {
+              "event_id": 3,
+              "event_name": "綱引き",
+              "venue": "グラウンド",
+              "start_time": "1030",
+              "end_time": "1100",
+              "created_at": "2026-04-01T00:00:00Z",
+              "updated_at": "2026-04-02T09:00:00Z"
+            }
+          ],
+          "total": 1,
+          "limit": 50,
+          "offset": 0
+        }
+        """.trimIndent(),
+        )
+
+        assertTrue(decoded.events.single().venues.isEmpty())
+    }
+
+    @Test
+    fun decodesPayloadWithEmptyVenuesArrayButVenuePresent() {
+        val decoded = json.decodeFromString<EventsResponse>(
+            """
+        {
+          "events": [
+            {
+              "event_id": 3,
+              "event_name": "綱引き",
+              "venue": "グラウンド",
+              "venues": [],
+              "start_time": "1030",
+              "end_time": "1100",
+              "created_at": "2026-04-01T00:00:00Z",
+              "updated_at": "2026-04-02T09:00:00Z"
+            }
+          ],
+          "total": 1,
+          "limit": 50,
+          "offset": 0
+        }
+        """.trimIndent(),
+        )
+
+        val event = decoded.events.single()
+        assertEquals("グラウンド", event.venue)
+        assertTrue(event.venues.isEmpty())
     }
 
     @Test

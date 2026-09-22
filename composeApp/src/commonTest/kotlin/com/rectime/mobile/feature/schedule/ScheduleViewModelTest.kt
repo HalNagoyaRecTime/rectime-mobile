@@ -3,6 +3,7 @@ package com.rectime.mobile.feature.schedule
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.model.EventVenue
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -94,17 +95,56 @@ class ScheduleViewModelTest {
         assertEquals(3, first.eventId)
         assertEquals("綱引き", first.title)
         assertEquals("グラウンド", first.venue)
+        assertEquals(listOf(EventVenue(venueId = 5, venueName = "グラウンド")), first.venues)
         assertEquals(10 * 60 + 30, first.startMinuteOfDay)
         assertEquals(30, first.durationMinutes)
         assertEquals("10:30", first.startTimeLabel)
         assertEquals("11:00", first.endTimeLabel)
 
         assertEquals(7, events[1].eventId)
+        assertTrue(events[1].venues.isEmpty())
         assertEquals(13 * 60, events[1].startMinuteOfDay)
         assertEquals(90, events[1].durationMinutes)
 
         assertNull(viewModel.error)
         assertFalse(viewModel.isLoading)
+    }
+
+    @Test
+    fun fetchEventsKeepsVenueWhenVenuesArrayIsEmpty() = runTest(testDispatcher) {
+        val viewModel = buildViewModel(
+            mockClient {
+                respondJson(
+                    """
+                {
+                  "events": [
+                    {
+                      "event_id": 3,
+                      "event_name": "綱引き",
+                      "rule_text": null,
+                      "venue": "グラウンド",
+                      "venues": [],
+                      "start_time": "1030",
+                      "end_time": "1100",
+                      "created_at": "2026-04-01T00:00:00Z",
+                      "updated_at": "2026-04-01T00:00:00Z"
+                    }
+                  ],
+                  "total": 1,
+                  "limit": 50,
+                  "offset": 0
+                }
+                """.trimIndent(),
+                )
+            },
+        )
+
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val event = viewModel.events.value.single()
+        assertEquals("グラウンド", event.venue)
+        assertTrue(event.venues.isEmpty())
     }
 
     @Test
@@ -716,6 +756,9 @@ class ScheduleViewModelTest {
                   "event_name": "綱引き",
                   "rule_text": "8人1組で綱を引く",
                   "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],    
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
