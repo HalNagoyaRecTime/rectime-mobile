@@ -25,7 +25,6 @@ class EventsResponseTest {
                   "event_id": 3,
                   "event_name": "綱引き",
                   "rule_text": "8人1組で綱を引く",
-                  "venue": "グラウンド",
                   "venues": [
                     {"venue_id": 5, "venue_name": "グラウンド"}
                   ],
@@ -50,7 +49,6 @@ class EventsResponseTest {
         assertEquals(3, event.eventId)
         assertEquals("綱引き", event.eventName)
         assertEquals("8人1組で綱を引く", event.ruleText)
-        assertEquals("グラウンド", event.venue)
         assertEquals(
             listOf(EventVenueResponse(venueId = 5, venueName = "グラウンド")),
             event.venues,
@@ -77,7 +75,9 @@ class EventsResponseTest {
                 {
                   "event_id": 3,
                   "event_name": "綱引き",
-                  "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -92,61 +92,6 @@ class EventsResponseTest {
         )
 
         assertNull(decoded.events.single().ruleText)
-    }
-
-    @Test
-    fun decodesPayloadWithoutVenuesKey() {
-        val decoded = json.decodeFromString<EventsResponse>(
-            """
-        {
-          "events": [
-            {
-              "event_id": 3,
-              "event_name": "綱引き",
-              "venue": "グラウンド",
-              "start_time": "1030",
-              "end_time": "1100",
-              "created_at": "2026-04-01T00:00:00Z",
-              "updated_at": "2026-04-02T09:00:00Z"
-            }
-          ],
-          "total": 1,
-          "limit": 50,
-          "offset": 0
-        }
-        """.trimIndent(),
-        )
-
-        assertTrue(decoded.events.single().venues.isEmpty())
-    }
-
-    @Test
-    fun decodesPayloadWithEmptyVenuesArrayButVenuePresent() {
-        val decoded = json.decodeFromString<EventsResponse>(
-            """
-        {
-          "events": [
-            {
-              "event_id": 3,
-              "event_name": "綱引き",
-              "venue": "グラウンド",
-              "venues": [],
-              "start_time": "1030",
-              "end_time": "1100",
-              "created_at": "2026-04-01T00:00:00Z",
-              "updated_at": "2026-04-02T09:00:00Z"
-            }
-          ],
-          "total": 1,
-          "limit": 50,
-          "offset": 0
-        }
-        """.trimIndent(),
-        )
-
-        val event = decoded.events.single()
-        assertEquals("グラウンド", event.venue)
-        assertTrue(event.venues.isEmpty())
     }
 
     @Test
@@ -168,7 +113,9 @@ class EventsResponseTest {
                 {
                   "event_id": 3,
                   "event_name": "綱引き",
-                  "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -231,7 +178,6 @@ class EventsResponseTest {
                     {
                       "eventId": 3,
                       "eventName": "綱引き",
-                      "venue": "グラウンド",
                       "startTime": "1030",
                       "endTime": "1100",
                       "createdAt": "2026-04-01T00:00:00Z",
@@ -276,7 +222,9 @@ class EventsResponseTest {
               "event_id": $eventId,
               "event_name": "綱引き",
               "rule_text": $ruleText,
-              "venue": "グラウンド",
+              "venues": [
+                {"venue_id": 5, "venue_name": "グラウンド"}
+              ],
               "start_time": "1030",
               "end_time": "1100",
               "created_at": "2026-04-01T00:00:00Z",

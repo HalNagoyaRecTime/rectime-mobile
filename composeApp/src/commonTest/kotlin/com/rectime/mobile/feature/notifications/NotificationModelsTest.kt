@@ -97,7 +97,6 @@ class NotificationModelsTest {
                 relatedEvent = NotificationRelatedEvent(
                     id = 7,
                     name = "玉入れ",
-                    venue = "体育館",
                     venues = listOf(EventVenue(venueId = 1, venueName = "体育館")),
                     startTime = "0915",
                     endTime = "0945",
@@ -107,55 +106,7 @@ class NotificationModelsTest {
         )
     }
 
-    @Test
-    fun relatedEventVenuesDefaultsToEmptyListWhenKeyIsAbsent() {
-        val response = json.decodeFromString<NotificationResponse>(
-            """
-        {
-          "notification_id": 12,
-          "notification_type": "event_reminder",
-          "title": "競技開始のお知らせ",
-          "body": "開始時間が近づいています。",
-          "scheduled_at": "2026-07-31T09:00:00+09:00",
-          "related_event": {
-            "event_id": 7,
-            "event_name": "玉入れ",
-            "venue": "体育館",
-            "start_time": "0915",
-            "end_time": "0945"
-          }
-        }
-        """.trimIndent(),
-        )
 
-        assertEquals(emptyList(), response.relatedEvent?.venues)
-    }
-
-    @Test
-    fun relatedEventKeepsVenueWhenVenuesArrayIsEmpty() {
-        val response = json.decodeFromString<NotificationResponse>(
-            """
-        {
-          "notification_id": 12,
-          "notification_type": "event_reminder",
-          "title": "競技開始のお知らせ",
-          "body": "開始時間が近づいています。",
-          "scheduled_at": "2026-07-31T09:00:00+09:00",
-          "related_event": {
-            "event_id": 7,
-            "event_name": "玉入れ",
-            "venue": "体育館",
-            "venues": [],
-            "start_time": "0915",
-            "end_time": "0945"
-          }
-        }
-        """.trimIndent(),
-        )
-
-        assertEquals("体育館", response.relatedEvent?.venue)
-        assertEquals(emptyList(), response.relatedEvent?.venues)
-    }
 
     @Test
     fun emptyListResponseIsMappedToEmptyPage() {
@@ -182,7 +133,6 @@ class NotificationModelsTest {
                   "related_event": {
                     "event_id": 7,
                     "event_name": "玉入れ",
-                    "venue": "体育館",
                     "venues": [
                       {"venue_id": 1, "venue_name": "体育館"}
                     ],

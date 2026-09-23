@@ -50,7 +50,6 @@ class EventDetailViewModelTest {
         {
           "event_id": 1,
           "event_name": "100m走",
-          "venue": "第1グラウンド",
           "venues": [
             {"venue_id": 1, "venue_name": "第1グラウンド"}
           ],
@@ -133,65 +132,12 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertEquals("第1グラウンド", state.eventDetail?.venue)
         assertEquals(listOf("第1グラウンド"), state.eventDetail?.venues?.map { it.venueName })
         assertEquals("スパイク禁止", state.eventDetail?.ruleText)
         assertEquals("第1集合場所", state.gatherings.singleOrNull()?.gatheringSpotName)
     }
 
-    @Test
-    fun fetchEventDetailKeepsVenueWhenVenuesArrayIsEmpty() = runTest(testDispatcher) {
-        val responseBody = """
-        {
-          "event_id": 1,
-          "event_name": "100m走",
-          "venue": "第1グラウンド",
-          "venues": [],
-          "start_time": "0900",
-          "end_time": "0930",
-          "rule_text": null
-        }
-    """.trimIndent()
 
-        val client = buildClient(
-            eventsHandler = jsonOk(responseBody),
-            gatheringsHandler = jsonOk("[]"),
-        )
-        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
-
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals("第1グラウンド", state.eventDetail?.venue)
-        assertTrue(state.eventDetail?.venues.orEmpty().isEmpty())
-    }
-
-    @Test
-    fun fetchEventDetailDefaultsToEmptyVenuesWhenKeyIsAbsent() = runTest(testDispatcher) {
-        // rectime-api PR #436マージ前の古いレスポンス形式(venuesキー自体が無い)を想定
-        val legacyResponseBody = """
-        {
-          "event_id": 1,
-          "event_name": "100m走",
-          "venue": "第1グラウンド",
-          "start_time": "0900",
-          "end_time": "0930",
-          "rule_text": "スパイク禁止"
-        }
-    """.trimIndent()
-
-        val client = buildClient(
-            eventsHandler = jsonOk(legacyResponseBody),
-            gatheringsHandler = jsonOk("[]"),
-        )
-        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
-
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals("第1グラウンド", state.eventDetail?.venue)
-        assertTrue(state.eventDetail?.venues.orEmpty().isEmpty())
-    }
 
     @Test
     fun fetchEventDetailHandlesNullRuleTextCorrectly() = runTest(testDispatcher) {
@@ -199,7 +145,9 @@ class EventDetailViewModelTest {
             {
               "event_id": 2,
               "event_name": "走り高跳び",
-              "venue": "第2グラウンド",
+              "venues": [
+                {"venue_id": 2, "venue_name": "第2グラウンド"}
+              ],
               "start_time": "1000",
               "end_time": "1100",
               "rule_text": null
@@ -375,7 +323,6 @@ class EventDetailViewModelTest {
             EventDetailResponse(
                 eventId = eventId,
                 eventName = "100m走",
-                venue = "第1グラウンド",
                 venues = venues,
                 startTime = "0900",
                 endTime = "0930",

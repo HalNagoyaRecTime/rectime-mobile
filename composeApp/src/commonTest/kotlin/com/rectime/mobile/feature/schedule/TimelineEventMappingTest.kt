@@ -17,7 +17,6 @@ class TimelineEventMappingTest {
 
         assertEquals(1, timelineEvent.eventId)
         assertEquals("玉入れ", timelineEvent.title)
-        assertEquals("第1体育館", timelineEvent.venue)
         assertEquals(9 * 60 + 30, timelineEvent.startMinuteOfDay)
         assertEquals(75, timelineEvent.durationMinutes)
         assertEquals("9:30", timelineEvent.startTimeLabel)
@@ -139,7 +138,6 @@ class TimelineEventMappingTest {
     private fun eventResponse(
         eventId: Int = 1,
         eventName: String = "玉入れ",
-        venue: String = "第1体育館",
         venues: List<EventVenueResponse> = emptyList(),
         startTime: String = "0930",
         endTime: String = "1045",
@@ -148,7 +146,6 @@ class TimelineEventMappingTest {
         eventId = eventId,
         eventName = eventName,
         ruleText = ruleText,
-        venue = venue,
         venues = venues,
         startTime = startTime,
         endTime = endTime,
