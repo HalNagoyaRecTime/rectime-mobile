@@ -1,22 +1,15 @@
 package com.rectime.mobile.core.model
 
-import com.rectime.mobile.feature.notifications.NotificationRelatedEvent
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class EventVenue (
+data class EventVenue(
     val venueId: Int,
     val venueName: String,
 )
 
 /**
- * venuesが取得できていればそれを表示に使い、空の場合は
- * 後方互換のためvenue(単数)にフォールバックする。
- * (rectime-api側でevent_venuesが未反映のイベントが存在するため)
+ * 複数の実施場所を「・」区切りで結合した表示用文字列を返す。
  */
-fun venueDisplayText(venue: String, venues: List<EventVenue>): String =
-    if (venues.isNotEmpty()) {
-        venues.joinToString("・") { it.venueName }
-    } else {
-        venue
-    }
+fun venueDisplayText(venues: List<EventVenue>): String =
+    venues.joinToString("・") { it.venueName }

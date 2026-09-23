@@ -164,7 +164,7 @@ private fun EventDetailContent(
         ) {
             DetailSection(heading = "実施場所", onInfoClick = onOpenMap) {
                 DetailBodyText(
-                    text = venueDisplayText(event.venue, event.venues),
+                    text = venueDisplayText(event.venues),
                     modifier = Modifier.padding(start = BodyIndent),
                 )
             }

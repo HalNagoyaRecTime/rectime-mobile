@@ -13,8 +13,7 @@ import kotlinx.datetime.format.char
 data class TimelineEvent(
     val eventId: Int,
     val title: String,
-    val venue: String,
-    val venues: List<EventVenue> = emptyList(),
+    val venues: List<EventVenue>,
     val startMinuteOfDay: Int,
     val durationMinutes: Int,
     val lane: Int,
@@ -47,7 +46,6 @@ internal fun EventResponse.toTimelineEvent(): TimelineEvent {
     return TimelineEvent(
         eventId = eventId,
         title = eventName,
-        venue = venue,
         venues = venues.map { it.toModel() },
         startMinuteOfDay = startMinuteOfDay,
         durationMinutes = endMinuteOfDay - startMinuteOfDay,

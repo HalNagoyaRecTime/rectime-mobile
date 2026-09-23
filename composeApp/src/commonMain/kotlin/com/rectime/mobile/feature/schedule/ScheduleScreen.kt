@@ -420,7 +420,7 @@ private fun ScheduleScreenUI(
                                 EventCard(
                                     time = "${event.startTimeLabel}-${event.endTimeLabel}",
                                     title = event.title,
-                                    court = venueDisplayText(event.venue, event.venues),
+                                    court = venueDisplayText(event.venues),
                                     isLive = isLive,
                                     isParticipating = event.isParticipating,
                                     onClick = { onOpenEventDetail(event.eventId) },
@@ -452,7 +452,7 @@ private fun ScheduleScreenUI(
                     EventCard(
                         time = "${event.startTimeLabel}-${event.endTimeLabel}",
                         title = event.title,
-                        court = venueDisplayText(event.venue, event.venues),
+                        court = venueDisplayText(event.venues),
                         isLive = isLive,
                         isParticipating = event.isParticipating,
                         onClick = {
