@@ -98,7 +98,7 @@ private val defaultLight = AppColorTokens(
     navigationShadow = Color(0x33000000),
     sheetBackground = Color(0xFFFFFFFF),
     sheetHandle = Color(0xFFCED1DA),
-    surfacePrimary = Color(0xFFE0E1E5),
+    surfacePrimary = Color(0xFFFFFFFF),
     surfaceMuted = Color(0xFFECEEFA),
     surfaceAccent = Color(0xFFE0EAFF),
     surfaceAccentStrong = Color(0xFF4169E1),
@@ -141,7 +141,7 @@ private val defaultLight = AppColorTokens(
     textReadNotificationBody = Color(0xFF808080),
     textReadNotificationTime = Color(0xFFb3b3b3),
     readNotificationChevron = Color(0xFF999999),
-    notificationBackground = Color(0xFFf2f2f2),
+    notificationBackground = Color(0xFFFFFFFF),
     //スケジュール画面
     textScheduleTimeBar = Color(0xFF999999),
     textScheduleTimeLine = Color(0xFFb3b3b3),
@@ -157,7 +157,7 @@ private val defaultLight = AppColorTokens(
     userInformationBody = Color(0xFF333333),
     textContactInformation = Color(0xFF666666),
     textCopyRight = Color(0xFF808080),
-    settingBackground = Color(0xFFf2f2f2),
+    settingBackground = Color(0xFFFFFFFF),
     //詳細画面
     textDetailsScreenHeader = Color(0xFF666666),
     textDetailsScreenTitle = Color(0xFF000000),
@@ -165,7 +165,7 @@ private val defaultLight = AppColorTokens(
     textDetailsScreenBody = Color(0xFF333333),
     textRelationEvent = Color(0xFF808080),
     detailsScreenHeaderBackground = Color(0xCCFFFFFF),
-    detailsScreenListBackground = Color(0xFFf2f2f2),
+    detailsScreenListBackground = Color(0xFFFFFFFF),
     //モーダル画面
     modalBackground = Color(0x4D000000),
     textMapModal = Color(0xFF808080),

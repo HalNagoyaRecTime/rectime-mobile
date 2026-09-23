@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -148,6 +149,11 @@ object RankingScreen : Screen {
                     }
                     items(uiState.rankingItems) { item ->
                         RankingRow(item = item)
+                        // 自チームのハイライトが区切り線まで途切れなく見えるようにする
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = AppTheme.colors.commonSeparatorLine,
+                        )
                     }
                 }
             }
@@ -203,6 +209,8 @@ private fun RankingRow(item: RankingItem) {
             color = AppTheme.colors.textPrimary,
             fontSize = bodyFontSize,
         )
+
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = "${item.score}pt",
