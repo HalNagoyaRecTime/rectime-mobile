@@ -169,17 +169,20 @@ private fun RankingRow(item: RankingItem) {
     val rankFontSize = if (isTopRank) RankingTopRankFontSize else RankingRankFontSize
     val bodyFontSize = if (isTopRank) RankingTopBodyFontSize else RankingBodyFontSize
     // 自分のチームは、左端から右へ薄れるグラデーションでハイライトする。
-    val rowBackground = if (item.isMyTeam) {
-        Brush.horizontalGradient(listOf(AppTheme.colors.rankingMyTeamHighlight, Color.Transparent))
+    // ハイライト無し行では無駄なBrushを生成しないよう、背景自体を付けない。
+    val highlightModifier = if (item.isMyTeam) {
+        Modifier.background(
+            brush = Brush.horizontalGradient(listOf(AppTheme.colors.rankingMyTeamHighlight, Color.Transparent)),
+        )
     } else {
-        Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+        Modifier
     }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(if (isTopRank) RankingTopRowHeight else RankingRowHeight)
-            .background(brush = rowBackground)
+            .then(highlightModifier)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
