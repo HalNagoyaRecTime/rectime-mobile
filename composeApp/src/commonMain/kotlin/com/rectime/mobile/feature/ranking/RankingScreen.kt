@@ -201,6 +201,8 @@ private fun RankingRow(item: RankingItem) {
             color = AppTheme.colors.textPrimary,
             fontSize = rankFontSize,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
             modifier = Modifier.width(if (isTopRank) 40.dp else 32.dp),
         )
 
