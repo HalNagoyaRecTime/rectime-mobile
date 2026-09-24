@@ -59,9 +59,59 @@ internal class FirebaseTokenRegistrationCoordinator(
     }
 
     fun onTokenRefreshed(fcmToken: String) {
+        handleTokenRefreshed(fcmToken, restoreSession = null)
+    }
+
+    fun onTokenRefreshed(
+        fcmToken: String,
+        restoreSession: suspend () -> AuthSession?,
+    ) {
+        handleTokenRefreshed(fcmToken, restoreSession)
+    }
+
+    private fun handleTokenRefreshed(
+        fcmToken: String,
+        restoreSession: (suspend () -> AuthSession?)?,
+    ) {
         if (fcmToken.isBlank()) return
         val updated = updateState { it.copy(fcmToken = fcmToken, generation = it.generation + 1) }
-        if (updated.session != null && !updated.stopping) scheduleRegistration()
+        if (updated.session != null && !updated.stopping) {
+            scheduleRegistration()
+            return
+        }
+        if (updated.stopping || restoreSession == null) return
+
+        scope.launch {
+            try {
+                val session = restoreSession() ?: return@launch
+                val restored = updateState { current ->
+                    if (
+                        current.generation != updated.generation ||
+                        current.session != null ||
+                        current.stopping
+                    ) {
+                        current
+                    } else {
+                        current.copy(
+                            session = session,
+                            generation = current.generation + 1,
+                        )
+                    }
+                }
+                if (
+                    restored.session?.let {
+                        it.refreshTokenId == session.refreshTokenId &&
+                            it.user.id == session.user.id
+                    } == true &&
+                    !restored.stopping
+                ) {
+                    scheduleRegistration()
+                }
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                onRegistrationFailure(error)
+            }
+        }
     }
 
     fun stopRegistration(session: AuthSession?) {

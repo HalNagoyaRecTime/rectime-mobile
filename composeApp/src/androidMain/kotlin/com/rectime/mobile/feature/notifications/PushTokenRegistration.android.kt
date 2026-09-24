@@ -4,6 +4,7 @@ import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.feature.auth.AuthSession
+import com.rectime.mobile.feature.auth.AuthSessionStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,9 @@ internal object AndroidPushTokenRegistrar : FirebaseTokenLogoutHandler {
     }
 
     fun onTokenRefreshed(fcmToken: String) {
-        coordinator.onTokenRefreshed(fcmToken)
+        coordinator.onTokenRefreshed(fcmToken) {
+            AuthSessionStore().load()
+        }
     }
 
     override fun stopRegistration(session: AuthSession?) {
