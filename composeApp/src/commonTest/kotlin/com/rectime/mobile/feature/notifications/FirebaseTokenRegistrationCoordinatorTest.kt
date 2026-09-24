@@ -128,6 +128,56 @@ class FirebaseTokenRegistrationCoordinatorTest {
     }
 
     @Test
+    fun backgroundTokenRefreshRestoresPersistedSessionAndRegisters() = runTest {
+        val store = InMemoryRegistrationStore()
+        val registrations = mutableListOf<String>()
+        val coordinator = coordinator(
+            store = store,
+            register = { token, _, accessToken ->
+                registrations += "$token:$accessToken"
+                73L
+            },
+        )
+        val persistedSession = session("user-a", "session-a", "access-a")
+
+        coordinator.onTokenRefreshed("background-fcm") { persistedSession }
+        runCurrent()
+
+        assertEquals(listOf("background-fcm:access-a"), registrations)
+        assertEquals(
+            FirebaseTokenRegistrationState("user-a", "background-fcm", 73L),
+            store.state,
+        )
+    }
+
+    @Test
+    fun logoutDuringSessionRestoreDoesNotRegisterTheStoppedSession() = runTest {
+        val restoreStarted = CompletableDeferred<Unit>()
+        val finishRestore = CompletableDeferred<AuthSession?>()
+        var registrations = 0
+        val coordinator = coordinator(
+            register = { _, _, _ ->
+                registrations++
+                registrations.toLong()
+            },
+        )
+        val session = session("user-a", "session-a", "access-a")
+
+        coordinator.onTokenRefreshed("background-fcm") {
+            restoreStarted.complete(Unit)
+            finishRestore.await()
+        }
+        runCurrent()
+        assertTrue(restoreStarted.isCompleted)
+
+        coordinator.stopRegistration(session)
+        finishRestore.complete(session)
+        runCurrent()
+
+        assertEquals(0, registrations)
+    }
+
+    @Test
     fun backendDeleteFailureStillAttemptsLocalMessagingCleanup() = runTest {
         val store = InMemoryRegistrationStore(
             FirebaseTokenRegistrationState("user-a", "fcm-a", 12L),
