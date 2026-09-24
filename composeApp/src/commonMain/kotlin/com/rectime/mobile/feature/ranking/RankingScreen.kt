@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -17,8 +18,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
@@ -33,7 +37,15 @@ import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
 import kotlin.time.Duration.Companion.milliseconds
 
+// 上位3チームは下位チームより一回り大きく表示する。
+private val RankingTopRowHeight = 84.dp
 private val RankingRowHeight = 64.dp
+private val RankingTopAccentBarSize = 6.dp to 44.dp
+private val RankingAccentBarSize = 4.dp to 32.dp
+private val RankingTopRankFontSize = 22.sp
+private val RankingRankFontSize = 16.sp
+private val RankingTopBodyFontSize = 20.sp
+private val RankingBodyFontSize = 16.sp
 
 object RankingScreen : Screen {
     override val key: String = "ranking"
@@ -137,6 +149,11 @@ object RankingScreen : Screen {
                     }
                     items(uiState.rankingItems) { item ->
                         RankingRow(item = item)
+                        // 自チームのハイライトが区切り線まで途切れなく見えるようにする
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = AppTheme.colors.commonSeparatorLine,
+                        )
                     }
                 }
             }
@@ -146,36 +163,47 @@ object RankingScreen : Screen {
 
 @Composable
 private fun RankingRow(item: RankingItem) {
+    val isTopRank = item.rank <= 3
     val accentColor = rankAccentColor(item.rank)
+    val (accentBarWidth, accentBarHeight) = if (isTopRank) RankingTopAccentBarSize else RankingAccentBarSize
+    val rankFontSize = if (isTopRank) RankingTopRankFontSize else RankingRankFontSize
+    val bodyFontSize = if (isTopRank) RankingTopBodyFontSize else RankingBodyFontSize
+    // 自分のチームは、左端から右へ薄れるグラデーションでハイライトする。
+    // ハイライト無し行では無駄なBrushを生成しないよう、背景自体を付けない。
+    val highlightModifier = if (item.isMyTeam) {
+        Modifier.background(
+            brush = Brush.horizontalGradient(listOf(AppTheme.colors.rankingMyTeamHighlight, Color.Transparent)),
+        )
+    } else {
+        Modifier
+    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(RankingRowHeight)
-            .background(
-                color = if (item.isMyTeam) {
-                    AppTheme.colors.surfaceAccent  // 自分のチームのハイライト色(仮)
-                } else {
-                    Color.Transparent
-                },
-            )
+            .height(if (isTopRank) RankingTopRowHeight else RankingRowHeight)
+            .then(highlightModifier)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // 左側の、順位の色帯
         Box(
             modifier = Modifier
-                .width(4.dp)
-                .height(32.dp)
+                .width(accentBarWidth)
+                .height(accentBarHeight)
                 .background(color = accentColor ?: Color.Transparent)
         )
 
         Spacer(modifier = Modifier.width(16.dp))
 
         Text(
-            text = "${item.rank}",
+            text = "${item.rank}.",
             color = AppTheme.colors.textPrimary,
-            modifier = Modifier.width(32.dp),
+            fontSize = rankFontSize,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
+            modifier = Modifier.width(if (isTopRank) 40.dp else 32.dp),
         )
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -184,19 +212,25 @@ private fun RankingRow(item: RankingItem) {
             text = item.teamName,
             modifier = Modifier.weight(1f),
             color = AppTheme.colors.textPrimary,
+            fontSize = bodyFontSize,
         )
+
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = "${item.score}pt",
             color = AppTheme.colors.textPrimary,
+            fontSize = bodyFontSize,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
 
+@Composable
 private fun rankAccentColor(rank: Int): Color? = when (rank) {
-    1 -> Color(0xFFF2C230)  // 金(仮)
-    2 -> Color(0xFFA8C5B8)  // 銀(仮)
-    3 -> Color(0xFFC98A2C)  // 銅(仮)
+    1 -> AppTheme.colors.rankingGoldAccent
+    2 -> AppTheme.colors.rankingSilverAccent
+    3 -> AppTheme.colors.rankingBronzeAccent
     else -> null  // 4位以下は、帯の色なし
 }
 
@@ -205,10 +239,12 @@ private fun MarqueeText(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = AppTheme.colors.textPrimary,
+    fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
 ) {
     Text(
         text = text,
         color = color,
+        fontSize = fontSize,
         maxLines = 1,
         overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
         modifier = modifier.basicMarquee(
