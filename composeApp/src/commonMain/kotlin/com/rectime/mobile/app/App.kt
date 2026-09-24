@@ -32,6 +32,7 @@ import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
+import com.rectime.mobile.feature.notifications.FirebaseTokenRegistrationContext
 import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
@@ -105,7 +106,8 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         }
         hadSession = authState.session != null
     }
-    LaunchedEffect(authState.session?.accessToken) {
+    LaunchedEffect(authState.session) {
+        FirebaseTokenRegistrationContext.update(authState.session)
         updatePushTokenRegistration(authState.session?.accessToken)
     }
     LaunchedEffect(Unit) {

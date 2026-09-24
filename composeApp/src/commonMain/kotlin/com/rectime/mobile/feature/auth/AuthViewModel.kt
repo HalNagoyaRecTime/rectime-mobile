@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.platform.openExternalUrl
+import com.rectime.mobile.feature.notifications.FirebaseTokenLogoutHandler
+import com.rectime.mobile.feature.notifications.FirebaseTokenLogoutHandlerRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,7 @@ class AuthViewModel(
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    private val firebaseTokenLogoutHandler: FirebaseTokenLogoutHandler = FirebaseTokenLogoutHandlerRegistry,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -280,16 +283,22 @@ class AuthViewModel(
     }
 
     fun logout() {
+        val session = _uiState.value.session
+        firebaseTokenLogoutHandler.stopRegistration(session)
         viewModelScope.launch {
-            val session = _uiState.value.session
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 if (session != null && !devAuthBypassEnabled) {
+                    try {
+                        firebaseTokenLogoutHandler.unregister(session)
+                    } catch (error: Throwable) {
+                        if (error is CancellationException) throw error
+                    }
                     api.logout(session)
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                // Prefer local sign-out even if server logout fails.
+                // Push解除やサーバーログアウトに失敗してもlocal logoutを続ける。
             } finally {
                 // API側でログアウトしてもaccess tokenは期限まで有効なため、端末から
                 // 消せたことを確認できない限りログアウト成功として扱わない。
