@@ -37,7 +37,7 @@ class FirebaseTokenApiTest {
         val client = mockAppHttpClient { request ->
             capturedRequest = request
             respond(
-                content = """{"firebase_token_id":1}""",
+                content = """{"firebaseTokenId":1}""",
                 status = HttpStatusCode.OK,
                 headers = jsonHeaders,
             )
@@ -75,7 +75,7 @@ class FirebaseTokenApiTest {
         val client = mockAppHttpClient { request ->
             capturedRequest = request
             respond(
-                content = """{"firebase_token_id":1}""",
+                content = """{"firebaseTokenId":1}""",
                 status = HttpStatusCode.OK,
                 headers = jsonHeaders,
             )
@@ -154,7 +154,7 @@ class FirebaseTokenApiTest {
             client = mockAppHttpClient { request ->
                 capturedRequest = request
                 respond(
-                    content = """{"firebase_token_id":1}""",
+                    content = """{"firebaseTokenId":1}""",
                     status = HttpStatusCode.OK,
                     headers = jsonHeaders,
                 )
@@ -178,7 +178,7 @@ class FirebaseTokenApiTest {
         var capturedRequest: HttpRequestData? = null
         val client = mockAppHttpClient { request ->
             capturedRequest = request
-            respond(content = "{}", status = HttpStatusCode.OK, headers = jsonHeaders)
+            respond(content = """{"firebaseTokenId":1}""", status = HttpStatusCode.OK, headers = jsonHeaders)
         }
         val api = FirebaseTokenApi(client = client, baseUrl = "https://external.example")
 
@@ -193,6 +193,70 @@ class FirebaseTokenApiTest {
         assertFalse(request.headers.contains("X-Client-Type"))
     }
 
+    @Test
+    fun registerReturnsFirebaseTokenIdFromPhaseZeroContract() = runTest {
+        val api = testApi(
+            mockAppHttpClient {
+                respond(
+                    content = """{"firebaseTokenId":42,"userId":8,"platform":"android","lastSeenAt":"2026-09-24T00:00:00.000Z"}""",
+                    status = HttpStatusCode.OK,
+                    headers = jsonHeaders,
+                )
+            },
+        )
+
+        assertEquals(
+            42L,
+            api.register("firebase-token", FirebasePlatform.Android, "access-token"),
+        )
+    }
+
+    @Test
+    fun deleteUsesRegistrationIdAndAcceptsAlreadyDeletedToken() = runTest {
+        var capturedRequest: HttpRequestData? = null
+        val api = testApi(
+            mockAppHttpClient { request ->
+                capturedRequest = request
+                respond(content = "", status = HttpStatusCode.NotFound)
+            },
+        )
+
+        api.delete(firebaseTokenId = 27, accessToken = "access-token")
+
+        val request = requireNotNull(capturedRequest)
+        assertEquals("DELETE", request.method.value)
+        assertEquals("$testBaseUrl/api/v1/firebase-tokens/27", request.url.toString())
+        assertEquals(listOf("Bearer access-token"), request.headers.getAll(HttpHeaders.Authorization))
+        assertEquals(listOf("mobile"), request.headers.getAll("X-Client-Type"))
+    }
+
+    @Test
+    fun deleteExposesBackendFailureWithoutLeakingCredentials() = runTest {
+        val api = testApi(
+            mockAppHttpClient {
+                respond(
+                    content = """{"error":{"code":"SERVICE_UNAVAILABLE","message":"Service unavailable"}}""",
+                    status = HttpStatusCode.ServiceUnavailable,
+                    headers = jsonHeaders,
+                )
+            },
+        )
+
+        val error = assertFailsWith<HttpStatusException> {
+            api.delete(firebaseTokenId = 27, accessToken = "secret-access-token")
+        }
+        assertEquals(HttpStatusCode.ServiceUnavailable, error.status)
+        assertFalse(error.message.orEmpty().contains("secret-access-token"))
+        assertFalse(error.message.orEmpty().contains("firebaseTokenId"))
+    }
+
+    @Test
+    fun deleteRejectsInvalidIdsAndBlankAccessTokensBeforeNetwork() = runTest {
+        val api = testApi(mockAppHttpClient { error("Network request must not be sent") })
+
+        assertFailsWith<IllegalArgumentException> { api.delete(0, "access-token") }
+        assertFailsWith<IllegalArgumentException> { api.delete(1, " ") }
+    }
     private fun testApi(client: HttpClient) = FirebaseTokenApi(
         client = client,
         baseUrl = testBaseUrl,
