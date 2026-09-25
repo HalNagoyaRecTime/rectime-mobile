@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.schedule
 
+import com.rectime.mobile.core.network.EventVenueResponse
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -24,7 +25,9 @@ class EventsResponseTest {
                   "event_id": 3,
                   "event_name": "綱引き",
                   "rule_text": "8人1組で綱を引く",
-                  "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -46,7 +49,10 @@ class EventsResponseTest {
         assertEquals(3, event.eventId)
         assertEquals("綱引き", event.eventName)
         assertEquals("8人1組で綱を引く", event.ruleText)
-        assertEquals("グラウンド", event.venue)
+        assertEquals(
+            listOf(EventVenueResponse(venueId = 5, venueName = "グラウンド")),
+            event.venues,
+        )
         assertEquals("1030", event.startTime)
         assertEquals("1100", event.endTime)
         assertEquals("2026-04-01T00:00:00Z", event.createdAt)
@@ -69,7 +75,9 @@ class EventsResponseTest {
                 {
                   "event_id": 3,
                   "event_name": "綱引き",
-                  "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -105,7 +113,9 @@ class EventsResponseTest {
                 {
                   "event_id": 3,
                   "event_name": "綱引き",
-                  "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -168,7 +178,6 @@ class EventsResponseTest {
                     {
                       "eventId": 3,
                       "eventName": "綱引き",
-                      "venue": "グラウンド",
                       "startTime": "1030",
                       "endTime": "1100",
                       "createdAt": "2026-04-01T00:00:00Z",
@@ -213,7 +222,9 @@ class EventsResponseTest {
               "event_id": $eventId,
               "event_name": "綱引き",
               "rule_text": $ruleText,
-              "venue": "グラウンド",
+              "venues": [
+                {"venue_id": 5, "venue_name": "グラウンド"}
+              ],
               "start_time": "1030",
               "end_time": "1100",
               "created_at": "2026-04-01T00:00:00Z",

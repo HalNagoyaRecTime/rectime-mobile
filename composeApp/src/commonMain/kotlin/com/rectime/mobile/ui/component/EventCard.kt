@@ -677,9 +677,9 @@ private fun EventCardInnerContent(
                             fontWeight = titleWeight,
                             fontFamily = fontFamily
                         ),
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(titleToCourtSpacing))
                     Box(
@@ -697,7 +697,10 @@ private fun EventCardInnerContent(
                                 fontSize = dim.largeCourtFont,
                                 fontWeight = courtWeight,
                                 fontFamily = fontFamily
-                            )
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -719,9 +722,9 @@ private fun EventCardInnerContent(
                             fontWeight = titleWeight,
                             fontFamily = fontFamily
                         ),
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(titleToCourtSpacing))
                     Box(
@@ -739,7 +742,10 @@ private fun EventCardInnerContent(
                                 fontSize = dim.mediumCourtFont,
                                 fontWeight = courtWeight,
                                 fontFamily = fontFamily
-                            )
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -761,9 +767,9 @@ private fun EventCardInnerContent(
                             fontWeight = titleWeight,
                             fontFamily = fontFamily
                         ),
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                     )
                 }
                 EventCardSizeVariant.Compact -> {
