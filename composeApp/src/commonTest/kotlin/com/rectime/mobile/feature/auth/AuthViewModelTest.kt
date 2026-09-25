@@ -2,8 +2,8 @@ package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
-import com.rectime.mobile.feature.notifications.FirebaseTokenLogoutHandler
-import com.rectime.mobile.feature.notifications.FirebaseTokenLogoutHandlerRegistry
+import com.rectime.mobile.feature.notifications.PushTokenLifecycle
+import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -895,9 +895,9 @@ class AuthViewModelTest {
     fun logoutStopsAndUnregistersPushBeforeServerLogoutAndKeepsLocalCleanupOnFailure() =
         runTest(testDispatcher) {
             val events = mutableListOf<String>()
-            val pushHandler = RecordingFirebaseTokenLogoutHandler(
+            val pushHandler = RecordingPushTokenLifecycle(
                 events = events,
-                unregisterFailure = IllegalStateException("backend unavailable"),
+                logoutFailure = IllegalStateException("backend unavailable"),
             )
             val store = FakeAuthSessionStorage(session = storedSession)
             val cache = LocalCache(InMemoryKeyValueStore())
@@ -919,7 +919,7 @@ class AuthViewModelTest {
                 ),
                 store = store,
                 cache = cache,
-                firebaseTokenLogoutHandler = pushHandler,
+                pushTokenLifecycle = pushHandler,
             )
             testDispatcher.scheduler.advanceUntilIdle()
 
@@ -927,7 +927,7 @@ class AuthViewModelTest {
             assertEquals(listOf("stop"), events)
             testDispatcher.scheduler.advanceUntilIdle()
 
-            assertEquals(listOf("stop", "push-delete", "server-logout"), events)
+            assertEquals(listOf("stop", "push-cleanup", "server-logout"), events)
             assertNull(viewModel.uiState.value.session)
             assertEquals("Logged out", viewModel.uiState.value.message)
             assertNull(store.session)
@@ -940,7 +940,7 @@ class AuthViewModelTest {
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
         nowMillis: () -> Long = { 1_000L },
-        firebaseTokenLogoutHandler: FirebaseTokenLogoutHandler = FirebaseTokenLogoutHandlerRegistry,
+        pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
@@ -948,7 +948,7 @@ class AuthViewModelTest {
         devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
         nowMillis = nowMillis,
-        firebaseTokenLogoutHandler = firebaseTokenLogoutHandler,
+        pushTokenLifecycle = pushTokenLifecycle,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })
@@ -973,17 +973,29 @@ class AuthViewModelTest {
         }
     }
 
-    private class RecordingFirebaseTokenLogoutHandler(
+    private class RecordingPushTokenLifecycle(
         private val events: MutableList<String>,
-        private val unregisterFailure: Throwable? = null,
-    ) : FirebaseTokenLogoutHandler {
-        override fun stopRegistration(session: AuthSession?) {
+        private val logoutFailure: Throwable? = null,
+    ) : PushTokenLifecycle {
+        override fun updateSession(session: AuthSession?) = Unit
+
+        override fun onTokenRefreshed(fcmToken: String) = Unit
+
+        override fun beginLogout(session: AuthSession?) {
             events += "stop"
         }
 
-        override suspend fun unregister(session: AuthSession?) {
-            events += "push-delete"
-            unregisterFailure?.let { throw it }
+        override suspend fun logout(
+            session: AuthSession?,
+            remoteLogout: suspend (String?) -> Unit,
+        ) {
+            events += "push-cleanup"
+            try {
+                logoutFailure?.let { throw it }
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+            }
+            remoteLogout("fcm-token")
         }
     }
     private class FakeAuthSessionStorage(

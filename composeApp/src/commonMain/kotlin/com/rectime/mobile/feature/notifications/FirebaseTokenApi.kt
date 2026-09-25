@@ -5,14 +5,11 @@ import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.network.mobileAuthHeaders
 import io.ktor.client.HttpClient
-import io.ktor.client.request.delete
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.call.body
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.serialization.Serializable
 
@@ -27,17 +24,11 @@ class FirebaseTokenApi(
         fcmToken: String,
         platform: FirebasePlatform,
         accessToken: String,
-    ): Long {
-        require(fcmToken.isNotBlank()) { "FCM token must not be blank" }
-        require(accessToken.isNotBlank()) { "Access token must not be blank" }
+    ) {
+        require(fcmToken.isNotBlank()) { "FCMトークンを指定してください" }
+        require(accessToken.isNotBlank()) { "アクセストークンを指定してください" }
 
         val response = client.post(endpoint) {
-            // このAPIはFCMのバックグラウンドコールバック(AndroidPushTokenRegistrar)
-            // からも、永続化ストアから読んだaccessTokenで呼ばれる。SessionTokenHolder
-            // (現在ログイン中のセッション用グローバル状態)は書き換えず、渡された
-            // accessTokenをこのリクエストにのみ明示的に付与する。ログアウト直後に
-            // FCMのトークンリフレッシュが走った場合でも、他のAPIリクエストへ古い
-            // トークンが漏れ出さないようにするため。
             headersProvider(endpoint, accessToken)?.forEach { (name, value) ->
                 header(name, value)
             }
@@ -49,24 +40,6 @@ class FirebaseTokenApi(
                 ),
             )
         }
-        if (response.status.value !in 200..299) {
-            throw apiErrorException(response.status, response.bodyAsText())
-        }
-        return response.body<FirebaseTokenRegistrationResponse>().firebaseTokenId
-            .also { require(it > 0) { "Firebase token ID must be positive" } }
-    }
-
-    suspend fun delete(firebaseTokenId: Long, accessToken: String) {
-        require(firebaseTokenId > 0) { "Firebase token ID must be positive" }
-        require(accessToken.isNotBlank()) { "Access token must not be blank" }
-
-        val tokenEndpoint = "$endpoint/$firebaseTokenId"
-        val response = client.delete(tokenEndpoint) {
-            headersProvider(tokenEndpoint, accessToken)?.forEach { (name, value) ->
-                header(name, value)
-            }
-        }
-        if (response.status == HttpStatusCode.NotFound) return
         if (response.status.value !in 200..299) {
             throw apiErrorException(response.status, response.bodyAsText())
         }
@@ -86,9 +59,4 @@ enum class FirebasePlatform(val wireValue: String) {
 internal data class RegisterFirebaseTokenRequest(
     val fcmToken: String,
     val platform: String,
-)
-
-@Serializable
-internal data class FirebaseTokenRegistrationResponse(
-    val firebaseTokenId: Long,
 )

@@ -14,71 +14,60 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-actual fun updatePushTokenRegistration(accessToken: String?) {
-    val session = FirebaseTokenRegistrationContext.current()
-        ?.takeIf { it.accessToken == accessToken }
-    AndroidPushTokenRegistrar.updateSession(session)
-}
+actual fun platformPushTokenLifecycle(): PushTokenLifecycle = AndroidPushTokenRegistrar
 
-internal object AndroidPushTokenRegistrar : FirebaseTokenLogoutHandler {
+internal object AndroidPushTokenRegistrar : PushTokenLifecycle {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val coordinator = FirebaseTokenRegistrationCoordinator(
+    private val manager = PushTokenLifecycleManager(
         platform = FirebasePlatform.Android,
-        store = createFirebaseTokenRegistrationStore(),
         scope = scope,
         register = { fcmToken, platform, accessToken ->
             withApi { api -> api.register(fcmToken, platform, accessToken) }
         },
-        delete = { id, accessToken ->
-            withApi { api -> api.delete(id, accessToken) }
-        },
+        currentFcmToken = { fetchFirebaseToken() },
         deleteMessagingToken = ::deleteMessagingToken,
-        onRegistrationFailure = ::logFailure,
+        restoreSession = { AuthSessionStore().load() },
+        onFailure = ::logFailure,
     )
 
-    init {
-        FirebaseTokenLogoutHandlerRegistry.install(this)
-    }
+    override fun updateSession(session: AuthSession?) = manager.updateSession(session)
 
-    fun updateSession(session: AuthSession?) {
-        coordinator.updateSession(session)
-        if (session != null) {
-            scope.launch {
-                runCatching { fetchFirebaseToken() }
-                    .onSuccess(coordinator::onTokenRefreshed)
-                    .onFailure(::logFailure)
+    override fun onTokenRefreshed(fcmToken: String) = manager.onTokenRefreshed(fcmToken)
+
+    override fun beginLogout(session: AuthSession?) = manager.beginLogout(session)
+
+    override suspend fun logout(
+        session: AuthSession?,
+        remoteLogout: suspend (String?) -> Unit,
+    ) = manager.logout(session, remoteLogout)
+
+    private suspend fun deleteMessagingToken() = suspendCancellableCoroutine { continuation ->
+        FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { task ->
+            if (!continuation.isActive) return@addOnCompleteListener
+            val error = task.exception
+            when {
+                error != null -> continuation.resumeWithException(error)
+                task.isSuccessful -> continuation.resume(Unit)
+                else -> continuation.resumeWithException(
+                    IllegalStateException("FCMトークンを削除できませんでした"),
+                )
             }
         }
     }
 
-    fun onTokenRefreshed(fcmToken: String) {
-        coordinator.onTokenRefreshed(fcmToken) {
-            AuthSessionStore().load()
-        }
-    }
-
-    override fun stopRegistration(session: AuthSession?) {
-        coordinator.stopRegistration(session)
-    }
-
-    override suspend fun unregister(session: AuthSession?) {
-        if (session != null) coordinator.unregister(session)
-    }
-
-    private suspend fun deleteMessagingToken() =
-        suspendCancellableCoroutine { continuation ->
-            FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { task ->
-                if (!continuation.isActive) return@addOnCompleteListener
-                val error = task.exception
-                when {
-                    error != null -> continuation.resumeWithException(error)
-                    task.isSuccessful -> continuation.resume(Unit)
-                    else -> continuation.resumeWithException(
-                        IllegalStateException("Firebase token deletion was not successful"),
-                    )
-                }
+    private suspend fun fetchFirebaseToken(): String? = suspendCancellableCoroutine { continuation ->
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (!continuation.isActive) return@addOnCompleteListener
+            val error = task.exception
+            when {
+                error != null -> continuation.resumeWithException(error)
+                task.isSuccessful -> continuation.resume(task.result)
+                else -> continuation.resumeWithException(
+                    IllegalStateException("FCMトークンを取得できませんでした"),
+                )
             }
         }
+    }
 
     private suspend fun <T> withApi(block: suspend (FirebaseTokenApi) -> T): T {
         val api = FirebaseTokenApi()
@@ -93,28 +82,10 @@ internal object AndroidPushTokenRegistrar : FirebaseTokenLogoutHandler {
         if (error is CancellationException) throw error
         when (error) {
             is HttpStatusException ->
-                Log.w(
-                    TAG,
-                    "FCM token registration failed: HTTP ${error.status.value} (${error.code})",
-                )
-            else -> Log.w(TAG, "FCM token registration failed")
+                Log.w(TAG, "FCM token lifecycle failed: HTTP ${error.status.value} (${error.code})")
+            else -> Log.w(TAG, "FCM token lifecycle failed")
         }
     }
-
-    private suspend fun fetchFirebaseToken(): String =
-        suspendCancellableCoroutine { continuation ->
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                if (!continuation.isActive) return@addOnCompleteListener
-                val error = task.exception
-                when {
-                    error != null -> continuation.resumeWithException(error)
-                    task.isSuccessful -> continuation.resume(task.result)
-                    else -> continuation.resumeWithException(
-                        IllegalStateException("Firebase token request was not successful"),
-                    )
-                }
-            }
-        }
 
     private const val TAG = "RectimeFCM"
 }
