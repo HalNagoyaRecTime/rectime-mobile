@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -53,6 +55,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -266,7 +269,7 @@ fun resolveEventCardShadowSpec(
 fun EventCard(
     time: String,
     title: String,
-    court: String,
+    venues: List<String>,
     isLive: Boolean,
     isParticipating: Boolean,
     onClick: () -> Unit,
@@ -553,7 +556,7 @@ fun EventCard(
                         EventCardInnerContent(
                             time = time,
                             title = title,
-                            court = court,
+                            venues = venues,
                             variant = variant,
                             isLive = isLive,
                             cutSize = cutSize,
@@ -626,7 +629,7 @@ fun EventCard(
 private fun EventCardInnerContent(
     time: String,
     title: String,
-    court: String,
+    venues: List<String>,
     variant: EventCardSizeVariant,
     isLive: Boolean,
     cutSize: Dp,
@@ -682,27 +685,19 @@ private fun EventCardInnerContent(
                             overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(titleToCourtSpacing))
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(eventVenueBackground)
-                            .padding(
-                                horizontal = (2.3f * dim.u).dp,
-                                vertical = (0.1f * dim.u).dp
-                            )
-                    ) {
-                        Text(
-                            text = court,
-                            style = tightlySpacedTextStyle(
-                                fontSize = dim.largeCourtFont,
-                                fontWeight = courtWeight,
-                                fontFamily = fontFamily
-                            ),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    EventVenueChip(
+                        venues = venues,
+                        textStyle = tightlySpacedTextStyle(
+                            fontSize = dim.largeCourtFont,
+                            fontWeight = courtWeight,
+                            fontFamily = fontFamily
+                        ),
+                        horizontalPadding = (2.3f * dim.u).dp,
+                        verticalPadding = (0.1f * dim.u).dp,
+                        maxWidth = availableWidth - rightReservedSpace,
+                        backgroundColor = eventVenueBackground,
+                        dim = dim
+                    )
                 }
                 EventCardSizeVariant.Medium -> {
                     Text(
@@ -727,27 +722,19 @@ private fun EventCardInnerContent(
                             overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(titleToCourtSpacing))
-                    Box(
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(eventVenueBackground)
-                            .padding(
-                                horizontal = (2f * dim.u).dp,
-                                vertical = (0.1f * dim.u).dp
-                            )
-                    ) {
-                        Text(
-                            text = court,
-                            style = tightlySpacedTextStyle(
-                                fontSize = dim.mediumCourtFont,
-                                fontWeight = courtWeight,
-                                fontFamily = fontFamily
-                            ),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    EventVenueChip(
+                        venues = venues,
+                        textStyle = tightlySpacedTextStyle(
+                            fontSize = dim.mediumCourtFont,
+                            fontWeight = courtWeight,
+                            fontFamily = fontFamily
+                        ),
+                        horizontalPadding = (2f * dim.u).dp,
+                        verticalPadding = (0.1f * dim.u).dp,
+                        maxWidth = availableWidth - rightReservedSpace,
+                        backgroundColor = eventVenueBackground,
+                        dim = dim
+                    )
                 }
                 EventCardSizeVariant.Small -> {
                     Text(
@@ -795,6 +782,93 @@ private fun EventCardInnerContent(
                     )
                 }
             }
+        }
+    }
+}
+private const val VenueSeparator = "・"
+
+/**
+ * 実施場所チップに表示する内容。
+ * [label] に表示しきれなかった実施場所の件数を [hiddenCount] に持つ。
+ */
+data class EventVenueLabel(
+    val label: String,
+    val hiddenCount: Int
+)
+
+/**
+ * 実施場所をできるだけ多く「・」区切りで並べ、収まらない分を件数として返す。
+ * 1件も収まらない場合でも先頭の実施場所は表示対象とし、省略は表示側に任せる。
+ *
+ * @param fits 表示文字列と省略件数の組み合わせがチップ内に収まるかを判定する。
+ */
+fun fitEventVenueLabel(
+    venues: List<String>,
+    fits: (label: String, hiddenCount: Int) -> Boolean
+): EventVenueLabel {
+    if (venues.isEmpty()) return EventVenueLabel(label = "", hiddenCount = 0)
+    for (shownCount in venues.size downTo 2) {
+        val label = venues.take(shownCount).joinToString(VenueSeparator)
+        val hiddenCount = venues.size - shownCount
+        if (fits(label, hiddenCount)) return EventVenueLabel(label, hiddenCount)
+    }
+    return EventVenueLabel(label = venues.first(), hiddenCount = venues.size - 1)
+}
+
+@Composable
+private fun EventVenueChip(
+    venues: List<String>,
+    textStyle: TextStyle,
+    horizontalPadding: Dp,
+    verticalPadding: Dp,
+    maxWidth: Dp,
+    backgroundColor: Color,
+    dim: EventCardDimensions
+) {
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val hiddenCountSpacing = (0.8f * dim.u).dp
+
+    val venueLabel = remember(venues, textStyle, maxWidth, density) {
+        val maxTextWidthPx = with(density) { (maxWidth - horizontalPadding * 2).toPx() }
+        val spacingPx = with(density) { hiddenCountSpacing.toPx() }
+        fitEventVenueLabel(venues) { label, hiddenCount ->
+            val labelWidth = textMeasurer.measure(label, textStyle, maxLines = 1, softWrap = false).size.width
+            val suffixWidth = if (hiddenCount > 0) {
+                textMeasurer.measure("+$hiddenCount", textStyle, maxLines = 1, softWrap = false).size.width + spacingPx
+            } else {
+                0f
+            }
+            labelWidth + suffixWidth <= maxTextWidthPx
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(backgroundColor)
+            .padding(
+                horizontal = horizontalPadding,
+                vertical = verticalPadding
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = venueLabel.label,
+            style = textStyle,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        if (venueLabel.hiddenCount > 0) {
+            Spacer(modifier = Modifier.width(hiddenCountSpacing))
+            Text(
+                text = "+${venueLabel.hiddenCount}",
+                style = textStyle,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }
