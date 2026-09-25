@@ -1,77 +1,20 @@
 package com.rectime.mobile.feature.notifications
 
-import com.rectime.mobile.core.network.HttpStatusException
-import com.rectime.mobile.feature.auth.AuthSessionStore
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import com.rectime.mobile.feature.auth.AuthSession
 
-actual fun updatePushTokenRegistration(accessToken: String?) {
-    IosPushTokenRegistrar.updateAccessToken(accessToken)
-}
+actual fun platformPushTokenLifecycle(): PushTokenLifecycle = NoopPushTokenLifecycle
 
-/** SwiftのMessagingDelegateとKMPの認証/API層を接続するiOS専用ブリッジ。 */
-object IosPushTokenRegistrar {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val registrationMutex = Mutex()
+private object NoopPushTokenLifecycle : PushTokenLifecycle {
+    override fun updateSession(session: AuthSession?) = Unit
 
-    private var currentAccessToken: String? = null
-    private var currentFcmToken: String? = null
-    private var lastRegisteredPair: Pair<String, String>? = null
+    override fun onTokenRefreshed(fcmToken: String) = Unit
 
-    fun updateAccessToken(accessToken: String?) {
-        scope.launch {
-            registrationMutex.withLock {
-                currentAccessToken = accessToken?.takeIf(String::isNotBlank)
-                if (currentAccessToken == null) lastRegisteredPair = null
-                registerIfReady()
-            }
-        }
-    }
+    override fun beginLogout(session: AuthSession?) = Unit
 
-    fun onTokenRefreshed(fcmToken: String?) {
-        val token = fcmToken?.takeIf(String::isNotBlank) ?: return
-        scope.launch {
-            registrationMutex.withLock {
-                currentFcmToken = token
-                if (currentAccessToken.isNullOrBlank()) {
-                    currentAccessToken = AuthSessionStore().load()?.accessToken
-                }
-                registerIfReady()
-            }
-        }
-    }
-
-    private suspend fun registerIfReady() {
-        val accessToken = currentAccessToken?.takeIf(String::isNotBlank) ?: return
-        val fcmToken = currentFcmToken?.takeIf(String::isNotBlank) ?: return
-        val pair = accessToken to fcmToken
-        if (lastRegisteredPair == pair) return
-
-        val api = FirebaseTokenApi()
-        try {
-            api.register(
-                fcmToken = fcmToken,
-                platform = FirebasePlatform.Ios,
-                accessToken = accessToken,
-            )
-            lastRegisteredPair = pair
-            println("[IosPushTokenRegistrar] FCM token registration completed")
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: HttpStatusException) {
-            println(
-                "[IosPushTokenRegistrar] FCM token registration failed: " +
-                    "HTTP ${error.status.value} (${error.code})",
-            )
-        } catch (error: Throwable) {
-            println("[IosPushTokenRegistrar] FCM token registration failed: ${error::class.simpleName}")
-        } finally {
-            api.close()
-        }
+    override suspend fun logout(
+        session: AuthSession?,
+        remoteLogout: suspend (String?) -> Unit,
+    ) {
+        remoteLogout(null)
     }
 }
