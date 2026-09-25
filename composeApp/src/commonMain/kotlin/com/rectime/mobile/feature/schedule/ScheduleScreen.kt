@@ -46,7 +46,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppModal
 import com.rectime.mobile.ui.component.EventCard
@@ -420,7 +419,7 @@ private fun ScheduleScreenUI(
                                 EventCard(
                                     time = "${event.startTimeLabel}-${event.endTimeLabel}",
                                     title = event.title,
-                                    court = venueDisplayText(event.venues),
+                                    venues = event.venues.map { it.venueName },
                                     isLive = isLive,
                                     isParticipating = event.isParticipating,
                                     onClick = { onOpenEventDetail(event.eventId) },
@@ -452,7 +451,7 @@ private fun ScheduleScreenUI(
                     EventCard(
                         time = "${event.startTimeLabel}-${event.endTimeLabel}",
                         title = event.title,
-                        court = venueDisplayText(event.venues),
+                        venues = event.venues.map { it.venueName },
                         isLive = isLive,
                         isParticipating = event.isParticipating,
                         onClick = {
