@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
                 print("[PushNotification] FCM token fetch failed: \(error.localizedDescription)")
                 return
             }
-            IosPushTokenRegistrar.shared.onTokenRefreshed(fcmToken: token)
+            IosPushTokenLifecycle.shared.onFirebaseTokenRefreshed(fcmToken: token)
         }
     }
 
@@ -60,6 +60,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
         FirebaseApp.configure(options: options)
         Messaging.messaging().delegate = self
+        IosPushTokenLifecycle.shared.installDeletionHandler(handler: FirebaseMessagingTokenDeletionHandler())
+        IosPushTokenLifecycle.shared.installTokenProvider(provider: FirebaseMessagingTokenProvider())
         isFirebaseConfigured = true
     }
 
@@ -80,9 +82,30 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+private final class FirebaseMessagingTokenDeletionHandler: NSObject, IosFirebaseMessagingTokenDeletionHandler {
+    func deleteToken(completion: @escaping (String?) -> Void) {
+        Messaging.messaging().deleteToken { error in
+            completion(error?.localizedDescription)
+        }
+    }
+}
+
+private final class FirebaseMessagingTokenProvider: NSObject, IosFirebaseMessagingTokenProvider {
+    func getToken(completion: @escaping (String?) -> Void) {
+        Messaging.messaging().token { token, error in
+            if let error {
+                print("[PushNotification] FCM token fetch failed")
+                completion(nil)
+                return
+            }
+            completion(token)
+        }
+    }
+}
+
 extension AppDelegate: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        IosPushTokenRegistrar.shared.onTokenRefreshed(fcmToken: fcmToken)
+        IosPushTokenLifecycle.shared.onFirebaseTokenRefreshed(fcmToken: fcmToken)
     }
 }
 
