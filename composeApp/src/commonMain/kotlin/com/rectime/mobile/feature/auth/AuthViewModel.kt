@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.platform.openExternalUrl
+import com.rectime.mobile.feature.notifications.PushTokenLifecycle
+import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,10 +28,12 @@ class AuthViewModel(
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    private val pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
     private val refreshMutex = Mutex()
+    private val sessionTransitionMutex = Mutex()
     private var refreshAttemptCount = 0
     private var refreshWindowStartedAt = 0L
 
@@ -77,45 +81,71 @@ class AuthViewModel(
             try {
                 val user = api.currentUser(stored.accessToken)
                 val session = stored.copy(user = user)
-                sessionStore.save(session)
-                sessionStore.clearPendingAuth()
-                _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
+                sessionTransitionMutex.withLock {
+                    if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                        sessionStore.save(session)
+                        if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
+                            sessionStore.clearPendingAuth()
+                        }
+                        pushTokenLifecycle.updateSession(session)
+                        _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
+                    }
+                }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 // 一時的な通信・Server障害では保存済みSessionとPKCE情報を維持する。
                 if (!error.isUnauthorizedAuthError()) {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            session = stored,
-                            pendingAuth = storedPending,
-                            message = "Offline",
-                            error = null,
-                        )
+                    sessionTransitionMutex.withLock {
+                        if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    session = stored,
+                                    pendingAuth = storedPending,
+                                    message = "Offline",
+                                    error = null,
+                                )
+                            }
+                        }
                     }
                     return@launch
                 }
                 try {
                     val refreshed = refreshMutex.withLock { api.refresh(stored) }
-                    sessionStore.save(refreshed)
-                    sessionStore.clearPendingAuth()
-                    _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
+                    sessionTransitionMutex.withLock {
+                        if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                            sessionStore.save(refreshed)
+                            if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
+                                sessionStore.clearPendingAuth()
+                            }
+                            pushTokenLifecycle.updateSession(refreshed)
+                            _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
+                        }
+                    }
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
                     if (refreshError.isUnauthorizedAuthError()) {
-                        invalidateSession(AUTH_EXPIRED_MESSAGE)
+                        invalidateSession(
+                            AUTH_EXPIRED_MESSAGE,
+                            expectedSession = stored,
+                            expectedPendingAuth = storedPending,
+                        )
                     } else {
                         val detail = if (isDebugBuild) {
                             " (${authErrorMessage(refreshError, debugDetailsEnabled = true)})"
                         } else {
                             ""
                         }
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                session = stored,
-                                message = "Offline",
-                            )
+                        sessionTransitionMutex.withLock {
+                            if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                                _uiState.update {
+                                    it.copy(
+                                        isLoading = false,
+                                        session = stored,
+                                        message = "Offline",
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -150,7 +180,7 @@ class AuthViewModel(
 
                 // Microsoftで認証済みの場合も即時コールバックを処理できるよう、
                 // ブラウザーへ制御を渡す前に今回のPKCE情報を保存する。
-                sessionStore.savePendingAuth(pending)
+                sessionTransitionMutex.withLock { sessionStore.savePendingAuth(pending) }
                 pendingForAttempt = pending
                 _uiState.update { it.copy(pendingAuth = pending) }
                 val opened = openUrl(authUrl)
@@ -202,11 +232,11 @@ class AuthViewModel(
             val callbackError = readQueryValue(url, "error")
             if (!callbackError.isNullOrBlank()) {
                 // OAuth callbackの失敗時はPKCE/stateを破棄し、再試行時に新しい認証を開始する。
-                sessionStore.clearPendingAuth()
+                clearPendingAuthForAttempt(pending)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        pendingAuth = null,
+                        pendingAuth = it.pendingAuth.takeUnless { saved -> saved == pending },
                         message = "",
                         error = if (callbackError == "access_denied") {
                             AUTH_CANCELED_MESSAGE
@@ -225,20 +255,20 @@ class AuthViewModel(
                     "code".takeIf { code.isNullOrBlank() },
                     "state".takeIf { state.isNullOrBlank() },
                 ).joinToString("/")
-                sessionStore.clearPendingAuth()
+                clearPendingAuthForAttempt(pending)
                 _uiState.update {
                     it.copy(
-                        pendingAuth = null,
+                        pendingAuth = it.pendingAuth.takeUnless { saved -> saved == pending },
                         error = debugAuthMessage("コールバックに $missing がありません", isDebugBuild),
                     )
                 }
                 return@launch
             }
             if (state != pending.state) {
-                sessionStore.clearPendingAuth()
+                clearPendingAuthForAttempt(pending)
                 _uiState.update {
                     it.copy(
-                        pendingAuth = null,
+                        pendingAuth = it.pendingAuth.takeUnless { saved -> saved == pending },
                         error = debugAuthMessage("state が一致しません", isDebugBuild),
                     )
                 }
@@ -248,29 +278,40 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = true, error = null, message = "Completing login...") }
             try {
                 val session = api.exchangeCode(code, state, pending.codeVerifier)
-                sessionStore.save(session)
-                sessionStore.clearPendingAuth()
-                // 共有端末で前のユーザーがログアウトせずにアプリを離れていた場合、
-                // キャッシュキーはユーザーIDで分離されていないため、新規ログイン時にも
-                // 明示的にクリアしておかないと前ユーザーのデータが見えてしまう。
-                cache.clearAll()
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        session = session,
-                        pendingAuth = null,
-                        message = "Login successful",
-                    )
+                val committed = sessionTransitionMutex.withLock {
+                    if (sessionStore.loadPendingAuth() != pending) {
+                        false
+                    } else {
+                        sessionStore.save(session)
+                        sessionStore.clearPendingAuth()
+                        // 共有端末では、新規ログイン時に前ユーザーのキャッシュを消去する。
+                        cache.clearAll()
+                        pushTokenLifecycle.updateSession(session)
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                session = session,
+                                pendingAuth = null,
+                                message = "Login successful",
+                            )
+                        }
+                        true
+                    }
                 }
+                if (!committed) return@launch
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 if (error is AuthApiException) {
-                    sessionStore.clearPendingAuth()
+                    clearPendingAuthForAttempt(pending)
                 }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        pendingAuth = if (error is AuthApiException) null else it.pendingAuth,
+                        pendingAuth = if (error is AuthApiException) {
+                            it.pendingAuth.takeUnless { saved -> saved == pending }
+                        } else {
+                            it.pendingAuth
+                        },
                         error = authErrorMessage(error, isDebugBuild),
                         message = "",
                     )
@@ -280,28 +321,66 @@ class AuthViewModel(
     }
 
     fun logout() {
+        val session = _uiState.value.session
+        pushTokenLifecycle.beginLogout(session)
         viewModelScope.launch {
-            val session = _uiState.value.session
             _uiState.update { it.copy(isLoading = true, error = null) }
+            val pendingAtLogoutStart = runCatching { sessionStore.loadPendingAuth() }.getOrNull()
             try {
                 if (session != null && !devAuthBypassEnabled) {
-                    api.logout(session)
+                    pushTokenLifecycle.logout(session) { fcmToken ->
+                        api.logout(session, fcmToken)
+                    }
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                // Prefer local sign-out even if server logout fails.
+                // Push解除やサーバーログアウトに失敗してもlocal logoutを続ける。
             } finally {
-                // API側でログアウトしてもaccess tokenは期限まで有効なため、端末から
-                // 消せたことを確認できない限りログアウト成功として扱わない。
-                val cleared = sessionStore.clear() and sessionStore.clearPendingAuth()
-                cache.clearAll()
-                _uiState.update {
-                    if (cleared) {
+                sessionTransitionMutex.withLock {
+                    val stored = sessionStore.load()
+                    val storedSessionIsTarget = if (session == null) {
+                        stored == null
+                    } else {
+                        stored == null || (
+                            stored.refreshTokenId == session.refreshTokenId &&
+                                stored.user.id == session.user.id
+                            )
+                    }
+                    if (!storedSessionIsTarget) {
+                        _uiState.update { current ->
+                            val currentSession = current.session
+                            if (currentSession == null || currentSession.refreshTokenId == session?.refreshTokenId) {
+                                current.copy(
+                                    isLoading = false,
+                                    session = stored,
+                                    error = null,
+                                    message = "Logged in",
+                                )
+                            } else {
+                                current.copy(isLoading = false)
+                            }
+                        }
+                        return@withLock
+                    }
+
+                    // 新しいSessionが保存済みなら、古いlogoutでSessionやcacheを消さない。
+                    val sessionCleared = sessionStore.clear()
+                    val currentPending = sessionStore.loadPendingAuth()
+                    val pendingCleared = when {
+                        pendingAtLogoutStart == null && currentPending == null -> sessionStore.clearPendingAuth()
+                        currentPending != pendingAtLogoutStart -> true
+                        else -> sessionStore.clearPendingAuth()
+                    }
+                    cache.clearAll()
+                    val cleared = sessionCleared && pendingCleared
+                    _uiState.value = if (cleared) {
                         AuthUiState(message = "Logged out")
                     } else {
                         AuthUiState(error = LOGOUT_FAILED_MESSAGE)
                     }
                 }
+                // 古いSessionの復元禁止はSessionStoreとcacheのcleanup完了後に確定する。
+                pushTokenLifecycle.completeLogout(session)
             }
         }
     }
@@ -317,22 +396,36 @@ class AuthViewModel(
                 refreshAttemptCount = 0
             }
             if (refreshAttemptCount >= MAX_REFRESH_ATTEMPTS) {
-                invalidateSession(AUTH_EXPIRED_MESSAGE, expectedAccessToken = accessToken)
+                invalidateSession(
+                    AUTH_EXPIRED_MESSAGE,
+                    expectedAccessToken = accessToken,
+                    expectedSession = current,
+                )
                 return
             }
             refreshAttemptCount++
 
             try {
                 val refreshed = api.refresh(current)
-                if (_uiState.value.session?.accessToken != accessToken) return
-                sessionStore.save(refreshed)
-                _uiState.update {
-                    it.copy(session = refreshed, error = null, message = "Logged in")
+                sessionTransitionMutex.withLock {
+                    val latest = _uiState.value.session
+                    val stored = sessionStore.load()
+                    if (
+                        latest?.accessToken == accessToken &&
+                        latest.refreshTokenId == current.refreshTokenId &&
+                        stored?.refreshTokenId == current.refreshTokenId
+                    ) {
+                        sessionStore.save(refreshed)
+                        pushTokenLifecycle.updateSession(refreshed)
+                        _uiState.update {
+                            it.copy(session = refreshed, error = null, message = "Logged in")
+                        }
+                    }
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 if (error.isUnauthorizedAuthError()) {
-                    invalidateSession(AUTH_EXPIRED_MESSAGE, expectedAccessToken = accessToken)
+                    invalidateSession(AUTH_EXPIRED_MESSAGE, expectedAccessToken = accessToken, expectedSession = current)
                 } else {
                     _uiState.update {
                         it.copy(
@@ -346,17 +439,32 @@ class AuthViewModel(
         }
     }
 
-    private suspend fun invalidateSession(message: String, expectedAccessToken: String? = null) {
-        if (expectedAccessToken != null && _uiState.value.session?.accessToken != expectedAccessToken) return
-        sessionStore.clear()
-        sessionStore.clearPendingAuth()
-        cache.clearAll()
-        _uiState.value = AuthUiState(error = message)
+    private suspend fun invalidateSession(
+        message: String,
+        expectedAccessToken: String? = null,
+        expectedSession: AuthSession? = null,
+        expectedPendingAuth: PendingAuth? = null,
+    ) {
+        sessionTransitionMutex.withLock {
+            val current = _uiState.value.session
+            if (expectedAccessToken != null && current?.accessToken != expectedAccessToken) return@withLock
+            if (expectedSession != null && current != null && current.refreshTokenId != expectedSession.refreshTokenId) return@withLock
+            val stored = sessionStore.load()
+            if (expectedSession != null && stored?.refreshTokenId != expectedSession.refreshTokenId) return@withLock
+            sessionStore.clear()
+            if (expectedPendingAuth != null && sessionStore.loadPendingAuth() == expectedPendingAuth) {
+                sessionStore.clearPendingAuth()
+            }
+            cache.clearAll()
+            _uiState.value = AuthUiState(error = message)
+        }
     }
 
     private suspend fun clearPendingAuthForAttempt(pending: PendingAuth) {
-        if (sessionStore.loadPendingAuth() == pending) {
-            sessionStore.clearPendingAuth()
+        sessionTransitionMutex.withLock {
+            if (sessionStore.loadPendingAuth() == pending) {
+                sessionStore.clearPendingAuth()
+            }
         }
     }
 

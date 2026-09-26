@@ -2,6 +2,8 @@ package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.feature.notifications.PushTokenLifecycle
+import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -11,6 +13,7 @@ import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -798,6 +801,53 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun staleLogoutKeepsNewerSessionAndCache() = runTest(testDispatcher) {
+        val remoteLogoutStarted = CompletableDeferred<Unit>()
+        val finishRemoteLogout = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("account_cache", "user-a-data")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/logout")) {
+                        remoteLogoutStarted.complete(Unit)
+                        finishRemoteLogout.await()
+                        respond(content = "", status = HttpStatusCode.NoContent)
+                    } else {
+                        respond(
+                            content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(remoteLogoutStarted.isCompleted)
+
+        val userB = storedSession.copy(
+            accessToken = "access-b",
+            refreshTokenId = "refresh-b",
+            user = storedSession.user.copy(id = "user-b", email = "user-b@example.com"),
+        )
+        store.session = userB
+        cache.save("account_cache", "user-b-data")
+        finishRemoteLogout.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(userB, store.session)
+        assertEquals(userB, viewModel.uiState.value.session)
+        assertEquals("user-b-data", cache.load<String>("account_cache"))
+    }
+
+    @Test
     fun logoutDropsTheUiSessionWhenLocalStorageCannotBeCleared() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(session = storedSession, clearFails = true)
         val viewModel = buildViewModel(api = okApi(), store = store)
@@ -889,6 +939,55 @@ class AuthViewModelTest {
         assertEquals("Logged out", state.message)
     }
 
+    @Test
+    fun logoutStopsAndUnregistersPushBeforeServerLogoutAndKeepsLocalCleanupOnFailure() =
+        runTest(testDispatcher) {
+            val events = mutableListOf<String>()
+            val store = FakeAuthSessionStorage(session = storedSession)
+            val cache = LocalCache(InMemoryKeyValueStore())
+            val pushHandler = RecordingPushTokenLifecycle(
+                events = events,
+                logoutFailure = IllegalStateException("backend unavailable"),
+                onComplete = {
+                    events += if (store.session == null && store.pendingAuth == null) {
+                        "complete-after-auth-cleanup"
+                    } else {
+                        "complete-before-auth-cleanup"
+                    }
+                },
+            )
+            cache.save("some_cached_key", "cached-value")
+            val viewModel = buildViewModel(
+                api = AuthApi(
+                    mockClient { request ->
+                        if (request.url.encodedPath.endsWith("/auth/logout")) {
+                            events += "server-logout"
+                            respond(content = "", status = HttpStatusCode.NoContent)
+                        } else {
+                            respond(
+                                content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                                status = HttpStatusCode.OK,
+                                headers = jsonHeaders,
+                            )
+                        }
+                    },
+                ),
+                store = store,
+                cache = cache,
+                pushTokenLifecycle = pushHandler,
+            )
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            viewModel.logout()
+            assertEquals(listOf("stop"), events)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf("stop", "push-cleanup", "server-logout", "complete", "complete-after-auth-cleanup"), events)
+            assertNull(viewModel.uiState.value.session)
+            assertEquals("Logged out", viewModel.uiState.value.message)
+            assertNull(store.session)
+            assertNull(cache.load<String>("some_cached_key"))
+        }
     private fun buildViewModel(
         api: AuthApi,
         store: FakeAuthSessionStorage,
@@ -896,6 +995,7 @@ class AuthViewModelTest {
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
         nowMillis: () -> Long = { 1_000L },
+        pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
@@ -903,6 +1003,7 @@ class AuthViewModelTest {
         devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
         nowMillis = nowMillis,
+        pushTokenLifecycle = pushTokenLifecycle,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })
@@ -927,6 +1028,37 @@ class AuthViewModelTest {
         }
     }
 
+    private class RecordingPushTokenLifecycle(
+        private val events: MutableList<String>,
+        private val logoutFailure: Throwable? = null,
+        private val onComplete: () -> Unit = {},
+    ) : PushTokenLifecycle {
+        override fun updateSession(session: AuthSession?) = Unit
+
+        override fun onTokenRefreshed(fcmToken: String) = Unit
+
+        override fun completeLogout(session: AuthSession?) {
+            events += "complete"
+            onComplete()
+        }
+
+        override fun beginLogout(session: AuthSession?) {
+            events += "stop"
+        }
+
+        override suspend fun logout(
+            session: AuthSession?,
+            remoteLogout: suspend (String?) -> Unit,
+        ) {
+            events += "push-cleanup"
+            try {
+                logoutFailure?.let { throw it }
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+            }
+            remoteLogout("fcm-token")
+        }
+    }
     private class FakeAuthSessionStorage(
         var session: AuthSession? = null,
         var pendingAuth: PendingAuth? = null,
