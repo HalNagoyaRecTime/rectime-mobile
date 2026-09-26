@@ -143,6 +143,38 @@ class PushTokenLifecycleManagerTest {
     }
 
     @Test
+    fun userSwitchDuringMessagingDeleteRegistersTheNewSessionAfterDelete() = runTest {
+        val deleteStarted = CompletableDeferred<Unit>()
+        val finishDelete = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        val manager = manager(
+            register = { token, _, accessToken -> events += "register:$token:$accessToken" },
+            deleteMessagingToken = {
+                deleteStarted.complete(Unit)
+                finishDelete.await()
+                true
+            },
+        )
+        val userA = session("user-a", "refresh-a", "access-a")
+        val userB = session("user-b", "refresh-b", "access-b")
+        manager.updateSession(userA)
+        runCurrent()
+        manager.beginLogout(userA)
+        val logout = async { manager.logout(userA) { } }
+        runCurrent()
+        deleteStarted.await()
+
+        manager.updateSession(userB)
+        runCurrent()
+        finishDelete.complete(Unit)
+        logout.await()
+        runCurrent()
+        manager.completeLogout(userA)
+
+        assertTrue(events.contains("register:fcm-token:access-b"))
+    }
+
+    @Test
     fun failedMessagingDeleteKeepsCachedTokenForNextLogin() = runTest {
         val registrations = mutableListOf<String>()
         var currentToken = "AAA"
@@ -187,6 +219,33 @@ class PushTokenLifecycleManagerTest {
         runCurrent()
 
         assertEquals(0, registrations)
+    }
+
+    @Test
+    fun logoutKeepsOldSessionBlockedUntilAndAfterLocalCleanup() = runTest {
+        var registrations = 0
+        var restoreCalls = 0
+        val active = session("user-a", "refresh-a", "access-a")
+        val manager = manager(
+            register = { _, _, _ -> registrations++ },
+            restoreSession = { restoreCalls++; active },
+        )
+        manager.updateSession(active)
+        runCurrent()
+        val registrationsBeforeLogout = registrations
+        manager.beginLogout(active)
+        manager.logout(active) { }
+
+        // logout()が戻りlocal cleanup待ちの間に、古いSessionがUIから再通知されても拒否する。
+        manager.updateSession(active)
+        manager.onTokenRefreshed("late-token")
+        runCurrent()
+        manager.completeLogout(active)
+        manager.onTokenRefreshed("after-cleanup-token")
+        runCurrent()
+
+        assertEquals(registrationsBeforeLogout, registrations)
+        assertTrue(restoreCalls > 0)
     }
 
     @Test
@@ -321,6 +380,9 @@ class PushTokenLifecycleManagerTest {
         finishRemoteLogout.complete(Unit)
         runCurrent()
         logout.await()
+        runCurrent()
+        manager.completeLogout(userA)
+        manager.updateSession(userB)
         runCurrent()
 
         assertTrue(events.contains("remote-logout:fcm-token"))

@@ -32,10 +32,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
         Messaging.messaging().token { token, error in
             if let error {
-                print("[PushNotification] FCM token fetch failed")
+                print("[PushNotification] FCM token fetch failed: \(error.localizedDescription)")
                 return
             }
-            IosPushTokenLifecycle.shared.onFirebaseTokenRefreshed(fcmToken: token)
+            IosPushTokenRegistrar.shared.onTokenRefreshed(fcmToken: token)
         }
     }
 
@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
-        print("[PushNotification] APNs registration failed")
+        print("[PushNotification] APNs registration failed: \(error.localizedDescription)")
     }
 
     private func configureFirebase() {
@@ -81,9 +81,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 extension AppDelegate: MessagingDelegate {
-    // Firebase callbackからKMP lifecycleへtoken更新を渡し、共通処理でsessionと登録を調整する。
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        IosPushTokenLifecycle.shared.onFirebaseTokenRefreshed(fcmToken: fcmToken)
+        IosPushTokenRegistrar.shared.onTokenRefreshed(fcmToken: fcmToken)
     }
 }
 

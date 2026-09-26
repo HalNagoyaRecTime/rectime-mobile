@@ -12,4 +12,5 @@ interface PushTokenLifecycle {
         session: AuthSession?,
         remoteLogout: suspend (String?) -> Unit,
     )
+    fun completeLogout(session: AuthSession?)
 }
