@@ -32,10 +32,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         Messaging.messaging().apnsToken = deviceToken
         Messaging.messaging().token { token, error in
             if let error {
-                print("[PushNotification] FCM token fetch failed: \(error.localizedDescription)")
+                print("[PushNotification] FCM token fetch failed")
                 return
             }
-            IosPushTokenRegistrar.shared.onTokenRefreshed(fcmToken: token)
+            IosPushTokenLifecycle.shared.onFirebaseTokenRefreshed(fcmToken: token)
         }
     }
 
@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
-        print("[PushNotification] APNs registration failed: \(error.localizedDescription)")
+        print("[PushNotification] APNs registration failed")
     }
 
     private func configureFirebase() {
@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
         FirebaseApp.configure(options: options)
         Messaging.messaging().delegate = self
+        IosPushTokenLifecycle.shared.installDeletionHandler(handler: FirebaseMessagingTokenDeletionHandler())
         isFirebaseConfigured = true
     }
 
@@ -80,9 +81,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+private final class FirebaseMessagingTokenDeletionHandler: NSObject, IosFirebaseMessagingTokenDeletionHandler {
+    func deleteToken(completion: @escaping (Bool) -> Void) {
+        Messaging.messaging().deleteToken { error in
+            completion(error == nil)
+        }
+    }
+}
+
 extension AppDelegate: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        IosPushTokenRegistrar.shared.onTokenRefreshed(fcmToken: fcmToken)
+        IosPushTokenLifecycle.shared.onFirebaseTokenRefreshed(fcmToken: fcmToken)
     }
 }
 

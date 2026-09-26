@@ -2,9 +2,9 @@ package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.feature.auth.AuthSession
 
-actual fun platformPushTokenLifecycle(): PushTokenLifecycle = NoopPushTokenLifecycle
+actual fun platformPushTokenLifecycle(): PushTokenLifecycle = JvmPushTokenLifecycle
 
-private object NoopPushTokenLifecycle : PushTokenLifecycle {
+private object JvmPushTokenLifecycle : PushTokenLifecycle {
     override fun updateSession(session: AuthSession?) = Unit
 
     override fun onTokenRefreshed(fcmToken: String) = Unit

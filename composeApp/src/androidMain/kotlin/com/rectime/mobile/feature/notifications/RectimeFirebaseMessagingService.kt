@@ -8,7 +8,7 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         initializePlatformContext(applicationContext)
-        AndroidPushTokenRegistrar.onTokenRefreshed(token)
+        AndroidPushTokenLifecycle.onTokenRefreshed(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

@@ -13,7 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class FirebaseTokenLifecycleManagerTest {
+class PushTokenLifecycleManagerTest {
     @Test
     fun sameUserAndTokenRegisterOnceAcrossSessionRotation() = runTest {
         val registrations = mutableListOf<String>()
@@ -122,6 +122,35 @@ class FirebaseTokenLifecycleManagerTest {
     }
 
     @Test
+    fun staleLogoutKeepsInFlightRegistrationForCurrentUser() = runTest {
+        val registrationStarted = CompletableDeferred<Unit>()
+        val finishRegistration = CompletableDeferred<Unit>()
+        var registrations = 0
+        val manager = manager(
+            register = { _, _, _ ->
+                registrations++
+                if (registrations == 1) {
+                    registrationStarted.complete(Unit)
+                    finishRegistration.await()
+                }
+            },
+        )
+        val activeUser = session("user-b", "refresh-b", "access-b")
+        val staleUser = session("user-a", "refresh-a", "access-a")
+
+        manager.updateSession(activeUser)
+        runCurrent()
+        assertTrue(registrationStarted.isCompleted)
+
+        manager.beginLogout(staleUser)
+        runCurrent()
+        finishRegistration.complete(Unit)
+        runCurrent()
+
+        assertEquals(2, registrations)
+    }
+
+    @Test
     fun logoutContinuesLocalTokenDeletionWhenRemoteLogoutFails() = runTest {
         var messagingDeleteCalled = false
         val manager = manager(
@@ -135,17 +164,119 @@ class FirebaseTokenLifecycleManagerTest {
         assertTrue(messagingDeleteCalled)
     }
 
+    @Test
+    fun tokenRefreshDuringLogoutCannotReplaceTheCapturedLogoutToken() = runTest {
+        val remoteTokens = mutableListOf<String?>()
+        val manager = manager()
+        val active = session("user-a", "refresh-a", "access-a")
+        manager.updateSession(active)
+        manager.onTokenRefreshed("known-token")
+        runCurrent()
+
+        manager.beginLogout(active)
+        manager.onTokenRefreshed("late-token")
+        runCurrent()
+        manager.logout(active) { token -> remoteTokens += token }
+
+        assertEquals(listOf<String?>("known-token"), remoteTokens)
+    }
+
+    @Test
+    fun logoutUsesCurrentTokenProviderWhenNoTokenWasCached() = runTest {
+        val remoteTokens = mutableListOf<String?>()
+        val manager = manager(currentFcmToken = { "provider-token" })
+        val active = session("user-a", "refresh-a", "access-a")
+
+        manager.beginLogout(active)
+        manager.logout(active) { token -> remoteTokens += token }
+
+        assertEquals(listOf<String?>("provider-token"), remoteTokens)
+    }
+
+    @Test
+    fun tokenProviderFailureStillLogsOutWithANullToken() = runTest {
+        val remoteTokens = mutableListOf<String?>()
+        val failures = mutableListOf<Throwable>()
+        var deleted = false
+        val manager = manager(
+            currentFcmToken = { error("FCM unavailable") },
+            deleteMessagingToken = { deleted = true },
+            onFailure = { failures += it },
+        )
+        val active = session("user-a", "refresh-a", "access-a")
+
+        manager.beginLogout(active)
+        manager.logout(active) { token -> remoteTokens += token }
+
+        assertEquals(listOf<String?>(null), remoteTokens)
+        assertTrue(deleted)
+        assertEquals(1, failures.size)
+    }
+
+    @Test
+    fun userSwitchDuringLogoutPreservesTheNewSessionAndSkipsTokenDeletion() = runTest {
+        val finishRemoteLogout = CompletableDeferred<Unit>()
+        val events = mutableListOf<String>()
+        val manager = manager(
+            register = { token, _, accessToken -> events += "register:$token:$accessToken" },
+            deleteMessagingToken = { events += "messaging-delete" },
+        )
+        val userA = session("user-a", "refresh-a", "access-a")
+        val userB = session("user-b", "refresh-b", "access-b")
+        manager.updateSession(userA)
+        runCurrent()
+        manager.beginLogout(userA)
+
+        val logout = async {
+            manager.logout(userA) {
+                events += "remote-logout:$it"
+                finishRemoteLogout.await()
+            }
+        }
+        runCurrent()
+        manager.updateSession(userB)
+        runCurrent()
+        finishRemoteLogout.complete(Unit)
+        runCurrent()
+        logout.await()
+        runCurrent()
+
+        assertTrue(events.contains("remote-logout:fcm-token"))
+        assertTrue("messaging-delete" !in events)
+        assertTrue(events.contains("register:fcm-token:access-b"))
+    }
+
+    @Test
+    fun messagingDeleteFailureDoesNotFailLogout() = runTest {
+        val remoteTokens = mutableListOf<String?>()
+        val failures = mutableListOf<Throwable>()
+        val manager = manager(
+            deleteMessagingToken = { error("Firebase unavailable") },
+            onFailure = { failures += it },
+        )
+        val active = session("user-a", "refresh-a", "access-a")
+        manager.beginLogout(active)
+
+        manager.logout(active) { remoteTokens += it }
+
+        assertEquals(listOf<String?>("fcm-token"), remoteTokens)
+        assertEquals(1, failures.size)
+    }
+
     private fun TestScope.manager(
         register: suspend (String, FirebasePlatform, String) -> Unit = { _, _, _ -> },
+        currentFcmToken: suspend () -> String? = { "fcm-token" },
         deleteMessagingToken: suspend () -> Unit = {},
         restoreSession: suspend () -> AuthSession? = { null },
+        onFailure: (Throwable) -> Unit = {},
     ) = PushTokenLifecycleManager(
         platform = FirebasePlatform.Android,
         scope = backgroundScope,
         register = register,
-        currentFcmToken = { "fcm-token" },
+        currentFcmToken = currentFcmToken,
         deleteMessagingToken = deleteMessagingToken,
         restoreSession = restoreSession,
+        onFailure = onFailure,
     )
 
     private fun session(userId: String, refreshTokenId: String, accessToken: String) =
