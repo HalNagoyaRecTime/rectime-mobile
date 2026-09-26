@@ -29,37 +29,39 @@ internal class PushTokenLifecycleManager(
                     session = null,
                     generation = current.generation + 1,
                 )
-                current.stopping &&
-                    session.refreshTokenId == current.stoppedSessionId -> current
+                session.refreshTokenId in current.stoppedSessionIds -> current
                 else -> current.copy(
                     session = session,
-                    stopping = false,
-                    stoppedSessionId = null,
                     generation = current.generation + 1,
                 )
             }
         }
-        if (updated.session != null && !updated.stopping) scheduleRegistration()
+        if (session != null && updated.session?.refreshTokenId == session.refreshTokenId) {
+            scheduleRegistration()
+        }
     }
 
     override fun onTokenRefreshed(fcmToken: String) {
         if (fcmToken.isBlank()) return
-        // logout中のrefreshはsnapshotが空の時だけ採用し、既に決めたlogout tokenを差し替えない。
         val updated = updateState { current ->
-            val logoutContext = current.logoutContext
-            val canUseTokenForLogout = logoutContext != null &&
-                (current.session == null || current.session.user.id == logoutContext.userId)
+            val activeLogout = current.activeLogoutSessionId?.let { id ->
+                current.logoutContexts[id]?.takeIf { context ->
+                    current.session == null || current.session.user.id == context.userId
+                }?.let { id to it }
+            }
+            val contexts = activeLogout?.let { (id, context) ->
+                if (context.fcmToken == null) {
+                    current.logoutContexts + (id to context.copy(fcmToken = fcmToken))
+                } else {
+                    current.logoutContexts
+                }
+            } ?: current.logoutContexts
             current.copy(
                 fcmToken = fcmToken,
-                logoutContext = if (logoutContext?.fcmToken == null && canUseTokenForLogout) {
-                    logoutContext.copy(fcmToken = fcmToken)
-                } else {
-                    logoutContext
-                },
+                logoutContexts = contexts,
                 generation = current.generation + 1,
             )
         }
-        if (updated.stopping) return
         if (updated.session != null) {
             scheduleRegistration()
             return
@@ -71,35 +73,39 @@ internal class PushTokenLifecycleManager(
         val updated = updateState { current ->
             val target = session ?: current.session
             val ownsCurrentSession = target != null &&
-                (current.session == null ||
-                    (current.session.refreshTokenId == target.refreshTokenId &&
-                        current.session.user.id == target.user.id))
-            val context = target?.let {
-                current.logoutContext?.takeIf { saved ->
-                    saved.refreshTokenId == it.refreshTokenId && saved.userId == it.user.id
-                } ?: LogoutContext(
-                    refreshTokenId = it.refreshTokenId,
-                    userId = it.user.id,
-                    fcmToken = if (ownsCurrentSession) {
+                (current.session == null || isSameSession(current.session, target))
+            if (target == null) {
+                current
+            } else {
+                val existing = current.logoutContexts[target.refreshTokenId]
+                val context = if (existing?.userId == target.user.id) {
+                    existing
+                } else {
+                    LogoutContext(
+                        userId = target.user.id,
+                        fcmToken = if (ownsCurrentSession) {
                         current.fcmToken?.takeIf(String::isNotBlank)
                     } else {
                         null
                     },
+                    )
+                }
+                current.copy(
+                    session = if (ownsCurrentSession) null else current.session,
+                    stoppedSessionIds = current.stoppedSessionIds + target.refreshTokenId,
+                    logoutContexts = current.logoutContexts + (target.refreshTokenId to context),
+                    activeLogoutSessionId = if (ownsCurrentSession) {
+                        target.refreshTokenId
+                    } else {
+                        current.activeLogoutSessionId
+                    },
+                    generation = current.generation + 1,
                 )
-            } ?: current.logoutContext
-            current.copy(
-                session = if (ownsCurrentSession) null else current.session,
-                stopping = if (ownsCurrentSession) true else current.stopping,
-                stoppedSessionId = if (ownsCurrentSession) {
-                    target.refreshTokenId
-                } else {
-                    current.stoppedSessionId
-                },
-                logoutContext = context,
-                generation = current.generation + 1,
-            )
+            }
         }
-        if (updated.session != null && !updated.stopping) scheduleRegistration()
+        if (updated.session != null && updated.session.refreshTokenId !in updated.stoppedSessionIds) {
+            scheduleRegistration()
+        }
     }
 
     override suspend fun logout(
@@ -109,60 +115,44 @@ internal class PushTokenLifecycleManager(
         if (session == null) return
         operationMutex.withLock {
             val savedContext = updateState { current ->
-                if (
-                    current.logoutContext?.let {
-                        it.refreshTokenId == session.refreshTokenId &&
-                            it.userId == session.user.id
-                    } == true
-                ) {
-                    current
+                val activeSession = current.session
+                val ownsCurrentSession = activeSession == null || isSameSession(activeSession, session)
+                val existing = current.logoutContexts[session.refreshTokenId]
+                val context = if (existing?.userId == session.user.id) {
+                    existing
                 } else {
-                    val activeSession = current.session
-                    val ownsCurrentSession = activeSession == null ||
-                        (activeSession.refreshTokenId == session.refreshTokenId &&
-                            activeSession.user.id == session.user.id)
-                    current.copy(
-                        session = if (ownsCurrentSession) null else activeSession,
-                        stopping = if (ownsCurrentSession) true else current.stopping,
-                        stoppedSessionId = if (ownsCurrentSession) {
-                            session.refreshTokenId
-                        } else {
-                            current.stoppedSessionId
-                        },
-                        logoutContext = LogoutContext(
-                            refreshTokenId = session.refreshTokenId,
-                            userId = session.user.id,
-                            fcmToken = if (ownsCurrentSession) {
-                                current.fcmToken?.takeIf(String::isNotBlank)
-                            } else {
-                                null
-                            },
-                        ),
-                        generation = current.generation + 1,
+                    LogoutContext(
+                        userId = session.user.id,
+                        fcmToken = if (ownsCurrentSession) current.fcmToken?.takeIf(String::isNotBlank) else null,
                     )
                 }
-            }.logoutContext?.takeIf {
-                it.refreshTokenId == session.refreshTokenId &&
-                    it.userId == session.user.id
-            }
+                current.copy(
+                    session = if (ownsCurrentSession) null else activeSession,
+                    stoppedSessionIds = current.stoppedSessionIds + session.refreshTokenId,
+                    logoutContexts = current.logoutContexts + (session.refreshTokenId to context),
+                    activeLogoutSessionId = if (ownsCurrentSession) {
+                        session.refreshTokenId
+                    } else {
+                        current.activeLogoutSessionId
+                    },
+                    generation = current.generation + 1,
+                )
+            }.logoutContexts[session.refreshTokenId]?.takeIf { it.userId == session.user.id }
 
             var fcmToken = savedContext?.fcmToken
-            val activeSession = state.load().session
-            val canFetchCurrentToken = activeSession == null ||
-                (activeSession.refreshTokenId == session.refreshTokenId &&
-                    activeSession.user.id == session.user.id)
-            if (fcmToken == null && canFetchCurrentToken) {
+            val beforeProvider = state.load()
+            val providerStillBelongsToLogout =
+                (beforeProvider.session == null || isSameSession(beforeProvider.session, session)) &&
+                    beforeProvider.activeLogoutSessionId == session.refreshTokenId
+            if (fcmToken == null && providerStillBelongsToLogout) {
                 try {
                     fcmToken = currentFcmToken()?.takeIf(String::isNotBlank)
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
                     onFailure(error)
                 }
-                fcmToken = fcmToken ?: state.load().logoutContext
-                    ?.takeIf {
-                        it.refreshTokenId == session.refreshTokenId &&
-                            it.userId == session.user.id
-                    }
+                fcmToken = fcmToken ?: state.load().logoutContexts[session.refreshTokenId]
+                    ?.takeIf { it.userId == session.user.id }
                     ?.fcmToken
             }
 
@@ -175,14 +165,8 @@ internal class PushTokenLifecycleManager(
 
             val activeSessionAfterRemote = state.load().session
             var messagingTokenDeleted = false
-            // Firebase Tokenは端末全体で共有されるため、別Userがlogin済みなら旧logoutから削除しない。
-            if (
-                activeSessionAfterRemote == null ||
-                (activeSessionAfterRemote.refreshTokenId == session.refreshTokenId &&
-                    activeSessionAfterRemote.user.id == session.user.id)
-            ) {
+            if (activeSessionAfterRemote == null || isSameSession(activeSessionAfterRemote, session)) {
                 try {
-                    // Backend logoutの後で削除し、成功した場合だけ古いToken cacheをclearする。
                     messagingTokenDeleted = deleteMessagingToken()
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
@@ -190,42 +174,42 @@ internal class PushTokenLifecycleManager(
                 }
             }
 
-            updateState { current ->
-                val sameLogout = current.logoutContext?.let {
-                    it.refreshTokenId == session.refreshTokenId &&
-                        it.userId == session.user.id
-                } == true
-                val ownsLogoutCache = sameLogout &&
-                    (current.session == null ||
-                        (current.session.refreshTokenId == session.refreshTokenId &&
-                            current.session.user.id == session.user.id))
-                val cacheMatchesDeletedToken =
-                    fcmToken?.let { it == current.fcmToken } == true ||
-                        savedContext?.fcmToken?.let { it == current.fcmToken } == true
+            val updated = updateState { current ->
+                val sameLogout = current.logoutContexts[session.refreshTokenId]
+                    ?.userId == session.user.id
+                val cacheMatchesDeletedToken = fcmToken?.let { it == current.fcmToken } == true ||
+                    savedContext?.fcmToken?.let { it == current.fcmToken } == true
                 current.copy(
-                    fcmToken = if (
-                        messagingTokenDeleted && ownsLogoutCache && cacheMatchesDeletedToken
-                    ) {
-                        null
+                    fcmToken = if (messagingTokenDeleted && cacheMatchesDeletedToken) null else current.fcmToken,
+                    logoutContexts = if (sameLogout) {
+                        current.logoutContexts - session.refreshTokenId
                     } else {
-                        current.fcmToken
+                        current.logoutContexts
                     },
-                    stopping = if (
-                        current.session == null &&
-                            current.stoppedSessionId == session.refreshTokenId
-                    ) {
-                        false
-                    } else {
-                        current.stopping
-                    },
-                    stoppedSessionId = current.stoppedSessionId
-                        .takeUnless { current.session == null && it == session.refreshTokenId },
-                    logoutContext = current.logoutContext.takeUnless { sameLogout },
-                    lastRegistration = current.lastRegistration?.takeUnless {
-                        it.userId == session.user.id
-                    },
+                    activeLogoutSessionId = current.activeLogoutSessionId.takeUnless { it == session.refreshTokenId },
+                    lastRegistration = current.lastRegistration?.takeUnless { it.userId == session.user.id },
                 )
             }
+            if (updated.session != null && updated.session.refreshTokenId !in updated.stoppedSessionIds) {
+                scheduleRegistration()
+            }
+        }
+    }
+
+    override fun completeLogout(session: AuthSession?) {
+        if (session == null) return
+        updateState { current ->
+            val context = current.logoutContexts[session.refreshTokenId]
+            current.copy(
+                stoppedSessionIds = current.stoppedSessionIds + session.refreshTokenId,
+                logoutContexts = if (context?.userId == session.user.id) {
+                    current.logoutContexts - session.refreshTokenId
+                } else {
+                    current.logoutContexts
+                },
+                activeLogoutSessionId = current.activeLogoutSessionId.takeUnless { it == session.refreshTokenId },
+                generation = current.generation + 1,
+            )
         }
     }
 
@@ -237,8 +221,7 @@ internal class PushTokenLifecycleManager(
                     if (
                         current.generation != expectedGeneration ||
                         current.session != null ||
-                        current.stopping ||
-                        restored.refreshTokenId == current.stoppedSessionId
+                        restored.refreshTokenId in current.stoppedSessionIds
                     ) {
                         current
                     } else {
@@ -249,12 +232,7 @@ internal class PushTokenLifecycleManager(
                     }
                 }
                 val restoredSession = updated.session
-                if (
-                    restoredSession != null &&
-                    restoredSession.user.id == restored.user.id &&
-                    restoredSession.refreshTokenId == restored.refreshTokenId &&
-                    !updated.stopping
-                ) {
+                if (restoredSession != null && isSameSession(restoredSession, restored)) {
                     scheduleRegistration()
                 }
             } catch (error: Throwable) {
@@ -279,13 +257,16 @@ internal class PushTokenLifecycleManager(
         operationMutex.withLock {
             val request = state.load()
             val session = request.session ?: return
-            if (request.stopping) return
+            if (session.refreshTokenId in request.stoppedSessionIds) return
 
             val fcmToken = request.fcmToken?.takeIf(String::isNotBlank)
                 ?: currentFcmToken()?.takeIf(String::isNotBlank)
                 ?: return
             val prepared = updateState { current ->
-                if (current.generation == request.generation && !current.stopping) {
+                if (
+                    current.generation == request.generation &&
+                    session.refreshTokenId !in current.stoppedSessionIds
+                ) {
                     current.copy(fcmToken = fcmToken)
                 } else {
                     current
@@ -295,11 +276,10 @@ internal class PushTokenLifecycleManager(
                 prepared.generation != request.generation ||
                 prepared.session?.refreshTokenId != session.refreshTokenId ||
                 prepared.fcmToken != fcmToken ||
-                prepared.stopping
+                session.refreshTokenId in prepared.stoppedSessionIds
             ) return
 
             val key = RegistrationKey(session.user.id, fcmToken)
-            // 抑止状態はprocess内だけに置く。再起動後のPOSTでBackendのlast_seen_atを更新できる。
             if (prepared.lastRegistration == key) return
             register(fcmToken, platform, session.accessToken)
 
@@ -308,7 +288,7 @@ internal class PushTokenLifecycleManager(
                     current.generation == request.generation &&
                     current.session?.refreshTokenId == session.refreshTokenId &&
                     current.fcmToken == fcmToken &&
-                    !current.stopping
+                    session.refreshTokenId !in current.stoppedSessionIds
                 ) {
                     current.copy(lastRegistration = key)
                 } else {
@@ -326,20 +306,20 @@ internal class PushTokenLifecycleManager(
         }
     }
 
-    // generationで非同期restore/registrationの開始時点を固定し、logoutやUser切替後の古い結果を破棄する。
+    private fun isSameSession(left: AuthSession, right: AuthSession): Boolean =
+        left.user.id == right.user.id && left.refreshTokenId == right.refreshTokenId
+
     private data class State(
         val session: AuthSession? = null,
         val fcmToken: String? = null,
         val generation: Long = 0,
-        val stopping: Boolean = false,
-        val stoppedSessionId: String? = null,
-        val logoutContext: LogoutContext? = null,
+        val stoppedSessionIds: Set<String> = emptySet(),
+        val activeLogoutSessionId: String? = null,
+        val logoutContexts: Map<String, LogoutContext> = emptyMap(),
         val lastRegistration: RegistrationKey? = null,
     )
 
-    // logout開始時のUser・refresh session・Tokenをsnapshotし、active session切替後も対象を混同しない。
     private data class LogoutContext(
-        val refreshTokenId: String,
         val userId: String,
         val fcmToken: String?,
     )

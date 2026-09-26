@@ -11,6 +11,8 @@ private object JvmPushTokenLifecycle : PushTokenLifecycle {
 
     override fun beginLogout(session: AuthSession?) = Unit
 
+    override fun completeLogout(session: AuthSession?) = Unit
+
     override suspend fun logout(
         session: AuthSession?,
         remoteLogout: suspend (String?) -> Unit,

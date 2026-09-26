@@ -37,6 +37,8 @@ internal object AndroidPushTokenLifecycle : PushTokenLifecycle {
 
     override fun beginLogout(session: AuthSession?) = manager.beginLogout(session)
 
+    override fun completeLogout(session: AuthSession?) = manager.completeLogout(session)
+
     override suspend fun logout(
         session: AuthSession?,
         remoteLogout: suspend (String?) -> Unit,
