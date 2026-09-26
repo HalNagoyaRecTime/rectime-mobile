@@ -60,7 +60,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
         FirebaseApp.configure(options: options)
         Messaging.messaging().delegate = self
-        IosPushTokenLifecycle.shared.installDeletionHandler(handler: FirebaseMessagingTokenDeletionHandler())
         isFirebaseConfigured = true
     }
 
@@ -81,15 +80,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-private final class FirebaseMessagingTokenDeletionHandler: NSObject, IosFirebaseMessagingTokenDeletionHandler {
-    func deleteToken(completion: @escaping (Bool) -> Void) {
-        Messaging.messaging().deleteToken { error in
-            completion(error == nil)
-        }
-    }
-}
-
 extension AppDelegate: MessagingDelegate {
+    // Firebase callbackからKMP lifecycleへtoken更新を渡し、共通処理でsessionと登録を調整する。
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         IosPushTokenLifecycle.shared.onFirebaseTokenRefreshed(fcmToken: fcmToken)
     }

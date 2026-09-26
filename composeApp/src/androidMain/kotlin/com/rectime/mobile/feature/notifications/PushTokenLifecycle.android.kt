@@ -26,6 +26,7 @@ internal object AndroidPushTokenLifecycle : PushTokenLifecycle {
         },
         currentFcmToken = { fetchFirebaseToken() },
         deleteMessagingToken = ::deleteMessagingToken,
+        // FirebaseがbackgroundでonNewTokenだけを届けてprocessを起動する場合、memory Sessionが無いため保存値を復元する。
         restoreSession = { AuthSessionStore().load() },
         onFailure = ::logFailure,
     )
@@ -47,7 +48,7 @@ internal object AndroidPushTokenLifecycle : PushTokenLifecycle {
             val error = task.exception
             when {
                 error != null -> continuation.resumeWithException(error)
-                task.isSuccessful -> continuation.resume(Unit)
+                task.isSuccessful -> continuation.resume(true)
                 else -> continuation.resumeWithException(
                     IllegalStateException("FCMトークンを削除できませんでした"),
                 )

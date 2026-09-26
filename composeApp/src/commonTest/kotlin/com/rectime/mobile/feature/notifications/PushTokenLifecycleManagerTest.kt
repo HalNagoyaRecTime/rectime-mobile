@@ -56,7 +56,7 @@ class PushTokenLifecycleManagerTest {
                 postStarted.complete(Unit)
                 finishPost.await()
             },
-            deleteMessagingToken = { events += "messaging-delete" },
+            deleteMessagingToken = { events += "messaging-delete"; true },
         )
         val active = session("user-a", "refresh-a", "access-a")
         manager.updateSession(active)
@@ -81,6 +81,88 @@ class PushTokenLifecycleManagerTest {
         manager.onTokenRefreshed("late-token")
         runCurrent()
         assertEquals(1, events.count { it.startsWith("register") })
+    }
+
+    @Test
+    fun successfulMessagingDeleteClearsCachedTokenBeforeRelogin() = runTest {
+        var currentToken = "AAA"
+        val registrations = mutableListOf<String>()
+        val remoteTokens = mutableListOf<String?>()
+        val manager = manager(
+            register = { token, _, _ -> registrations += token },
+            currentFcmToken = { currentToken },
+            deleteMessagingToken = { true },
+        )
+        val firstSession = session("user-a", "refresh-a", "access-a")
+
+        manager.updateSession(firstSession)
+        runCurrent()
+        manager.beginLogout(firstSession)
+        manager.logout(firstSession) { token -> remoteTokens += token }
+
+        currentToken = "BBB"
+        manager.updateSession(session("user-a", "refresh-b", "access-b"))
+        runCurrent()
+
+        assertEquals(listOf<String?>("AAA"), remoteTokens)
+        assertEquals(listOf("AAA", "BBB"), registrations)
+    }
+
+    @Test
+    fun tokenRefreshDuringSuccessfulMessagingDeleteKeepsNewCachedToken() = runTest {
+        val deleteStarted = CompletableDeferred<Unit>()
+        val finishDelete = CompletableDeferred<Unit>()
+        val registrations = mutableListOf<String>()
+        val manager = manager(
+            register = { token, _, _ -> registrations += token },
+            currentFcmToken = { "AAA" },
+            deleteMessagingToken = {
+                deleteStarted.complete(Unit)
+                finishDelete.await()
+                true
+            },
+        )
+        val firstSession = session("user-a", "refresh-a", "access-a")
+
+        manager.updateSession(firstSession)
+        runCurrent()
+        manager.beginLogout(firstSession)
+        val logout = async { manager.logout(firstSession) {} }
+        runCurrent()
+        deleteStarted.await()
+
+        manager.onTokenRefreshed("BBB")
+        runCurrent()
+        finishDelete.complete(Unit)
+        logout.await()
+
+        manager.updateSession(session("user-a", "refresh-b", "access-b"))
+        runCurrent()
+
+        assertEquals(listOf("AAA", "BBB"), registrations)
+    }
+
+    @Test
+    fun failedMessagingDeleteKeepsCachedTokenForNextLogin() = runTest {
+        val registrations = mutableListOf<String>()
+        var currentToken = "AAA"
+        val manager = manager(
+            register = { token, _, _ -> registrations += token },
+            currentFcmToken = { currentToken },
+            deleteMessagingToken = { error("Firebase unavailable") },
+        )
+        val firstSession = session("user-a", "refresh-a", "access-a")
+
+        manager.updateSession(firstSession)
+        runCurrent()
+        manager.beginLogout(firstSession)
+        manager.logout(firstSession) { }
+
+        currentToken = "BBB"
+        manager.updateSession(session("user-a", "refresh-b", "access-b"))
+        runCurrent()
+
+        assertEquals(listOf("AAA", "AAA"), registrations)
     }
 
     @Test
@@ -154,7 +236,7 @@ class PushTokenLifecycleManagerTest {
     fun logoutContinuesLocalTokenDeletionWhenRemoteLogoutFails() = runTest {
         var messagingDeleteCalled = false
         val manager = manager(
-            deleteMessagingToken = { messagingDeleteCalled = true },
+            deleteMessagingToken = { messagingDeleteCalled = true; true },
         )
         val active = session("user-a", "refresh-a", "access-a")
         manager.beginLogout(active)
@@ -200,7 +282,7 @@ class PushTokenLifecycleManagerTest {
         var deleted = false
         val manager = manager(
             currentFcmToken = { error("FCM unavailable") },
-            deleteMessagingToken = { deleted = true },
+            deleteMessagingToken = { deleted = true; true },
             onFailure = { failures += it },
         )
         val active = session("user-a", "refresh-a", "access-a")
@@ -219,7 +301,7 @@ class PushTokenLifecycleManagerTest {
         val events = mutableListOf<String>()
         val manager = manager(
             register = { token, _, accessToken -> events += "register:$token:$accessToken" },
-            deleteMessagingToken = { events += "messaging-delete" },
+            deleteMessagingToken = { events += "messaging-delete"; true },
         )
         val userA = session("user-a", "refresh-a", "access-a")
         val userB = session("user-b", "refresh-b", "access-b")
@@ -266,7 +348,7 @@ class PushTokenLifecycleManagerTest {
     private fun TestScope.manager(
         register: suspend (String, FirebasePlatform, String) -> Unit = { _, _, _ -> },
         currentFcmToken: suspend () -> String? = { "fcm-token" },
-        deleteMessagingToken: suspend () -> Unit = {},
+        deleteMessagingToken: suspend () -> Boolean = { true },
         restoreSession: suspend () -> AuthSession? = { null },
         onFailure: (Throwable) -> Unit = {},
     ) = PushTokenLifecycleManager(
