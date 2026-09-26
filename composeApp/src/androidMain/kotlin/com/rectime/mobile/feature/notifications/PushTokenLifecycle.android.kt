@@ -14,9 +14,9 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-actual fun platformPushTokenLifecycle(): PushTokenLifecycle = AndroidPushTokenRegistrar
+actual fun platformPushTokenLifecycle(): PushTokenLifecycle = AndroidPushTokenLifecycle
 
-internal object AndroidPushTokenRegistrar : PushTokenLifecycle {
+internal object AndroidPushTokenLifecycle : PushTokenLifecycle {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val manager = PushTokenLifecycleManager(
         platform = FirebasePlatform.Android,
