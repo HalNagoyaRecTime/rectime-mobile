@@ -143,6 +143,42 @@ class PushTokenLifecycleManagerTest {
     }
 
     @Test
+    fun tokenRefreshDuringFailedMessagingDeleteKeepsNewCachedToken() = runTest {
+        val deleteStarted = CompletableDeferred<Unit>()
+        val finishDelete = CompletableDeferred<Unit>()
+        val registrations = mutableListOf<String>()
+        val logoutTokens = mutableListOf<String?>()
+        val manager = manager(
+            register = { token, _, _ -> registrations += token },
+            currentFcmToken = { "AAA" },
+            deleteMessagingToken = {
+                deleteStarted.complete(Unit)
+                finishDelete.await()
+                error("Firebase unavailable")
+            },
+        )
+        val firstSession = session("user-a", "refresh-a", "access-a")
+
+        manager.updateSession(firstSession)
+        runCurrent()
+        manager.beginLogout(firstSession)
+        val logout = async { manager.logout(firstSession) { token -> logoutTokens += token } }
+        runCurrent()
+        deleteStarted.await()
+
+        manager.onTokenRefreshed("BBB")
+        runCurrent()
+        finishDelete.complete(Unit)
+        logout.await()
+
+        manager.updateSession(session("user-a", "refresh-b", "access-b"))
+        runCurrent()
+
+        assertEquals(listOf<String?>("AAA"), logoutTokens)
+        assertEquals(listOf("AAA", "BBB"), registrations)
+    }
+
+    @Test
     fun userSwitchDuringMessagingDeleteRegistersTheNewSessionAfterDelete() = runTest {
         val deleteStarted = CompletableDeferred<Unit>()
         val finishDelete = CompletableDeferred<Unit>()
@@ -175,26 +211,28 @@ class PushTokenLifecycleManagerTest {
     }
 
     @Test
-    fun failedMessagingDeleteKeepsCachedTokenForNextLogin() = runTest {
+    fun failedMessagingDeleteRefetchesCurrentTokenOnNextLogin() = runTest {
         val registrations = mutableListOf<String>()
+        val logoutTokens = mutableListOf<String?>()
         var currentToken = "AAA"
         val manager = manager(
             register = { token, _, _ -> registrations += token },
             currentFcmToken = { currentToken },
-            deleteMessagingToken = { error("Firebase unavailable") },
+            deleteMessagingToken = { false },
         )
         val firstSession = session("user-a", "refresh-a", "access-a")
 
         manager.updateSession(firstSession)
         runCurrent()
         manager.beginLogout(firstSession)
-        manager.logout(firstSession) { }
+        manager.logout(firstSession) { token -> logoutTokens += token }
 
         currentToken = "BBB"
         manager.updateSession(session("user-a", "refresh-b", "access-b"))
         runCurrent()
 
-        assertEquals(listOf("AAA", "AAA"), registrations)
+        assertEquals(listOf<String?>("AAA"), logoutTokens)
+        assertEquals(listOf("AAA", "BBB"), registrations)
     }
 
     @Test
