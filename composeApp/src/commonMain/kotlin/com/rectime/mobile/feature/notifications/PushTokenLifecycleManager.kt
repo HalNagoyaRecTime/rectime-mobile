@@ -15,7 +15,7 @@ internal class PushTokenLifecycleManager(
     private val scope: CoroutineScope,
     private val register: suspend (String, FirebasePlatform, String) -> Unit,
     private val currentFcmToken: suspend () -> String?,
-    private val deleteMessagingToken: suspend () -> Unit,
+    private val deleteMessagingToken: suspend () -> Boolean,
     private val restoreSession: suspend () -> AuthSession? = { null },
     private val onFailure: (Throwable) -> Unit = {},
 ) : PushTokenLifecycle {
@@ -44,6 +44,7 @@ internal class PushTokenLifecycleManager(
 
     override fun onTokenRefreshed(fcmToken: String) {
         if (fcmToken.isBlank()) return
+        // logout中のrefreshはsnapshotが空の時だけ採用し、既に決めたlogout tokenを差し替えない。
         val updated = updateState { current ->
             val logoutContext = current.logoutContext
             val canUseTokenForLogout = logoutContext != null &&
@@ -173,13 +174,16 @@ internal class PushTokenLifecycleManager(
             }
 
             val activeSessionAfterRemote = state.load().session
+            var messagingTokenDeleted = false
+            // Firebase Tokenは端末全体で共有されるため、別Userがlogin済みなら旧logoutから削除しない。
             if (
                 activeSessionAfterRemote == null ||
                 (activeSessionAfterRemote.refreshTokenId == session.refreshTokenId &&
                     activeSessionAfterRemote.user.id == session.user.id)
             ) {
                 try {
-                    deleteMessagingToken()
+                    // Backend logoutの後で削除し、成功した場合だけ古いToken cacheをclearする。
+                    messagingTokenDeleted = deleteMessagingToken()
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
                     onFailure(error)
@@ -191,7 +195,21 @@ internal class PushTokenLifecycleManager(
                     it.refreshTokenId == session.refreshTokenId &&
                         it.userId == session.user.id
                 } == true
+                val ownsLogoutCache = sameLogout &&
+                    (current.session == null ||
+                        (current.session.refreshTokenId == session.refreshTokenId &&
+                            current.session.user.id == session.user.id))
+                val cacheMatchesDeletedToken =
+                    fcmToken?.let { it == current.fcmToken } == true ||
+                        savedContext?.fcmToken?.let { it == current.fcmToken } == true
                 current.copy(
+                    fcmToken = if (
+                        messagingTokenDeleted && ownsLogoutCache && cacheMatchesDeletedToken
+                    ) {
+                        null
+                    } else {
+                        current.fcmToken
+                    },
                     stopping = if (
                         current.session == null &&
                             current.stoppedSessionId == session.refreshTokenId
@@ -281,6 +299,7 @@ internal class PushTokenLifecycleManager(
             ) return
 
             val key = RegistrationKey(session.user.id, fcmToken)
+            // 抑止状態はprocess内だけに置く。再起動後のPOSTでBackendのlast_seen_atを更新できる。
             if (prepared.lastRegistration == key) return
             register(fcmToken, platform, session.accessToken)
 
@@ -307,6 +326,7 @@ internal class PushTokenLifecycleManager(
         }
     }
 
+    // generationで非同期restore/registrationの開始時点を固定し、logoutやUser切替後の古い結果を破棄する。
     private data class State(
         val session: AuthSession? = null,
         val fcmToken: String? = null,
@@ -317,6 +337,7 @@ internal class PushTokenLifecycleManager(
         val lastRegistration: RegistrationKey? = null,
     )
 
+    // logout開始時のUser・refresh session・Tokenをsnapshotし、active session切替後も対象を混同しない。
     private data class LogoutContext(
         val refreshTokenId: String,
         val userId: String,
