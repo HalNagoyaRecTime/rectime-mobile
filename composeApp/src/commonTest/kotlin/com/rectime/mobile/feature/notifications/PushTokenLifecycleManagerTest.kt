@@ -236,6 +236,29 @@ class PushTokenLifecycleManagerTest {
     }
 
     @Test
+    fun thrownMessagingDeleteRefetchesCurrentTokenOnNextLogin() = runTest {
+        val registrations = mutableListOf<String>()
+        var currentToken = "AAA"
+        val manager = manager(
+            register = { token, _, _ -> registrations += token },
+            currentFcmToken = { currentToken },
+            deleteMessagingToken = { error("Firebase unavailable") },
+        )
+        val firstSession = session("user-a", "refresh-a", "access-a")
+
+        manager.updateSession(firstSession)
+        runCurrent()
+        manager.beginLogout(firstSession)
+        manager.logout(firstSession) { }
+
+        currentToken = "BBB"
+        manager.updateSession(session("user-a", "refresh-b", "access-b"))
+        runCurrent()
+
+        assertEquals(listOf("AAA", "BBB"), registrations)
+    }
+
+    @Test
     fun backgroundRestoreCompletingAfterLogoutCannotRegisterOldSession() = runTest {
         val restoreStarted = CompletableDeferred<Unit>()
         val finishRestore = CompletableDeferred<AuthSession?>()
