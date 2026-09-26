@@ -164,10 +164,9 @@ internal class PushTokenLifecycleManager(
             }
 
             val activeSessionAfterRemote = state.load().session
-            var messagingTokenDeleted = false
             if (activeSessionAfterRemote == null || isSameSession(activeSessionAfterRemote, session)) {
                 try {
-                    messagingTokenDeleted = deleteMessagingToken()
+                    deleteMessagingToken()
                 } catch (error: Throwable) {
                     if (error is CancellationException) throw error
                     onFailure(error)
@@ -177,10 +176,10 @@ internal class PushTokenLifecycleManager(
             val updated = updateState { current ->
                 val sameLogout = current.logoutContexts[session.refreshTokenId]
                     ?.userId == session.user.id
-                val cacheMatchesDeletedToken = fcmToken?.let { it == current.fcmToken } == true ||
+                val cacheMatchesLogoutToken = fcmToken?.let { it == current.fcmToken } == true ||
                     savedContext?.fcmToken?.let { it == current.fcmToken } == true
                 current.copy(
-                    fcmToken = if (messagingTokenDeleted && cacheMatchesDeletedToken) null else current.fcmToken,
+                    fcmToken = if (cacheMatchesLogoutToken) null else current.fcmToken,
                     logoutContexts = if (sameLogout) {
                         current.logoutContexts - session.refreshTokenId
                     } else {
