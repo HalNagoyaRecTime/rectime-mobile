@@ -102,6 +102,8 @@ object ScheduleScreen : Screen {
             onOpenEventDetail = { eventId -> navigationController.push(EventDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
+            isRefreshing = viewModel.isRefreshing,
+            onRefresh = viewModel::refresh,
             error = viewModel.error,
         )
     }
@@ -113,6 +115,8 @@ private fun ScheduleScreenUI(
     onOpenEventDetail: (Int) -> Unit,
     events: List<TimelineEvent>,
     isLoading: Boolean,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     error: String?,
 ) {
     val timelineTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction + 20.dp
@@ -175,6 +179,22 @@ private fun ScheduleScreenUI(
         RootScreenScaffold(
             title = "スケジュール",
             lazyListState = lazyListState,
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            contentBackground = {
+                // 更新時にリストが下がっても、先頭の時間帯と時刻欄の色を維持する。
+                val pastColor = AppTheme.colors.pastAreaBackground
+                val backgroundColor = AppTheme.colors.commonBackground
+                val timeBarColor = AppTheme.colors.scheduleTimeBarBackground
+                val nowY = with(density) { timelineGeometry.minuteY(nowMinute).toPx() }
+                val scrollY = lazyListState.firstVisibleItemScrollOffset
+                Canvas(Modifier.fillMaxSize()) {
+                    val pastHeight = (nowY - scrollY).coerceIn(0f, size.height)
+                    drawRect(backgroundColor)
+                    drawRect(pastColor, size = Size(size.width, pastHeight))
+                    drawRect(timeBarColor, size = Size(timeBarWidth.toPx(), size.height))
+                }
+            },
             horizontalPadding = false,
             contentTopPadding = false,
             contentBottomPadding = false,

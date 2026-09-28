@@ -15,6 +15,7 @@ import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.util.nowMinuteStateFlow
+import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -46,6 +47,9 @@ class ScheduleViewModel(
     var isLoading by mutableStateOf(false)
         private set
 
+    var isRefreshing by mutableStateOf(false)
+        private set
+
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -53,13 +57,19 @@ class ScheduleViewModel(
     var isOffline by mutableStateOf(false)
         private set
 
-    fun fetchEvents() {
+    fun fetchEvents() = loadEvents(isRefresh = false)
+
+    fun refresh() = loadEvents(isRefresh = true)
+
+    private fun loadEvents(isRefresh: Boolean) {
+        if (isLoading || isRefreshing) return
+        isLoading = !isRefresh
+        isRefreshing = isRefresh
+        error = null
         viewModelScope.launch {
             try {
-                isLoading = true
-                error = null
-                when (
-                    val result = fetchWithCacheFallback(
+                val result = withMinimumRefreshDuration(isRefresh) {
+                    fetchWithCacheFallback(
                         fetchLive = {
                             val response = client.get("$baseUrl/api/v1/events")
                             if (!response.status.isSuccess()) {
@@ -70,7 +80,8 @@ class ScheduleViewModel(
                         loadCache = { cache.load<EventsResponse>(EVENTS_CACHE_KEY) },
                         saveCache = { cache.save(EVENTS_CACHE_KEY, it) },
                     )
-                ) {
+                }
+                when (result) {
                     is CachedFetchResult.Fresh -> {
                         val timelineResult = toTimelineEvents(result.value)
                         _events.value = timelineResult.events
@@ -122,6 +133,7 @@ class ScheduleViewModel(
                 e.printStackTrace()
             } finally {
                 isLoading = false
+                isRefreshing = false
             }
         }
     }

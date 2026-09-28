@@ -2,6 +2,7 @@ package com.rectime.mobile.ui.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,6 +45,9 @@ fun RootScreenScaffold(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
+    isRefreshing: Boolean = false,
+    onRefresh: (() -> Unit)? = null,
+    contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
@@ -62,17 +66,33 @@ fun RootScreenScaffold(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            state = lazyListState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                top = topInset,
-                bottom = bottomInset,
-                start = if (horizontalPadding) hPad else 0.dp,
-                end = if (horizontalPadding) hPad else 0.dp,
-            ),
-            content = content,
-        )
+        contentBackground()
+        val listContent: @Composable () -> Unit = {
+            LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    top = topInset,
+                    bottom = bottomInset,
+                    start = if (horizontalPadding) hPad else 0.dp,
+                    end = if (horizontalPadding) hPad else 0.dp,
+                ),
+                content = content,
+            )
+        }
+        if (onRefresh == null) {
+            listContent()
+        } else {
+            PullToRefreshContainer(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                indicatorTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+                    spacing + AppTheme.layout.headerAction + spacing,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                listContent()
+            }
+        }
         if (headerEdgeFade) {
             Box(
                 modifier = Modifier

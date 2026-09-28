@@ -7,6 +7,7 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.util.nowMinuteStateFlow
+import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,7 +61,7 @@ class NotificationsViewModel(
         )
         loadJob = viewModelScope.launch {
             try {
-                when (val result = feedStore.load(force = isRefresh)) {
+                when (val result = withMinimumRefreshDuration(isRefresh) { feedStore.load(force = isRefresh) }) {
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = _uiState.value.copy(
                             notifications = result.value,
