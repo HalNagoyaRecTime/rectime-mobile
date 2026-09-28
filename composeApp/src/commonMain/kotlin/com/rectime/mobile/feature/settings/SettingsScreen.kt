@@ -1,9 +1,11 @@
 package com.rectime.mobile.feature.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,13 +37,12 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
+import com.rectime.mobile.feature.legal.LegalDocument
+import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.NotificationPermissionStatus
-import com.rectime.mobile.feature.notifications.description
-import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.LogoutConfirmationModal
-import com.rectime.mobile.ui.component.ProductionCredits
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.theme.AppTheme
@@ -59,6 +61,8 @@ class SettingsScreen(
 
     @Composable
     override fun Content(navigationController: NavigationController) {
+        var showAppInformation by remember { mutableStateOf(false) }
+        var showContactDetails by remember { mutableStateOf(false) }
         var showLogoutConfirmation by remember { mutableStateOf(false) }
         var notificationPermissionStatus by remember {
             mutableStateOf(NotificationPermissionStatus.Unavailable)
@@ -87,9 +91,14 @@ class SettingsScreen(
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
         }
 
+        // ナビゲーション本体の領域＋端末の安全領域＋ボタン下の余白。
+        val bottomPadding = 72.dp +
+            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
+
         RootScreenScaffold(
             title = "設定",
-            modifier = Modifier.background(AppTheme.colors.settingBackground)
+            modifier = Modifier.background(AppTheme.colors.settingBackground),
+            contentBottomPadding = false,
         ) {
             item {
                 UserInfoCard(
@@ -100,25 +109,80 @@ class SettingsScreen(
                 )
             }
 
-            if (notificationPermissionStartup != null) {
-                item {
-                    NotificationPermissionSetting(
-                        status = notificationPermissionStatus,
-                        onOpenSettings = notificationPermissionStartup::openSystemSettings,
+            item {
+                Spacer(Modifier.height(AppTheme.spacing.xl))
+                SettingsSection(title = "アプリ") {
+                    SettingsRow(
+                        title = "メールアドレス",
+                        icon = SettingsIcon.Contact,
+                        subtitle = session.user.email.ifBlank { "-" },
+                    )
+                    SettingsSeparator()
+                    SettingsRow(
+                        title = "通知",
+                        icon = SettingsIcon.Notification,
+                        detail = when (notificationPermissionStatus) {
+                            NotificationPermissionStatus.Granted -> "許可済み"
+                            NotificationPermissionStatus.NotDetermined -> "未設定"
+                            NotificationPermissionStatus.Denied -> "オフ"
+                            NotificationPermissionStatus.Unavailable -> "利用不可"
+                        },
+                        enabled = notificationPermissionStartup != null &&
+                            notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
+                        onClick = { notificationPermissionStartup?.openSystemSettings() },
                     )
                 }
             }
+            item {
+                Spacer(Modifier.height(AppTheme.spacing.xl))
+                SettingsSection(title = "ヘルプ") {
+                    SettingsRow(
+                        title = "お問い合わせ",
+                        icon = SettingsIcon.Contact,
+                        onClick = { showContactDetails = true },
+                    )
+                    SettingsSeparator()
+                    AccountDeletionSection { enabled, showConfirmation ->
+                        SettingsRow(
+                            title = "アカウント削除",
+                            icon = SettingsIcon.Delete,
+                            enabled = enabled,
+                            onClick = showConfirmation,
+                        )
+                    }
+                    SettingsSeparator()
+                    LegalDocumentLinks { enabled, open ->
+                        SettingsRow(
+                            title = "利用規約",
+                            icon = SettingsIcon.Terms,
+                            enabled = enabled,
+                            onClick = { open(LegalDocument.Terms) },
+                        )
+                        SettingsSeparator()
+                        SettingsRow(
+                            title = "プライバシーポリシー",
+                            icon = SettingsIcon.Privacy,
+                            enabled = enabled,
+                            onClick = { open(LegalDocument.PrivacyPolicy) },
+                        )
+                    }
+                    SettingsSeparator()
+                    SettingsRow(
+                        title = "アプリ情報",
+                        icon = SettingsIcon.Version,
+                        onClick = { showAppInformation = true },
+                    )
 
+                }
+            }
             item {
                 Button(
-                    onClick = { showLogoutConfirmation = true }, // ← onLogoutを直接呼ばず、まずモーダルを開く
-                    shape = RoundedCornerShape(AppTheme.radius.full),
+                    onClick = { showLogoutConfirmation = true },
+                    shape = RoundedCornerShape(SettingsCornerRadius),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = AppTheme.colors.themeColorFirst,
                         contentColor = AppTheme.colors.textThemeColorFirst,
                     ),
-                    // padding(横方向を含む) → fillMaxWidth → height の順で、
-                    // 「外側に余白を持ちつつ、ボタン自体は52dpの高さ」になる
                     modifier = Modifier
                         .padding(
                             top = AppTheme.spacing.xxl,
@@ -136,35 +200,22 @@ class SettingsScreen(
                     )
                 }
             }
-
             item {
-                AppDivider(
-                    modifier = Modifier.padding(horizontal = ExtraHorizontalMargin),
-                )
+                Spacer(Modifier.height(bottomPadding))
             }
+        }
 
-            item {
-                ContactSection(
-                    modifier = Modifier.padding(
-                        top = AppTheme.spacing.lg,
-                        start = ExtraHorizontalMargin,
-                        end = ExtraHorizontalMargin,
-                    ),
-                )
-            }
-            item {
-                LegalDocumentLinks(
-                    modifier = Modifier.padding(top = AppTheme.spacing.xxl),
-                )
-            }
+        if (showAppInformation) {
+            AppInformationSheet(onDismiss = { showAppInformation = false })
+        }
 
-            item {
-                AccountDeletionSection(
-                    modifier = Modifier.padding(
-                        start = ExtraHorizontalMargin,
-                        end = ExtraHorizontalMargin,
-                    ),
-                )
+        if (showContactDetails) {
+            SettingsModal(
+                title = "お問い合わせ",
+                onDismiss = { showContactDetails = false },
+                dismissText = "閉じる",
+            ) {
+                ContactSection()
             }
         }
 
@@ -177,41 +228,6 @@ class SettingsScreen(
                 onDismiss = { showLogoutConfirmation = false },
             )
         }
-    }
-}
-
-@Composable
-private fun NotificationPermissionSetting(
-    status: NotificationPermissionStatus,
-    onOpenSettings: () -> Unit,
-) {
-    val enabled = status != NotificationPermissionStatus.Unavailable
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onOpenSettings)
-            .padding(horizontal = ExtraHorizontalMargin, vertical = AppTheme.spacing.md),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "通知",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.userInformationBody,
-            )
-            Text(
-                text = status.description(),
-                fontSize = 13.sp,
-                color = AppTheme.colors.textContactInformation,
-            )
-        }
-        Text(
-            text = "端末の設定を開く",
-            fontSize = 13.sp,
-            color = if (enabled) AppTheme.colors.themeColorFirst else AppTheme.colors.textMuted,
-        )
     }
 }
 
@@ -229,10 +245,9 @@ private fun UserInfoCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .fillMaxWidth()
-            .outerShadow(                                   // ← 追加
+            .outerShadow(
                 shape = RoundedCornerShape(AppTheme.radius.card),
-                color = AppTheme.colors.dropShadow,      // RootHeaderと同じ影の色トークンを流用
+                color = AppTheme.colors.dropShadow,
                 blurRadius = 8.dp,
                 offsetX = 0.dp,
                 offsetY = 4.dp,
@@ -289,28 +304,26 @@ private fun InfoRow(label: String, value: String) {
 }
 
 /**
- * お問い合わせ先セクション（制作クレジットを含む）
+ * お問い合わせ先セクション
  */
 @Composable
 private fun ContactSection(modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(
-            text = "お問い合わせ先",
-            fontSize = 12.sp,
-            color = AppTheme.colors.userInformationHeader,
-        )
-        Spacer(modifier = Modifier.height(AppTheme.spacing.xs))
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
             text = "レ・クリエイション実行委員会　アプリ開発班",
             fontSize = 13.sp,
-            color = AppTheme.colors.textContactInformation,
+            color = AppTheme.colors.textSettingModalBody,
+            textAlign = TextAlign.Center,
         )
         Text(
             text = "担当教官：高橋真広先生",
             fontSize = 13.sp,
-            color = AppTheme.colors.textContactInformation,
+            color = AppTheme.colors.textSettingModalBody,
+            textAlign = TextAlign.Center,
         )
-        Spacer(modifier = Modifier.height(AppTheme.spacing.lg))
-        ProductionCredits()
     }
 }

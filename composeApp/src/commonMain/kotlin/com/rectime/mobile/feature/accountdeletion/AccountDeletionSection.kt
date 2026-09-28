@@ -3,7 +3,6 @@ package com.rectime.mobile.feature.accountdeletion
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,21 +19,24 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
 fun AccountDeletionSection(
     modifier: Modifier = Modifier,
+    content: (@Composable (Boolean, () -> Unit) -> Unit)? = null,
 ) {
     val launcher = remember { AccountDeletionLauncher() }
-    AccountDeletionSection(modifier = modifier, launcher = launcher)
+    AccountDeletionSection(modifier = modifier, launcher = launcher, content = content)
 }
 
 @Composable
 internal fun AccountDeletionSection(
     modifier: Modifier,
     launcher: AccountDeletionLauncher,
+    content: (@Composable (Boolean, () -> Unit) -> Unit)? = null,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val state = remember(launcher) {
@@ -46,74 +48,66 @@ internal fun AccountDeletionSection(
             .fillMaxWidth()
             .semantics {
                 if (state.isOpening) {
-                    stateDescription = "削除手続きページを開いています"
+                    stateDescription = "アカウント削除ページを開いています"
                 }
             },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        TextButton(
-            onClick = state::showDialog,
-            contentPadding = PaddingValues(horizontal = 0.dp),
-        ) {
-            Text(
-                text = "アカウント削除手続き",
-                fontSize = 13.sp,
-                color = AppTheme.colors.themeColorFirst,
-            )
+        if (content != null) {
+            content(!state.isOpening, state::showDialog)
+        } else {
+            TextButton(
+                onClick = state::showDialog,
+                contentPadding = PaddingValues(horizontal = 0.dp),
+            ) {
+                Text(
+                    text = "アカウント削除",
+                    fontSize = 13.sp,
+                    color = AppTheme.colors.themeColorFirst,
+                )
+            }
         }
 
         if (state.isDialogVisible) {
-            AlertDialog(
-                onDismissRequest = state::dismissDialog,
-                title = {
-                    Text("アカウント削除手続き")
-                },
-                text = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.semantics {
-                            if (state.isOpening) {
-                                stateDescription = "削除手続きページを開いています"
-                            }
-                        },
-                    ) {
-                        Text("RecTimeアカウントの削除はWebで手続きします。")
-                        Text("Microsoft 365アカウント自体は削除されません。Webページで内容を確認し、削除手続きの最終確認を行ってください。")
-                        state.errorMessage?.let { message ->
-                            Text(
-                                text = message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Start,
-                                modifier = Modifier.semantics {
-                                    liveRegion = LiveRegionMode.Polite
-                                },
-                            )
-                        }
+            SettingsModal(
+                title = "アカウント削除",
+                onDismiss = state::dismissDialog,
+                confirmText = if (state.isOpening) "ページを開いています…" else "アカウント削除ページを開く",
+                onConfirm = { coroutineScope.launch { state.open() } },
+                enabled = !state.isOpening,
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        if (state.isOpening) stateDescription = "アカウント削除ページを開いています"
+                    },
+                ) {
+                    Text(
+                        text = "アカウントの削除はWebで行います。",
+                        fontSize = 13.sp,
+                        color = AppTheme.colors.textSettingModalBody,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = "遷移先で認証を行ってください。",
+                        fontSize = 13.sp,
+                        color = AppTheme.colors.textSettingModalBody,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    state.errorMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                        )
                     }
-                },
-                confirmButton = {
-                    TextButton(
-                        enabled = !state.isOpening,
-                        onClick = {
-                            coroutineScope.launch {
-                                state.open()
-                            }
-                        },
-                    ) {
-                        Text("削除手続きページを開く")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        enabled = !state.isOpening,
-                        onClick = state::dismissDialog,
-                    ) {
-                        Text("キャンセル")
-                    }
-                },
-            )
+                }
+            }
         }
     }
 }

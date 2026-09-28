@@ -29,3 +29,11 @@ internal fun normalizeExternalHttpsUrl(url: String): String? {
 }
 
 internal expect suspend fun openPlatformExternalUrl(url: String): Boolean
+
+/** Opens an HTTPS page in the platform browser sheet (external browser on Desktop). */
+suspend fun openInAppBrowser(url: String): Boolean {
+    val normalizedUrl = normalizeExternalHttpsUrl(url) ?: return false
+    return openPlatformInAppBrowser(normalizedUrl)
+}
+
+internal expect suspend fun openPlatformInAppBrowser(url: String): Boolean
