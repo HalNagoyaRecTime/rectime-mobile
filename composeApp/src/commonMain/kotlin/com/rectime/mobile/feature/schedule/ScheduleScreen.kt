@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,7 +90,8 @@ private fun ScheduleScreenUI(
     error: String?,
 ) {
     val timelineTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction + 20.dp
-    val timelineBottomPadding = 120.dp
+    val navigationBottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val timelineBottomPadding = 120.dp + navigationBottomInset + 24.dp
     val hourStart = 9
     val hourEnd = 20
     val hourHeight = 72.dp
@@ -103,6 +106,12 @@ private fun ScheduleScreenUI(
 
     val windowInfo = LocalWindowInfo.current
     val density = LocalDensity.current
+    // Keep the scrollable range at 9:00–20:00 while painting the full 0:00–24:00 day.
+    val viewportHeight = with(density) { windowInfo.containerSize.height.toDp() }
+    val dayStartY = timelineTopPadding - hourHeight * hourStart
+    val dayEndY = timelineTopPadding + hourHeight * (24 - hourStart)
+    val bouncePaintTop = maxOf(viewportHeight, -dayStartY)
+    val bouncePaintBottom = maxOf(viewportHeight, dayEndY - totalTimelineHeight)
     val screenWidthDp = remember(windowInfo.containerSize.width) {
         with(density) { windowInfo.containerSize.width.toDp() }
     }
@@ -153,6 +162,24 @@ private fun ScheduleScreenUI(
                         .height(totalTimelineHeight)
                         .background(AppTheme.colors.commonBackground)
                 ) {
+                    val commonBackground = AppTheme.colors.commonBackground
+                    val pastAreaBackground = AppTheme.colors.pastAreaBackground
+                    Canvas(Modifier.fillMaxSize()) {
+                        val top = -bouncePaintTop.toPx()
+                        val bottom = size.height + bouncePaintBottom.toPx()
+                        val nowY = (timelineTopPadding +
+                            hourHeight * ((nowMinute - hourStart * 60) / 60f)).toPx()
+                        drawRect(commonBackground, Offset(0f, top), Size(size.width, -top))
+                        drawRect(commonBackground, Offset(0f, size.height), Size(size.width, bottom - size.height))
+                        val pastAbove = nowY.coerceIn(top, 0f)
+                        if (pastAbove > top) {
+                            drawRect(pastAreaBackground, Offset(0f, top), Size(size.width, pastAbove - top))
+                        }
+                        val pastBelow = nowY.coerceIn(size.height, bottom)
+                        if (pastBelow > size.height) {
+                            drawRect(pastAreaBackground, Offset(0f, size.height), Size(size.width, pastBelow - size.height))
+                        }
+                    }
                     val separatorLineColor = AppTheme.colors.textScheduleTimeLine
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val totalHours = hourEnd - hourStart
@@ -276,15 +303,21 @@ private fun ScheduleScreenUI(
                         modifier = Modifier
                             .width(timeBarWidth)
                             .height(totalTimelineHeight)
-                            .outerShadow(
-                                shape = RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp),
-                                color = AppTheme.colors.dropShadow,
-                                blurRadius = 8.dp,
-                                offsetX = 2.dp,
-                                offsetY = 0.dp
-                            )
-                            .background(AppTheme.colors.scheduleTimeBarBackground)
                     ) {
+                        Box(
+                            Modifier.wrapContentSize(unbounded = true, align = Alignment.TopStart)
+                                .width(timeBarWidth)
+                                .height(totalTimelineHeight + bouncePaintTop + bouncePaintBottom)
+                                .offset(y = -bouncePaintTop)
+                                .outerShadow(
+                                    shape = RectangleShape,
+                                    color = AppTheme.colors.dropShadow,
+                                    blurRadius = 8.dp,
+                                    offsetX = 2.dp,
+                                    offsetY = 0.dp,
+                                )
+                                .background(AppTheme.colors.scheduleTimeBarBackground),
+                        )
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -316,7 +349,7 @@ private fun ScheduleScreenUI(
                         }
                     }
 
-                    if (nowMinute in (hourStart * 60)..(hourEnd * 60)) {
+                    if (nowMinute in 0..(24 * 60)) {
                         val nowOffset = timelineTopPadding + (hourHeight * ((nowMinute - hourStart * 60) / 60f))
                         val accentColor = AppTheme.colors.themeColorFirst
 
