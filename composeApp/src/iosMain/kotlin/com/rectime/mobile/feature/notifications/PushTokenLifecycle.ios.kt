@@ -14,14 +14,14 @@ private object IosPushTokenLifecycle : PushTokenLifecycle {
         IosPushTokenRegistrar.onTokenRefreshed(fcmToken)
     }
 
-    override fun beginLogout(session: AuthSession?) = Unit
+    override fun beginLogout(session: AuthSession) = Unit
 
     override suspend fun logout(
-        session: AuthSession?,
+        session: AuthSession,
         remoteLogout: suspend (String?) -> Unit,
     ) {
         remoteLogout(null)
     }
 
-    override fun completeLogout(session: AuthSession?) = Unit
+    override fun completeLogout(session: AuthSession) = Unit
 }

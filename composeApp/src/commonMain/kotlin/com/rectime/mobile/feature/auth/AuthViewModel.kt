@@ -321,15 +321,15 @@ class AuthViewModel(
     }
 
     fun logout() {
-        val session = _uiState.value.session
-        pushTokenLifecycle.beginLogout(session)
+        val targetSession = _uiState.value.session ?: return
+        pushTokenLifecycle.beginLogout(targetSession)
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             val pendingAtLogoutStart = runCatching { sessionStore.loadPendingAuth() }.getOrNull()
             try {
-                if (session != null && !devAuthBypassEnabled) {
-                    pushTokenLifecycle.logout(session) { fcmToken ->
-                        api.logout(session, fcmToken)
+                if (!devAuthBypassEnabled) {
+                    pushTokenLifecycle.logout(targetSession) { fcmToken ->
+                        api.logout(targetSession, fcmToken)
                     }
                 }
             } catch (error: Throwable) {
@@ -338,18 +338,14 @@ class AuthViewModel(
             } finally {
                 sessionTransitionMutex.withLock {
                     val stored = sessionStore.load()
-                    val storedSessionIsTarget = if (session == null) {
-                        stored == null
-                    } else {
-                        stored == null || (
-                            stored.refreshTokenId == session.refreshTokenId &&
-                                stored.user.id == session.user.id
-                            )
-                    }
+                    val storedSessionIsTarget = stored == null || (
+                        stored.refreshTokenId == targetSession.refreshTokenId &&
+                            stored.user.id == targetSession.user.id
+                        )
                     if (!storedSessionIsTarget) {
                         _uiState.update { current ->
                             val currentSession = current.session
-                            if (currentSession == null || currentSession.refreshTokenId == session?.refreshTokenId) {
+                            if (currentSession == null || currentSession.refreshTokenId == targetSession.refreshTokenId) {
                                 current.copy(
                                     isLoading = false,
                                     session = stored,
@@ -380,7 +376,7 @@ class AuthViewModel(
                     }
                 }
                 // 古いSessionの復元禁止はSessionStoreとcacheのcleanup完了後に確定する。
-                pushTokenLifecycle.completeLogout(session)
+                pushTokenLifecycle.completeLogout(targetSession)
             }
         }
     }

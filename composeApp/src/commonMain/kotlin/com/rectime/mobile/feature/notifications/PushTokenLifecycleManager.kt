@@ -69,39 +69,33 @@ internal class PushTokenLifecycleManager(
         restoreSessionIfCurrent(updated.generation)
     }
 
-    override fun beginLogout(session: AuthSession?) {
+    override fun beginLogout(session: AuthSession) {
         val updated = updateState { current ->
-            val target = session ?: current.session
-            val ownsCurrentSession = target != null &&
-                (current.session == null || isSameSession(current.session, target))
-            if (target == null) {
-                current
+            val ownsCurrentSession = current.session == null || isSameSession(current.session, session)
+            val existing = current.logoutContexts[session.refreshTokenId]
+            val context = if (existing?.userId == session.user.id) {
+                existing
             } else {
-                val existing = current.logoutContexts[target.refreshTokenId]
-                val context = if (existing?.userId == target.user.id) {
-                    existing
-                } else {
-                    LogoutContext(
-                        userId = target.user.id,
-                        fcmToken = if (ownsCurrentSession) {
+                LogoutContext(
+                    userId = session.user.id,
+                    fcmToken = if (ownsCurrentSession) {
                         current.fcmToken?.takeIf(String::isNotBlank)
                     } else {
                         null
                     },
-                    )
-                }
-                current.copy(
-                    session = if (ownsCurrentSession) null else current.session,
-                    stoppedSessionIds = current.stoppedSessionIds + target.refreshTokenId,
-                    logoutContexts = current.logoutContexts + (target.refreshTokenId to context),
-                    activeLogoutSessionId = if (ownsCurrentSession) {
-                        target.refreshTokenId
-                    } else {
-                        current.activeLogoutSessionId
-                    },
-                    generation = current.generation + 1,
                 )
             }
+            current.copy(
+                session = if (ownsCurrentSession) null else current.session,
+                stoppedSessionIds = current.stoppedSessionIds + session.refreshTokenId,
+                logoutContexts = current.logoutContexts + (session.refreshTokenId to context),
+                activeLogoutSessionId = if (ownsCurrentSession) {
+                    session.refreshTokenId
+                } else {
+                    current.activeLogoutSessionId
+                },
+                generation = current.generation + 1,
+            )
         }
         if (updated.session != null && updated.session.refreshTokenId !in updated.stoppedSessionIds) {
             scheduleRegistration()
@@ -109,10 +103,9 @@ internal class PushTokenLifecycleManager(
     }
 
     override suspend fun logout(
-        session: AuthSession?,
+        session: AuthSession,
         remoteLogout: suspend (String?) -> Unit,
     ) {
-        if (session == null) return
         operationMutex.withLock {
             val savedContext = updateState { current ->
                 val activeSession = current.session
@@ -195,8 +188,7 @@ internal class PushTokenLifecycleManager(
         }
     }
 
-    override fun completeLogout(session: AuthSession?) {
-        if (session == null) return
+    override fun completeLogout(session: AuthSession) {
         updateState { current ->
             val context = current.logoutContexts[session.refreshTokenId]
             current.copy(

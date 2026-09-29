@@ -7,10 +7,10 @@ expect fun platformPushTokenLifecycle(): PushTokenLifecycle
 interface PushTokenLifecycle {
     fun updateSession(session: AuthSession?)
     fun onTokenRefreshed(fcmToken: String)
-    fun beginLogout(session: AuthSession?)
+    fun beginLogout(session: AuthSession)
     suspend fun logout(
-        session: AuthSession?,
+        session: AuthSession,
         remoteLogout: suspend (String?) -> Unit,
     )
-    fun completeLogout(session: AuthSession?)
+    fun completeLogout(session: AuthSession)
 }

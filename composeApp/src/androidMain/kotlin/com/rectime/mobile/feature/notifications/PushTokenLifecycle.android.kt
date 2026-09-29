@@ -35,12 +35,12 @@ internal object AndroidPushTokenLifecycle : PushTokenLifecycle {
 
     override fun onTokenRefreshed(fcmToken: String) = manager.onTokenRefreshed(fcmToken)
 
-    override fun beginLogout(session: AuthSession?) = manager.beginLogout(session)
+    override fun beginLogout(session: AuthSession) = manager.beginLogout(session)
 
-    override fun completeLogout(session: AuthSession?) = manager.completeLogout(session)
+    override fun completeLogout(session: AuthSession) = manager.completeLogout(session)
 
     override suspend fun logout(
-        session: AuthSession?,
+        session: AuthSession,
         remoteLogout: suspend (String?) -> Unit,
     ) = manager.logout(session, remoteLogout)
 

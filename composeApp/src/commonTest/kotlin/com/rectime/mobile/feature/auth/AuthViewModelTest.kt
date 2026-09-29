@@ -992,6 +992,25 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun logoutWithoutSessionDoesNotTouchPushLifecycle() = runTest(testDispatcher) {
+        val events = mutableListOf<String>()
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(
+            api = failingApi(),
+            store = store,
+            pushTokenLifecycle = RecordingPushTokenLifecycle(events),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(events.isEmpty())
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+    }
+
+    @Test
     fun logoutStopsAndUnregistersPushBeforeServerLogoutAndKeepsLocalCleanupOnFailure() =
         runTest(testDispatcher) {
             val events = mutableListOf<String>()
@@ -1089,17 +1108,17 @@ class AuthViewModelTest {
 
         override fun onTokenRefreshed(fcmToken: String) = Unit
 
-        override fun completeLogout(session: AuthSession?) {
+        override fun completeLogout(session: AuthSession) {
             events += "complete"
             onComplete()
         }
 
-        override fun beginLogout(session: AuthSession?) {
+        override fun beginLogout(session: AuthSession) {
             events += "stop"
         }
 
         override suspend fun logout(
-            session: AuthSession?,
+            session: AuthSession,
             remoteLogout: suspend (String?) -> Unit,
         ) {
             events += "push-cleanup"

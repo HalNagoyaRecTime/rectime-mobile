@@ -9,12 +9,12 @@ private object JvmPushTokenLifecycle : PushTokenLifecycle {
 
     override fun onTokenRefreshed(fcmToken: String) = Unit
 
-    override fun beginLogout(session: AuthSession?) = Unit
+    override fun beginLogout(session: AuthSession) = Unit
 
-    override fun completeLogout(session: AuthSession?) = Unit
+    override fun completeLogout(session: AuthSession) = Unit
 
     override suspend fun logout(
-        session: AuthSession?,
+        session: AuthSession,
         remoteLogout: suspend (String?) -> Unit,
     ) {
         remoteLogout(null)
