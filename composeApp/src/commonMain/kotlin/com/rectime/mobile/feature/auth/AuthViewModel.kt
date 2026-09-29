@@ -389,6 +389,7 @@ class AuthViewModel(
         refreshMutex.withLock {
             val current = _uiState.value.session ?: return
             if (current.accessToken != accessToken) return
+            val pendingAtRefreshStart = sessionStore.loadPendingAuth()
 
             val now = nowMillis()
             if (refreshWindowStartedAt == 0L || now - refreshWindowStartedAt > REFRESH_WINDOW_MILLIS) {
@@ -400,6 +401,7 @@ class AuthViewModel(
                     AUTH_EXPIRED_MESSAGE,
                     expectedAccessToken = accessToken,
                     expectedSession = current,
+                    expectedPendingAuth = pendingAtRefreshStart,
                 )
                 return
             }
@@ -425,7 +427,12 @@ class AuthViewModel(
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 if (error.isUnauthorizedAuthError()) {
-                    invalidateSession(AUTH_EXPIRED_MESSAGE, expectedAccessToken = accessToken, expectedSession = current)
+                    invalidateSession(
+                        AUTH_EXPIRED_MESSAGE,
+                        expectedAccessToken = accessToken,
+                        expectedSession = current,
+                        expectedPendingAuth = pendingAtRefreshStart,
+                    )
                 } else {
                     _uiState.update {
                         it.copy(

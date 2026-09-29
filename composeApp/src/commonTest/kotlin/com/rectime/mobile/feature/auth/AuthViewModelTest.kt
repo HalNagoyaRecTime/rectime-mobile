@@ -17,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -673,6 +674,8 @@ class AuthViewModelTest {
             cache = cache,
         )
         testDispatcher.scheduler.advanceUntilIdle()
+        val pending = PendingAuth("state-abc", "verifier-123")
+        store.pendingAuth = pending
 
         viewModel.refreshAfterUnauthorized(storedSession.accessToken)
         testDispatcher.scheduler.advanceUntilIdle()
@@ -680,7 +683,53 @@ class AuthViewModelTest {
         assertNull(viewModel.uiState.value.session)
         assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
         assertNull(store.session)
+        assertNull(store.pendingAuth)
         assertNull(cache.load<String>("some_cached_key"))
+    }
+
+    @Test
+    fun staleRefreshDoesNotClearPendingAuthCreatedAfterRefreshStarted() = runTest(testDispatcher) {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val finishRefresh = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val pendingAtRefreshStart = PendingAuth("state-old", "verifier-old")
+        val pendingAfterRefreshStart = PendingAuth("state-new", "verifier-new")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                        refreshStarted.complete(Unit)
+                        finishRefresh.await()
+                        respond(
+                            content = """{"error":{"message":"refresh token revoked"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        respond(
+                            content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        store.pendingAuth = pendingAtRefreshStart
+
+        val refresh = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        refreshStarted.await()
+
+        store.pendingAuth = pendingAfterRefreshStart
+        finishRefresh.complete(Unit)
+        refresh.await()
+
+        assertNull(store.session)
+        assertEquals(pendingAfterRefreshStart, store.pendingAuth)
+        assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
     }
 
     @Test
@@ -712,6 +761,8 @@ class AuthViewModelTest {
             nowMillis = { 1_000L },
         )
         testDispatcher.scheduler.advanceUntilIdle()
+        val pending = PendingAuth("state-abc", "verifier-123")
+        store.pendingAuth = pending
 
         viewModel.refreshAfterUnauthorized(storedSession.accessToken)
         viewModel.refreshAfterUnauthorized("refreshed-1")
@@ -720,6 +771,7 @@ class AuthViewModelTest {
         assertEquals(2, refreshCount)
         assertNull(viewModel.uiState.value.session)
         assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+        assertNull(store.pendingAuth)
     }
 
     // ---- logout ----
