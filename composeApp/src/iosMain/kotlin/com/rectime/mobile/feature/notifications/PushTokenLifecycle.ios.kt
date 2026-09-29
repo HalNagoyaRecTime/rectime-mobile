@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.AuthSessionStore
 import kotlinx.coroutines.CancellationException
@@ -106,5 +107,15 @@ object IosPushTokenLifecycle : PushTokenLifecycle {
 
     private fun logFailure(error: Throwable) {
         if (error is CancellationException) throw error
+        when (error) {
+            is HttpStatusException -> println(
+                "[IosPushTokenLifecycle] FCM token lifecycle failed: " +
+                    "HTTP ${error.status.value} (${error.code})",
+            )
+            else -> println(
+                "[IosPushTokenLifecycle] FCM token lifecycle failed: " +
+                    "${error::class.simpleName}",
+            )
+        }
     }
 }

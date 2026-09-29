@@ -94,7 +94,9 @@ private final class FirebaseMessagingTokenProvider: NSObject, IosFirebaseMessagi
     func getToken(completion: @escaping (String?) -> Void) {
         Messaging.messaging().token { token, error in
             if let error {
-                print("[PushNotification] FCM token fetch failed")
+                print(
+                    "[PushNotification] FCM token fetch failed: \(error.localizedDescription)"
+                )
                 completion(nil)
                 return
             }
