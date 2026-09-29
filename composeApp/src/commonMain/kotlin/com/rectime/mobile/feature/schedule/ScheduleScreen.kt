@@ -137,7 +137,7 @@ private fun ScheduleScreenUI(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(AppTheme.colors.commonBackground)) {
         RootScreenScaffold(
             title = "スケジュール",
             lazyListState = lazyListState,
