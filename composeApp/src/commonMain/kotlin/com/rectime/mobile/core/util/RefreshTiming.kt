@@ -3,7 +3,7 @@ package com.rectime.mobile.core.util
 import kotlinx.coroutines.delay
 import kotlin.time.TimeSource
 
-private const val MinimumRefreshDurationMillis = 600L
+internal const val MinimumRefreshDurationMillis = 600L
 
 /** Fetch immediately, but keep the previous content visible for a perceptible refresh. */
 internal suspend fun <T> withMinimumRefreshDuration(

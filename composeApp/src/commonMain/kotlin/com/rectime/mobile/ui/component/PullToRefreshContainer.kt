@@ -20,6 +20,10 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -31,7 +35,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.core.util.MinimumRefreshDurationMillis
 import com.rectime.mobile.ui.theme.AppTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val RefreshHoldDistance = 80.dp
 private val RefreshIndicatorHeight = 64.dp
@@ -47,11 +54,23 @@ internal fun PullToRefreshContainer(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val state = rememberPullToRefreshState()
+    val scope = rememberCoroutineScope()
+    var isGestureRefreshing by remember { mutableStateOf(false) }
+    val showRefreshing = isRefreshing || isGestureRefreshing
     val holdDistancePx = with(LocalDensity.current) { RefreshHoldDistance.toPx() }
     val indicatorHeightPx = with(LocalDensity.current) { RefreshIndicatorHeight.toPx() }
     PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
+        isRefreshing = showRefreshing,
+        onRefresh = {
+            // Keep Material's pull state in the refreshing phase even if the screen
+            // rejects a duplicate request while its initial load is still running.
+            isGestureRefreshing = true
+            onRefresh()
+            scope.launch {
+                delay(MinimumRefreshDurationMillis)
+                isGestureRefreshing = false
+            }
+        },
         state = state,
         modifier = modifier.clipToBounds(),
         indicator = {
@@ -66,7 +85,7 @@ internal fun PullToRefreshContainer(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    RefreshIndicator(isRefreshing, state.distanceFraction >= 1f)
+                    RefreshIndicator(showRefreshing, state.distanceFraction >= 1f)
                 }
             }
         },

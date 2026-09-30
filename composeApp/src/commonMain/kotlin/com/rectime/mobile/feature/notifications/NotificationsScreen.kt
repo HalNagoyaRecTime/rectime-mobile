@@ -76,7 +76,7 @@ object NotificationsScreen : Screen {
             modifier = Modifier.background(AppTheme.colors.notificationBackground),
             onTrailingClick = viewModel::refresh,
             trailing = {
-                if (uiState.isRefreshing) {
+                if (uiState.isRefreshing || uiState.isLoading) {
                     CircularProgressIndicator(
                         color = AppTheme.colors.textPrimary,
                         strokeWidth = 2.dp,
