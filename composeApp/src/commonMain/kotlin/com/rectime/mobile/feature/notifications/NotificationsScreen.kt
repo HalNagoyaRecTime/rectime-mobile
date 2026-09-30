@@ -72,6 +72,7 @@ object NotificationsScreen : Screen {
         RootScreenScaffold(
             title = "通知一覧",
             isRefreshing = uiState.isRefreshing,
+            refreshEnabled = !uiState.isLoading,
             onRefresh = viewModel::refresh,
             modifier = Modifier.background(AppTheme.colors.notificationBackground),
             onTrailingClick = viewModel::refresh,

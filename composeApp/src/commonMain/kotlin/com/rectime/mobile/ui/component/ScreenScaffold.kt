@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -46,6 +47,7 @@ fun RootScreenScaffold(
     trailing: @Composable (() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
     isRefreshing: Boolean = false,
+    refreshEnabled: Boolean = true,
     onRefresh: (() -> Unit)? = null,
     contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
@@ -66,25 +68,29 @@ fun RootScreenScaffold(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        contentBackground()
         val listContent: @Composable () -> Unit = {
-            LazyColumn(
-                state = lazyListState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    top = topInset,
-                    bottom = bottomInset,
-                    start = if (horizontalPadding) hPad else 0.dp,
-                    end = if (horizontalPadding) hPad else 0.dp,
-                ),
-                content = content,
-            )
+            Box(Modifier.fillMaxSize()) {
+                contentBackground()
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier.fillMaxSize(),
+                    overscrollEffect = if (onRefresh == null) rememberOverscrollEffect() else null,
+                    contentPadding = PaddingValues(
+                        top = topInset,
+                        bottom = bottomInset,
+                        start = if (horizontalPadding) hPad else 0.dp,
+                        end = if (horizontalPadding) hPad else 0.dp,
+                    ),
+                    content = content,
+                )
+            }
         }
         if (onRefresh == null) {
             listContent()
         } else {
             PullToRefreshContainer(
                 isRefreshing = isRefreshing,
+                refreshEnabled = refreshEnabled,
                 onRefresh = onRefresh,
                 indicatorTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
                     spacing + AppTheme.layout.headerAction + spacing,

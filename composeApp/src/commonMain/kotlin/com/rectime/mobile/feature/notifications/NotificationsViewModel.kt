@@ -55,8 +55,8 @@ class NotificationsViewModel(
 
         val hasNotifications = _uiState.value.notifications.isNotEmpty()
         _uiState.value = _uiState.value.copy(
-            isLoading = !hasNotifications,
-            isRefreshing = isRefresh && hasNotifications,
+            isLoading = !isRefresh && !hasNotifications,
+            isRefreshing = isRefresh,
             error = null,
         )
         loadJob = viewModelScope.launch {
@@ -119,6 +119,8 @@ class NotificationsViewModel(
                     error = e.toNotificationErrorMessage(),
                     readIds = _uiState.value.readIds,
                 )
+            } finally {
+                _uiState.value = _uiState.value.copy(isLoading = false, isRefreshing = false)
             }
         }
     }

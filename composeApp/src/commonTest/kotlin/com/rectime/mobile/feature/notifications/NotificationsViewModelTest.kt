@@ -118,7 +118,7 @@ class NotificationsViewModelTest {
     }
 
     @Test
-    fun refreshFallsBackToFullLoadingWhenNothingIsLoadedYet() = runTest(testDispatcher) {
+    fun refreshShowsRefreshingIndicatorEvenWhenNothingIsLoadedYet() = runTest(testDispatcher) {
         val gate = CompletableDeferred<Unit>()
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
@@ -134,8 +134,8 @@ class NotificationsViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertTrue(state.isLoading)
-        assertFalse(state.isRefreshing)
+        assertFalse(state.isLoading)
+        assertTrue(state.isRefreshing)
         assertNull(state.error)
 
         gate.complete(Unit)
