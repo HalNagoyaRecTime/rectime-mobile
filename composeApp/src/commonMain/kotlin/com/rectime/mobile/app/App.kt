@@ -24,6 +24,8 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
+import com.rectime.mobile.core.haptics.HapticPreference
+import com.rectime.mobile.core.haptics.LocalHapticPreference
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
@@ -93,6 +95,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     }
 
     val navigationController = remember { NavigationController() }
+    val hapticPreference = remember { HapticPreference() }
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
@@ -112,6 +115,9 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     val authState by authViewModel.uiState.collectAsState()
     LaunchedEffect(notificationPermissionStartup) {
         notificationPermissionStartup?.requestIfNeeded()
+    }
+    LaunchedEffect(hapticPreference) {
+        hapticPreference.load()
     }
     var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
@@ -186,7 +192,10 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     .background(AppTheme.colors.surfacePrimary)
                     .fillMaxSize(),
             ) {
-                CompositionLocalProvider(LocalProfilePhotoRepository provides authViewModel.photoRepository) {
+                CompositionLocalProvider(
+                    LocalProfilePhotoRepository provides authViewModel.photoRepository,
+                    LocalHapticPreference provides hapticPreference,
+                ) {
                     NavigationHost(
                         navigationController = navigationController,
                         session = session,

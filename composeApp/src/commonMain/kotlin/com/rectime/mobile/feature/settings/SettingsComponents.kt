@@ -36,6 +36,7 @@ internal val SettingsCornerRadius = 26.dp
 
 internal enum class SettingsIcon(val path: String) {
     Notification(""),
+    Haptic("M12,4 L12,20 M7,7 C4,9 4,15 7,17 M17,7 C20,9 20,15 17,17"),
     Contact("M3,4 L21,4 L21,20 L3,20 Z M3,5 L12,12 L21,5"),
     Terms("M6,2 L15,2 L20,7 L20,22 L6,22 Z M15,2 L15,7 L20,7 M9,12 L17,12 M9,16 L17,16"),
     Privacy("M12,2 L21,6 L20,14 C19,18 16,21 12,23 C8,21 5,18 4,14 L3,6 Z M9,11 L9,16 L15,16 L15,11 Z M10,11 L10,9 C10,6 14,6 14,9 L14,11"),
@@ -91,6 +92,7 @@ internal fun SettingsRow(
     subtitle: String? = null,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     val color = when {
         !enabled -> AppTheme.colors.textMuted
@@ -132,7 +134,9 @@ internal fun SettingsRow(
         if (detail != null) {
             Text(detail, color = AppTheme.colors.textMuted, fontSize = 13.sp)
         }
-        if (onClick != null) {
+        if (trailingContent != null) {
+            trailingContent()
+        } else if (onClick != null) {
             Icon(
                 SettingsIcon.Chevron.image,
                 contentDescription = null,
