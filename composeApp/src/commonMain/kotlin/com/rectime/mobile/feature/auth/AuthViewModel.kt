@@ -388,6 +388,7 @@ private fun createDevSession() = AuthSession(
         displayName = "Dev User",
         studentIdNumber = "55000",
         classRoomName = "IA12A203",
+        classCode = "IA12A203",
     ),
 )
 

@@ -1,17 +1,25 @@
 package com.rectime.mobile.feature.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,7 +34,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,11 +60,16 @@ import com.rectime.mobile.ui.component.LogoutConfirmationModal
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.theme.AppTheme
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import kotlinx.coroutines.launch
 
 // 画面全体の横幅を絞るための追加マージン。
 // RootScreenScaffoldが既にscreenHorizontalPaddingを適用しているので、これはその「上乗せ分」。
 private val ExtraHorizontalMargin = 10.dp
+private val ProfileAvatarSize = 88.dp
 
 class SettingsScreen(
     private val session: AuthSession,
@@ -95,113 +114,134 @@ class SettingsScreen(
         val bottomPadding = 72.dp +
             WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 24.dp
 
+        // 両端のバウンスでスクロール背面が見えても、上は青・下は設定背景にする。
         RootScreenScaffold(
             title = "設定",
-            modifier = Modifier.background(AppTheme.colors.settingBackground),
+            modifier = Modifier.background(
+                Brush.verticalGradient(
+                    0f to AppTheme.colors.themeColorSecond,
+                    0.5f to AppTheme.colors.themeColorSecond,
+                    0.5f to AppTheme.colors.settingBackground,
+                    1f to AppTheme.colors.settingBackground,
+                ),
+            ),
+            horizontalPadding = false,
+            contentTopPadding = false,
             contentBottomPadding = false,
+            headerEdgeFade = false,
         ) {
             item {
-                UserInfoCard(
+                UserInfoHeader(
+                    userId = session.user.id,
                     displayName = session.user.displayName,
+                    email = session.user.email,
+                    avatarUrl = session.user.avatarUrl,
                     studentIdNumber = session.user.studentIdNumber,
-                    classRoomName = session.user.classRoomName,
-                    modifier = Modifier.padding(horizontal = ExtraHorizontalMargin),
+                    classCode = session.user.classCode,
                 )
             }
 
             item {
-                Spacer(Modifier.height(AppTheme.spacing.xl))
-                SettingsSection(title = "アプリ") {
-                    SettingsRow(
-                        title = "メールアドレス",
-                        icon = SettingsIcon.Contact,
-                        subtitle = session.user.email.ifBlank { "-" },
-                    )
-                    SettingsSeparator()
-                    SettingsRow(
-                        title = "通知",
-                        icon = SettingsIcon.Notification,
-                        detail = when (notificationPermissionStatus) {
-                            NotificationPermissionStatus.Granted -> "許可済み"
-                            NotificationPermissionStatus.NotDetermined -> "未設定"
-                            NotificationPermissionStatus.Denied -> "オフ"
-                            NotificationPermissionStatus.Unavailable -> "利用不可"
-                        },
-                        enabled = notificationPermissionStartup != null &&
-                            notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
-                        onClick = { notificationPermissionStartup?.openSystemSettings() },
-                    )
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                    Spacer(Modifier.height(AppTheme.spacing.xl))
+                    Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
+                        SettingsSection(title = "アプリ") {
+                            SettingsRow(
+                                title = "通知",
+                                icon = SettingsIcon.Notification,
+                                detail = when (notificationPermissionStatus) {
+                                    NotificationPermissionStatus.Granted -> "許可済み"
+                                    NotificationPermissionStatus.NotDetermined -> "未設定"
+                                    NotificationPermissionStatus.Denied -> "オフ"
+                                    NotificationPermissionStatus.Unavailable -> "利用不可"
+                                },
+                                enabled = notificationPermissionStartup != null &&
+                                    notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
+                                onClick = { notificationPermissionStartup?.openSystemSettings() },
+                            )
+                        }
+                    }
                 }
             }
             item {
-                Spacer(Modifier.height(AppTheme.spacing.xl))
-                SettingsSection(title = "ヘルプ") {
-                    SettingsRow(
-                        title = "お問い合わせ",
-                        icon = SettingsIcon.Contact,
-                        onClick = { showContactDetails = true },
-                    )
-                    SettingsSeparator()
-                    AccountDeletionSection { enabled, showConfirmation ->
-                        SettingsRow(
-                            title = "アカウント削除",
-                            icon = SettingsIcon.Delete,
-                            enabled = enabled,
-                            onClick = showConfirmation,
-                        )
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                    Spacer(Modifier.height(AppTheme.spacing.xl))
+                    Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
+                        SettingsSection(title = "ヘルプ") {
+                            SettingsRow(
+                                title = "お問い合わせ",
+                                icon = SettingsIcon.Contact,
+                                onClick = { showContactDetails = true },
+                            )
+                            SettingsSeparator()
+                            AccountDeletionSection { enabled, showConfirmation ->
+                                SettingsRow(
+                                    title = "アカウント削除",
+                                    icon = SettingsIcon.Delete,
+                                    enabled = enabled,
+                                    onClick = showConfirmation,
+                                )
+                            }
+                            SettingsSeparator()
+                            LegalDocumentLinks { enabled, open ->
+                                SettingsRow(
+                                    title = "利用規約",
+                                    icon = SettingsIcon.Terms,
+                                    enabled = enabled,
+                                    onClick = { open(LegalDocument.Terms) },
+                                )
+                                SettingsSeparator()
+                                SettingsRow(
+                                    title = "プライバシーポリシー",
+                                    icon = SettingsIcon.Privacy,
+                                    enabled = enabled,
+                                    onClick = { open(LegalDocument.PrivacyPolicy) },
+                                )
+                            }
+                            SettingsSeparator()
+                            SettingsRow(
+                                title = "アプリ情報",
+                                icon = SettingsIcon.Version,
+                                onClick = { showAppInformation = true },
+                            )
+                        }
                     }
-                    SettingsSeparator()
-                    LegalDocumentLinks { enabled, open ->
-                        SettingsRow(
-                            title = "利用規約",
-                            icon = SettingsIcon.Terms,
-                            enabled = enabled,
-                            onClick = { open(LegalDocument.Terms) },
-                        )
-                        SettingsSeparator()
-                        SettingsRow(
-                            title = "プライバシーポリシー",
-                            icon = SettingsIcon.Privacy,
-                            enabled = enabled,
-                            onClick = { open(LegalDocument.PrivacyPolicy) },
-                        )
-                    }
-                    SettingsSeparator()
-                    SettingsRow(
-                        title = "アプリ情報",
-                        icon = SettingsIcon.Version,
-                        onClick = { showAppInformation = true },
-                    )
-
                 }
             }
             item {
-                Button(
-                    onClick = { showLogoutConfirmation = true },
-                    shape = RoundedCornerShape(SettingsCornerRadius),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = AppTheme.colors.themeColorFirst,
-                        contentColor = AppTheme.colors.textThemeColorFirst,
-                    ),
-                    modifier = Modifier
-                        .padding(
-                            top = AppTheme.spacing.xxl,
-                            bottom = AppTheme.spacing.lg,
-                            start = ExtraHorizontalMargin,
-                            end = ExtraHorizontalMargin,
+                Box(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                    Button(
+                        onClick = { showLogoutConfirmation = true },
+                        shape = RoundedCornerShape(SettingsCornerRadius),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AppTheme.colors.themeColorFirst,
+                            contentColor = AppTheme.colors.textThemeColorFirst,
+                        ),
+                        modifier = Modifier
+                            .padding(
+                                top = AppTheme.spacing.xxl,
+                                bottom = AppTheme.spacing.lg,
+                                start = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                                end = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                            )
+                            .fillMaxWidth()
+                            .height(52.dp),
+                    ) {
+                        Text(
+                            text = "ログアウト",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
                         )
+                    }
+                }
+            }
+            item {
+                Spacer(
+                    Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
-                ) {
-                    Text(
-                        text = "ログアウト",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-            item {
-                Spacer(Modifier.height(bottomPadding))
+                        .height(bottomPadding)
+                        .background(AppTheme.colors.settingBackground),
+                )
             }
         }
 
@@ -232,74 +272,171 @@ class SettingsScreen(
 }
 
 /**
- * ユーザー情報カード（名前・学籍番号・所属クラス）
- * 学籍番号・所属クラスがnullの場合は "-" を表示する（行自体は必ず表示する）
+ * 画面上端から続くユーザー情報ヘッダー。
+ * 写真を取得できない場合は名前の頭文字を表示する。
  */
 @Composable
-private fun UserInfoCard(
+private fun UserInfoHeader(
+    userId: String,
     displayName: String,
+    email: String,
+    avatarUrl: String?,
     studentIdNumber: String?,
-    classRoomName: String?,
+    classCode: String?,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .outerShadow(
-                shape = RoundedCornerShape(AppTheme.radius.card),
-                color = AppTheme.colors.dropShadow,
-                blurRadius = 8.dp,
-                offsetX = 0.dp,
-                offsetY = 4.dp,
+    val avatarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+        AppTheme.layout.headerSpacing + AppTheme.layout.headerAction +
+        AppTheme.layout.headerSpacing + AppTheme.spacing.lg
+    val blueHeight = avatarTop + ProfileAvatarSize / 2
+    Box(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Spacer(
+                Modifier
+                    .fillMaxWidth()
+                    .height(blueHeight)
+                    .background(AppTheme.colors.themeColorSecond),
             )
-            .background(
-                color = AppTheme.colors.commonBackground,
-                shape = RoundedCornerShape(AppTheme.radius.card),
-            )
-            // 下だけ広めにとる（所属クラスの下の余白を確保するため）
-            .padding(
-                start = AppTheme.spacing.xl,
-                top = AppTheme.spacing.lg,
-                end = AppTheme.spacing.xl,
-                bottom = AppTheme.spacing.xxl,
-            ),
-    ) {
-        Text(
-            text = "ユーザー情報",
-            fontSize = 12.sp,
-            color = AppTheme.colors.userInformationHeader,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = AppTheme.colors.settingBackground,
+                        shape = RoundedCornerShape(
+                            topStart = SettingsCornerRadius,
+                            topEnd = SettingsCornerRadius,
+                        ),
+                    )
+                    .padding(
+                        start = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                        top = ProfileAvatarSize / 2 + AppTheme.spacing.sm,
+                        end = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                        bottom = AppTheme.spacing.md,
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = displayName.ifBlank { "-" },
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTheme.colors.textPrimary,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = email.ifBlank { "-" },
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontSize = 13.sp,
+                    color = AppTheme.colors.textSecondary,
+                )
+                Spacer(Modifier.height(AppTheme.spacing.md))
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val detailGap = 12.dp
+                    val maxDetailWidth = (maxWidth - detailGap) / 2
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            detailGap,
+                            Alignment.CenterHorizontally,
+                        ),
+                    ) {
+                        ProfileDetailRow(
+                            label = "学籍番号",
+                            value = studentIdNumber.orEmpty(),
+                            modifier = Modifier.widthIn(max = maxDetailWidth),
+                        )
+                        ProfileDetailRow(
+                            label = "所属クラス",
+                            value = classCode.orEmpty(),
+                            modifier = Modifier.widthIn(max = maxDetailWidth),
+                        )
+                    }
+                }
+            }
+        }
+        ProfileAvatar(
+            userId = userId,
+            displayName = displayName,
+            avatarUrl = avatarUrl,
+            modifier = Modifier.align(Alignment.TopCenter).offset(y = avatarTop),
         )
-
-        Spacer(modifier = Modifier.height(AppTheme.spacing.md))
-
-        InfoRow(label = "名前", value = displayName)
-
-        Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
-        InfoRow(label = "学籍番号", value = studentIdNumber ?: "-")
-
-        Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
-        InfoRow(label = "所属クラス", value = classRoomName ?: "-")
     }
 }
 
-/**
- * ユーザー情報の1行（見出しラベル＋本文）
- */
 @Composable
-private fun InfoRow(label: String, value: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun ProfileDetailRow(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Text(
             text = label,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.colors.userInformationBody,
-            modifier = Modifier.width(128.dp),
+            fontSize = 12.sp,
+            color = AppTheme.colors.textMuted,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = value,
+            text = value.ifBlank { "-" },
             fontSize = 14.sp,
-            color = AppTheme.colors.userInformationBody,
+            fontWeight = FontWeight.Medium,
+            color = AppTheme.colors.textPrimary,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun ProfileAvatar(
+    userId: String,
+    displayName: String,
+    avatarUrl: String?,
+    modifier: Modifier = Modifier,
+) {
+    val platformContext = LocalPlatformContext.current
+    val request = remember(platformContext, userId, avatarUrl) {
+        avatarUrl?.takeIf(String::isNotBlank)?.let { url ->
+            ImageRequest.Builder(platformContext)
+                .data(url)
+                // The endpoint is private and its URL is shared by all signed-in users.
+                .memoryCachePolicy(CachePolicy.DISABLED)
+                .diskCachePolicy(CachePolicy.DISABLED)
+                .build()
+        }
+    }
+    Box(
+        modifier = modifier
+            .size(ProfileAvatarSize)
+            .clip(CircleShape)
+            .background(Color.White)
+            .border(3.dp, Color.White, CircleShape)
+            .clearAndSetSemantics { },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = displayName.trim().take(1).uppercase().ifEmpty { "?" },
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppTheme.colors.themeColorSecond,
+        )
+        if (request != null) {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().padding(2.dp).clip(CircleShape),
+            )
+        }
     }
 }
 

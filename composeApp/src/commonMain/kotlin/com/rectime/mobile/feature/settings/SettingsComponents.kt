@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.rectime.mobile.core.config.appVersion
 import com.rectime.mobile.core.platform.platformAppIconPainter
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.theme.AppTheme
@@ -115,7 +116,14 @@ internal fun SettingsRow(
                 } else {
                     Icon(icon.image, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
                 }
-                Text(title, color = color, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                Text(
+                    text = title,
+                    color = color,
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             if (subtitle != null) {
                 Text(subtitle, color = AppTheme.colors.textMuted, fontSize = 14.sp)
