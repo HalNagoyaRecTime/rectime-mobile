@@ -25,6 +25,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +51,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
+import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.ui.component.SettingsModal
@@ -135,7 +137,6 @@ class SettingsScreen(
                     userId = session.user.id,
                     displayName = session.user.displayName,
                     email = session.user.email,
-                    avatarUrl = session.user.avatarUrl,
                     studentIdNumber = session.user.studentIdNumber,
                     classCode = session.user.classCode,
                 )
@@ -280,7 +281,6 @@ private fun UserInfoHeader(
     userId: String,
     displayName: String,
     email: String,
-    avatarUrl: String?,
     studentIdNumber: String?,
     classCode: String?,
     modifier: Modifier = Modifier,
@@ -363,7 +363,6 @@ private fun UserInfoHeader(
         ProfileAvatar(
             userId = userId,
             displayName = displayName,
-            avatarUrl = avatarUrl,
             modifier = Modifier.align(Alignment.TopCenter).offset(y = avatarTop),
         )
     }
@@ -400,15 +399,15 @@ private fun ProfileDetailRow(label: String, value: String, modifier: Modifier = 
 private fun ProfileAvatar(
     userId: String,
     displayName: String,
-    avatarUrl: String?,
     modifier: Modifier = Modifier,
 ) {
     val platformContext = LocalPlatformContext.current
-    val request = remember(platformContext, userId, avatarUrl) {
-        avatarUrl?.takeIf(String::isNotBlank)?.let { url ->
+    val photoBytes = LocalProfilePhotoRepository.current?.photoBytes?.collectAsState()?.value
+    val request = remember(platformContext, userId, photoBytes) {
+        photoBytes?.let { bytes ->
             ImageRequest.Builder(platformContext)
-                .data(url)
-                // The endpoint is private and its URL is shared by all signed-in users.
+                .data(bytes)
+                // 画像の保存とユーザー切替時の削除は専用Repositoryで管理する。
                 .memoryCachePolicy(CachePolicy.DISABLED)
                 .diskCachePolicy(CachePolicy.DISABLED)
                 .build()

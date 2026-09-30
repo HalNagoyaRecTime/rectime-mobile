@@ -6,6 +6,7 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.platform.openExternalUrl
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,7 @@ class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
+    val photoRepository: ProfilePhotoRepository? = null,
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
@@ -32,6 +34,7 @@ class AuthViewModel(
     private val refreshMutex = Mutex()
     private var refreshAttemptCount = 0
     private var refreshWindowStartedAt = 0L
+    private var photoFetchJob: Job? = null
 
     init {
         restoreSession()
@@ -68,18 +71,26 @@ class AuthViewModel(
 
             val stored = sessionStore.load()
             if (stored == null) {
+                photoRepository?.clear()
                 _uiState.update {
                     it.copy(isLoading = false, message = "", pendingAuth = storedPending)
                 }
                 return@launch
             }
 
+            photoRepository?.restore(stored.user.id)
+
             try {
                 val user = api.currentUser(stored.accessToken)
+                if (user.id != stored.user.id) {
+                    photoRepository?.clear()
+                    photoRepository?.restore(user.id)
+                }
                 val session = stored.copy(user = user)
                 sessionStore.save(session)
                 sessionStore.clearPendingAuth()
                 _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
+                fetchPhotoIfDue(session)
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 // 一時的な通信・Server障害では保存済みSessionとPKCE情報を維持する。
@@ -100,6 +111,7 @@ class AuthViewModel(
                     sessionStore.save(refreshed)
                     sessionStore.clearPendingAuth()
                     _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
+                    fetchPhotoIfDue(refreshed)
                 } catch (refreshError: Throwable) {
                     if (refreshError is CancellationException) throw refreshError
                     if (refreshError.isUnauthorizedAuthError()) {
@@ -248,12 +260,14 @@ class AuthViewModel(
             _uiState.update { it.copy(isLoading = true, error = null, message = "Completing login...") }
             try {
                 val session = api.exchangeCode(code, state, pending.codeVerifier)
-                sessionStore.save(session)
-                sessionStore.clearPendingAuth()
                 // 共有端末で前のユーザーがログアウトせずにアプリを離れていた場合、
                 // キャッシュキーはユーザーIDで分離されていないため、新規ログイン時にも
                 // 明示的にクリアしておかないと前ユーザーのデータが見えてしまう。
                 cache.clearAll()
+                photoFetchJob?.cancel()
+                check(photoRepository?.clear() != false) { "保存済みのプロフィール写真を削除できませんでした" }
+                sessionStore.save(session)
+                sessionStore.clearPendingAuth()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -262,6 +276,7 @@ class AuthViewModel(
                         message = "Login successful",
                     )
                 }
+                fetchPhotoIfDue(session, force = true)
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 if (error is AuthApiException) {
@@ -281,6 +296,9 @@ class AuthViewModel(
 
     fun logout() {
         viewModelScope.launch {
+            photoFetchJob?.cancel()
+            // サーバーのログアウトがタイムアウトしても写真は即座に端末から消す。
+            val photoCleared = photoRepository?.clear() ?: true
             val session = _uiState.value.session
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
@@ -293,7 +311,8 @@ class AuthViewModel(
             } finally {
                 // API側でログアウトしてもaccess tokenは期限まで有効なため、端末から
                 // 消せたことを確認できない限りログアウト成功として扱わない。
-                val cleared = sessionStore.clear() and sessionStore.clearPendingAuth()
+                val cleared = sessionStore.clear() and sessionStore.clearPendingAuth() and
+                    photoCleared
                 cache.clearAll()
                 _uiState.update {
                     if (cleared) {
@@ -348,10 +367,22 @@ class AuthViewModel(
 
     private suspend fun invalidateSession(message: String, expectedAccessToken: String? = null) {
         if (expectedAccessToken != null && _uiState.value.session?.accessToken != expectedAccessToken) return
+        photoFetchJob?.cancel()
+        photoRepository?.clear()
         sessionStore.clear()
         sessionStore.clearPendingAuth()
         cache.clearAll()
         _uiState.value = AuthUiState(error = message)
+    }
+
+    /** ログイン時、または起動時に24時間経過している場合だけ写真を取得する。 */
+    private fun fetchPhotoIfDue(session: AuthSession, force: Boolean = false) {
+        val repository = photoRepository ?: return
+        photoFetchJob?.cancel()
+        photoFetchJob = viewModelScope.launch {
+            repository.restore(session.user.id)
+            repository.refresh(session.user.id, session.accessToken, force)
+        }
     }
 
     private suspend fun clearPendingAuthForAttempt(pending: PendingAuth) {
@@ -362,6 +393,7 @@ class AuthViewModel(
 
     override fun onCleared() {
         api.close()
+        photoRepository?.close()
         super.onCleared()
     }
 
