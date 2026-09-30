@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
@@ -311,7 +310,7 @@ private fun UserInfoHeader(
                         start = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
                         top = ProfileAvatarSize / 2 + AppTheme.spacing.sm,
                         end = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
-                        bottom = AppTheme.spacing.md,
+                        bottom = AppTheme.spacing.md / 2,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -417,8 +416,8 @@ private fun ProfileAvatar(
         modifier = modifier
             .size(ProfileAvatarSize)
             .clip(CircleShape)
-            .background(Color.White)
-            .border(3.dp, Color.White, CircleShape)
+            .background(AppTheme.colors.settingBackground)
+            .border(3.dp, AppTheme.colors.settingBackground, CircleShape)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
