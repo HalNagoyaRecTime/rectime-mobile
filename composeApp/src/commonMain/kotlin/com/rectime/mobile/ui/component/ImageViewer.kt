@@ -21,6 +21,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import com.rectime.mobile.core.images.exportableImage
+import androidx.compose.material3.CircularProgressIndicator
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import com.rectime.mobile.core.images.ImageSaver
@@ -67,6 +71,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -82,7 +87,6 @@ import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
 private const val ViewerMinScale = 1f
-private const val ViewerMaxScale = 5f
 private const val ViewerSwipeThresholdDp = 56
 private const val ViewerDismissThresholdDp = 120
 private const val ViewerTouchSlopDp = 8
@@ -109,10 +113,11 @@ fun ImageViewerDialog(images: List<ImageViewerItem>, initialIndex: Int = 0, onCl
     }
 }
 
+/** Embed inside an existing full-screen modal; use ImageViewerDialog for standalone calls. */
 @Composable
 fun ImageViewerContent(
     images: List<ImageViewerItem>,
-    initialIndex: Int,
+    initialIndex: Int = 0,
     onClose: () -> Unit,
     saver: ImageSaver = rememberPlatformImageSaver(),
 ) {
@@ -146,6 +151,8 @@ fun ImageViewerContent(
         saveMessage = null
     }
     fun saveCurrentImage() {
+        tapJob?.cancel()
+        lastTapTime = 0L
         if (saving || !renderedImage.canSave) return
         saving = true
         val title = currentImage.title
@@ -184,8 +191,13 @@ fun ImageViewerContent(
                     .fillMaxSize()
                     .padding(top = 68.dp, bottom = 64.dp)
                     .testTag("image-viewer-image")
-                    .graphicsLayer { translationY = displayedDown
-                        translationX = displayedHorizontal }
+                    .onSizeChanged {
+                        transform.updateGeometry(Size(it.width.toFloat(), it.height.toFloat()), painter.intrinsicSize)
+                    }
+                    .graphicsLayer {
+                        translationY = displayedDown
+                        translationX = displayedHorizontal
+                    }
                     .pointerInput(images, currentIndex, painter) {
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
@@ -201,87 +213,87 @@ fun ImageViewerContent(
                             transform.image = painter.intrinsicSize
 
                             try {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val changes = event.changes
-                                val pan = event.calculatePan()
-                                val zoom = event.calculateZoom()
-                                val hasMultiplePointers = changes.size > 1
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val changes = event.changes
+                                    val pan = event.calculatePan()
+                                    val zoom = event.calculateZoom()
+                                    val hasMultiplePointers = changes.size > 1
 
-                                if (mode == ViewerGestureMode.PanZoom || hasMultiplePointers ||
-                                    zoom != 1f || (transform.scale > ViewerMinScale && pan != Offset.Zero)) {
-                                    mode = ViewerGestureMode.PanZoom
-                                    swipeDownDistance = 0f
-                                    swipeHorizontalDistance = 0f
-                                    transform.transform(zoom, pan, event.calculateCentroid(useCurrent = false))
-                                } else {
-                                    totalPan += pan
-                                    if (
-                                        mode == ViewerGestureMode.Undecided &&
-                                        totalPan.getDistance() > touchSlopPx
-                                    ) {
-                                        mode = if (kotlin.math.abs(totalPan.x) >= kotlin.math.abs(totalPan.y)) {
-                                            ViewerGestureMode.HorizontalSwipe
-                                        } else {
-                                            ViewerGestureMode.VerticalSwipe
+                                    if (mode == ViewerGestureMode.PanZoom || hasMultiplePointers ||
+                                        zoom != 1f || (transform.scale > ViewerMinScale && pan != Offset.Zero)) {
+                                        mode = ViewerGestureMode.PanZoom
+                                        swipeDownDistance = 0f
+                                        swipeHorizontalDistance = 0f
+                                        transform.transform(zoom, pan, event.calculateCentroid(useCurrent = false))
+                                    } else {
+                                        totalPan += pan
+                                        if (
+                                            mode == ViewerGestureMode.Undecided &&
+                                            totalPan.getDistance() > touchSlopPx
+                                        ) {
+                                            mode = if (kotlin.math.abs(totalPan.x) >= kotlin.math.abs(totalPan.y)) {
+                                                ViewerGestureMode.HorizontalSwipe
+                                            } else {
+                                                ViewerGestureMode.VerticalSwipe
+                                            }
+                                        }
+
+                                        if (mode == ViewerGestureMode.HorizontalSwipe) {
+                                            swipeHorizontalDistance = totalPan.x * 0.65f
+                                        }
+                                        if (mode == ViewerGestureMode.VerticalSwipe) {
+                                            swipeDownDistance = totalPan.y.coerceAtLeast(0f)
                                         }
                                     }
 
-                                    if (mode == ViewerGestureMode.HorizontalSwipe) {
-                                        swipeHorizontalDistance = totalPan.x * 0.65f
+                                    // Consume every move in the viewer, including the
+                                    // undecided phase, so EventDetail/root navigation
+                                    // never receives a competing scroll or back gesture.
+                                    changes.forEach { change ->
+                                        if (change.positionChanged()) change.consume()
                                     }
-                                    if (mode == ViewerGestureMode.VerticalSwipe) {
-                                        swipeDownDistance = totalPan.y.coerceAtLeast(0f)
-                                    }
+                                    endTime = changes.first().uptimeMillis
+                                    tapPosition = changes.first().position
+                                    if (changes.none { it.pressed }) break
                                 }
 
-                                // Consume every move in the viewer, including the
-                                // undecided phase, so EventDetail/root navigation
-                                // never receives a competing scroll or back gesture.
-                                changes.forEach { change ->
-                                    if (change.positionChanged()) change.consume()
-                                }
-                                endTime = changes.first().uptimeMillis
-                                tapPosition = changes.first().position
-                                if (changes.none { it.pressed }) break
-                            }
-
-                            if (mode != ViewerGestureMode.Undecided) lastTapTime = 0L
-                            dragging = false
-                            swipeHorizontalDistance = 0f
-                            when (mode) {
-                                ViewerGestureMode.HorizontalSwipe -> {
-                                    if (kotlin.math.abs(totalPan.x) >= swipeThresholdPx) {
-                                        val direction = if (totalPan.x < 0f) 1 else -1
-                                        currentIndex = (currentIndex + direction).coerceIn(0, images.lastIndex)
-                                    }
-                                    swipeDownDistance = 0f
-                                }
-
-                                ViewerGestureMode.VerticalSwipe -> {
-                                    if (totalPan.y >= dismissThresholdPx) {
-                                        close()
-                                    } else {
+                                if (mode != ViewerGestureMode.Undecided) lastTapTime = 0L
+                                dragging = false
+                                swipeHorizontalDistance = 0f
+                                when (mode) {
+                                    ViewerGestureMode.HorizontalSwipe -> {
+                                        if (kotlin.math.abs(totalPan.x) >= swipeThresholdPx) {
+                                            val direction = if (totalPan.x < 0f) 1 else -1
+                                            currentIndex = (currentIndex + direction).coerceIn(0, images.lastIndex)
+                                        }
                                         swipeDownDistance = 0f
                                     }
-                                }
 
-                                ViewerGestureMode.Undecided -> {
-                                    swipeDownDistance = 0f
-                                    val doubleTap = previousTapTime > 0 && endTime - previousTapTime <= 300
-                                    if (doubleTap) {
-                                        lastTapTime = 0L
-                                        transform.doubleTap(tapPosition)
-                                    } else {
-                                        lastTapTime = endTime
-                                        tapJob = scope.launch {
-                                            delay(300)
+                                    ViewerGestureMode.VerticalSwipe -> {
+                                        if (totalPan.y >= dismissThresholdPx) {
                                             close()
+                                        } else {
+                                            swipeDownDistance = 0f
                                         }
                                     }
+
+                                    ViewerGestureMode.Undecided -> {
+                                        swipeDownDistance = 0f
+                                        val doubleTap = previousTapTime > 0 && endTime - previousTapTime <= 300
+                                        if (doubleTap) {
+                                            lastTapTime = 0L
+                                            transform.doubleTap(tapPosition)
+                                        } else {
+                                            lastTapTime = endTime
+                                            tapJob = scope.launch {
+                                                delay(300)
+                                                close()
+                                            }
+                                        }
+                                    }
+                                    ViewerGestureMode.PanZoom -> swipeDownDistance = 0f
                                 }
-                                ViewerGestureMode.PanZoom -> swipeDownDistance = 0f
-                            }
                             } finally {
                                 dragging = false
                                 swipeDownDistance = 0f
@@ -291,6 +303,9 @@ fun ImageViewerContent(
                     },
                 contentAlignment = Alignment.Center,
             ) {
+                if (renderedImage.isLoading && currentImage.resource == null) {
+                    CircularProgressIndicator(color = Color.White)
+                }
                 AnimatedContent(
                     targetState = currentIndex,
                     transitionSpec = {
@@ -375,11 +390,12 @@ fun ImageViewerContent(
             }
 
             Text(
-                text = saveMessage ?: "${currentIndex + 1} / ${images.size}",
+                text = if (saving) "保存中…" else saveMessage ?: renderedImage.status ?: "${currentIndex + 1} / ${images.size}",
                 color = Color.White,
                 fontSize = 14.sp,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .clickable(enabled = renderedImage.retry != null) { renderedImage.retry?.invoke() }
                     .padding(bottom = 12.dp)
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color.Black.copy(alpha = 0.6f))
@@ -411,24 +427,38 @@ internal fun ViewerControlButton(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
+            tint = if (enabled) tint else tint.copy(alpha = 0.45f),
             modifier = Modifier.size(20.dp),
         )
     }
 }
 
-private data class ViewerPainter(val painter: Painter, val canSave: Boolean)
+private data class ViewerPainter(
+    val painter: Painter,
+    val canSave: Boolean,
+    val isLoading: Boolean = false,
+    val status: String? = null,
+    val retry: (() -> Unit)? = null,
+)
 
 @Composable
 private fun rememberViewerPainter(image: ImageViewerItem): ViewerPainter {
     val fallback = image.resource?.let { painterResource(it) }
     if (image.remoteUrl == null) return ViewerPainter(requireNotNull(fallback), true)
-    val remote = rememberAsyncImagePainter(image.remoteUrl)
+    val context = LocalPlatformContext.current
+    val request = remember(context, image.remoteUrl) {
+        ImageRequest.Builder(context).data(image.remoteUrl).exportableImage().build()
+    }
+    val remote = rememberAsyncImagePainter(request)
     val state by remote.state.collectAsState()
     return when (state) {
         is AsyncImagePainter.State.Success -> ViewerPainter(remote, true)
-        is AsyncImagePainter.State.Error -> ViewerPainter(fallback ?: remote, fallback != null)
-        else -> ViewerPainter(fallback ?: remote, false)
+        is AsyncImagePainter.State.Error -> ViewerPainter(
+            fallback ?: remote, fallback != null,
+            status = if (fallback != null) "代替画像を表示中 · タップで再読み込み" else "読み込めませんでした · タップで再読み込み",
+            retry = remote::restart,
+        )
+        else -> ViewerPainter(fallback ?: remote, false, isLoading = true)
     }
 }
 

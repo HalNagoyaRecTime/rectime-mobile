@@ -53,4 +53,23 @@ class ImageViewerTransformTest {
     fun viewerRejectsMissingImageSource() {
         assertFailsWith<IllegalArgumentException> { ImageViewerItem("empty") }
     }
+    @Test
+    fun pointerUpWithoutACentroidCannotCorruptTheImage() {
+        val transform = transform()
+        transform.transform(2f, Offset(30f, 10f), Offset(200f, 400f))
+        val previous = transform.offset
+        transform.transform(1f, Offset.Zero, Offset.Unspecified)
+        transform.transform(Float.NaN, Offset.Zero, Offset.Zero)
+        assertEquals(2f, transform.scale)
+        assertEquals(previous, transform.offset)
+    }
+
+    @Test
+    fun resizingTheViewportKeepsPanWithinTheNewImageBounds() {
+        val transform = transform()
+        transform.transform(5f, Offset(10_000f, 10_000f), Offset(200f, 400f))
+        transform.updateGeometry(Size(200f, 400f), Size(400f, 800f))
+        assertEquals(Offset(400f, 800f), transform.offset)
+    }
+
 }
