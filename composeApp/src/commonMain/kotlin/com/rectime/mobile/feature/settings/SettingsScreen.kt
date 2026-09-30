@@ -54,6 +54,7 @@ import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.ui.component.SettingsModal
+import com.rectime.mobile.core.platform.openInAppBrowser
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.NotificationPermissionStatus
@@ -183,7 +184,7 @@ class SettingsScreen(
                                 )
                             }
                             SettingsSeparator()
-                            LegalDocumentLinks { enabled, open ->
+                            LegalDocumentLinks(openUrl = ::openInAppBrowser) { enabled, open ->
                                 SettingsRow(
                                     title = "利用規約",
                                     icon = SettingsIcon.Terms,

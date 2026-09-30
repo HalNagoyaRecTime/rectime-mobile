@@ -21,15 +21,17 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
 fun LegalDocumentLinks(
     modifier: Modifier = Modifier,
+    openUrl: suspend (String) -> Boolean = ::openExternalUrl,
     content: (@Composable (Boolean, (LegalDocument) -> Unit) -> Unit)? = null,
 ) {
-    val launcher = remember { LegalDocumentLauncher() }
+    val launcher = remember(openUrl) { LegalDocumentLauncher(openUrl = openUrl) }
     LegalDocumentLinks(modifier = modifier, launcher = launcher, content = content)
 }
 

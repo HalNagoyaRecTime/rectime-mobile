@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.component.AppLogoMark
 import com.rectime.mobile.ui.component.ProductionCredits
@@ -91,7 +92,7 @@ private fun AuthLoginScreen(
             }
         }
 
-        LegalDocumentLinks()
+        LegalDocumentLinks(openUrl = ::openExternalUrl)
 
         Spacer(modifier = Modifier.height(AppTheme.spacing.md))
 
