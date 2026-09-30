@@ -1,13 +1,11 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,36 +17,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -57,8 +38,6 @@ import coil3.compose.AsyncImage
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronLeft
-import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Xmark
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
@@ -67,16 +46,10 @@ import rectime_mobile.composeapp.generated.resources.map_1f
 import rectime_mobile.composeapp.generated.resources.map_2f
 import rectime_mobile.composeapp.generated.resources.map_class_area
 
-private const val ViewerMinScale = 1f
-private const val ViewerMaxScale = 4f
-private const val ViewerSwipeThresholdDp = 56
-private const val ViewerDismissThresholdDp = 120
-private const val ViewerTouchSlopDp = 8
 private const val PreviewAspectRatio = 16f / 9f
 
 private val ModalHorizontalPadding = 16.dp
 private val MapCardShape = RoundedCornerShape(12.dp)
-private val ViewerControlSize = 48.dp
 
 /** The two independent image groups shown by the map modal. */
 internal enum class VenueMapSectionId {
@@ -148,13 +121,6 @@ private data class ViewerSelection(
     val initialIndex: Int,
 )
 
-private enum class ViewerGestureMode {
-    Undecided,
-    HorizontalSwipe,
-    VerticalSwipe,
-    PanZoom,
-}
-
 @Composable
 fun MapModal(onDismiss: () -> Unit) {
     val sections = remember { venueMapSections() }
@@ -187,8 +153,8 @@ fun MapModal(onDismiss: () -> Unit) {
                 },
             )
         } else {
-            VenueMapViewer(
-                images = selection.section.images,
+            ImageViewerContent(
+                images = selection.section.images.map { ImageViewerItem(it.title, it.bundledResource, it.remoteUrl) },
                 initialIndex = selection.initialIndex,
                 onClose = { viewerSelection = null },
             )
@@ -299,225 +265,6 @@ private fun VenueMapPreview(
 }
 
 @Composable
-private fun VenueMapViewer(
-    images: List<VenueMapImage>,
-    initialIndex: Int,
-    onClose: () -> Unit,
-) {
-    var currentIndex by remember(images, initialIndex) {
-        mutableIntStateOf(initialIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0)))
-    }
-    var scale by remember(images, initialIndex) { mutableFloatStateOf(ViewerMinScale) }
-    var offset by remember(images, initialIndex) { mutableStateOf(Offset.Zero) }
-    var swipeDownDistance by remember(images, initialIndex) { mutableFloatStateOf(0f) }
-
-    val latestScaleState = rememberUpdatedState(scale)
-    val latestOffsetState = rememberUpdatedState(offset)
-    val density = LocalDensity.current
-    val touchSlopPx = with(density) { ViewerTouchSlopDp.dp.toPx() }
-    val swipeThresholdPx = with(density) { ViewerSwipeThresholdDp.dp.toPx() }
-    val dismissThresholdPx = with(density) { ViewerDismissThresholdDp.dp.toPx() }
-    val currentImage = images[currentIndex]
-
-    LaunchedEffect(currentIndex) {
-        scale = ViewerMinScale
-        offset = Offset.Zero
-        swipeDownDistance = 0f
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Color.Black.copy(
-                    alpha = (0.92f * (1f - swipeDownDistance / 600f)).coerceIn(0.35f, 0.92f),
-                ),
-            ),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 68.dp, bottom = 64.dp)
-                    .graphicsLayer { translationY = swipeDownDistance }
-                    .pointerInput(images, currentIndex) {
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-
-                            var mode = ViewerGestureMode.Undecided
-                            var totalPan = Offset.Zero
-                            var gestureScale = latestScaleState.value
-                            var gestureOffset = latestOffsetState.value
-
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val changes = event.changes
-                                val pan = event.calculatePan()
-                                val zoom = event.calculateZoom()
-                                val hasMultiplePointers = changes.size > 1
-
-                                if (hasMultiplePointers || zoom != 1f || gestureScale > ViewerMinScale) {
-                                    mode = ViewerGestureMode.PanZoom
-                                    gestureScale = (gestureScale * zoom).coerceIn(
-                                        ViewerMinScale,
-                                        ViewerMaxScale,
-                                    )
-                                    gestureOffset = clampViewerOffset(
-                                        offset = gestureOffset + pan * gestureScale,
-                                        scale = gestureScale,
-                                        size = size,
-                                    )
-                                    // Pan/zoom is deliberately the only operation in
-                                    // this branch. A zoomed image can never leak a
-                                    // horizontal swipe to the pager or its parent.
-                                    if (gestureScale != latestScaleState.value || pan != Offset.Zero) {
-                                        scale = gestureScale
-                                        offset = gestureOffset
-                                    }
-                                } else {
-                                    totalPan += pan
-                                    if (
-                                        mode == ViewerGestureMode.Undecided &&
-                                        totalPan.getDistance() > touchSlopPx
-                                    ) {
-                                        mode = if (kotlin.math.abs(totalPan.x) >= kotlin.math.abs(totalPan.y)) {
-                                            ViewerGestureMode.HorizontalSwipe
-                                        } else {
-                                            ViewerGestureMode.VerticalSwipe
-                                        }
-                                    }
-
-                                    if (mode == ViewerGestureMode.VerticalSwipe) {
-                                        swipeDownDistance = totalPan.y.coerceAtLeast(0f)
-                                    }
-                                }
-
-                                // Consume every move in the viewer, including the
-                                // undecided phase, so EventDetail/root navigation
-                                // never receives a competing scroll or back gesture.
-                                changes.forEach { change ->
-                                    if (change.positionChanged()) change.consume()
-                                }
-                                if (changes.none { it.pressed }) break
-                            }
-
-                            when (mode) {
-                                ViewerGestureMode.HorizontalSwipe -> {
-                                    if (kotlin.math.abs(totalPan.x) >= swipeThresholdPx) {
-                                        val direction = if (totalPan.x < 0f) 1 else -1
-                                        currentIndex = (currentIndex + direction).coerceIn(0, images.lastIndex)
-                                    }
-                                    swipeDownDistance = 0f
-                                }
-
-                                ViewerGestureMode.VerticalSwipe -> {
-                                    if (totalPan.y >= dismissThresholdPx) {
-                                        onClose()
-                                    } else {
-                                        swipeDownDistance = 0f
-                                    }
-                                }
-
-                                ViewerGestureMode.Undecided,
-                                ViewerGestureMode.PanZoom,
-                                -> swipeDownDistance = 0f
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                VenueMapImageContent(
-                    image = currentImage,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            translationX = offset.x
-                            translationY = offset.y
-                        },
-                    contentScale = ContentScale.Fit,
-                )
-            }
-
-            ViewerControlButton(
-                contentDescription = "閉じる",
-                icon = SolidGroup.Xmark,
-                onClick = onClose,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 12.dp, top = 8.dp),
-                tint = Color.White,
-                background = Color.Black.copy(alpha = 0.6f),
-            )
-
-            Text(
-                text = currentImage.title,
-                color = Color.White,
-                fontSize = 15.sp,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 18.dp, start = 64.dp, end = 64.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-            )
-
-            if (currentIndex > 0) {
-                ViewerControlButton(
-                    contentDescription = "前の画像",
-                    icon = SolidGroup.ChevronLeft,
-                    onClick = { currentIndex -= 1 },
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 12.dp),
-                    tint = Color.White,
-                    background = Color.Black.copy(alpha = 0.6f),
-                )
-            }
-            if (currentIndex < images.lastIndex) {
-                ViewerControlButton(
-                    contentDescription = "次の画像",
-                    icon = SolidGroup.ChevronRight,
-                    onClick = { currentIndex += 1 },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 12.dp),
-                    tint = Color.White,
-                    background = Color.Black.copy(alpha = 0.6f),
-                )
-            }
-
-            Text(
-                text = "${currentIndex + 1} / ${images.size}",
-                color = Color.White,
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-            )
-        }
-    }
-}
-
-private fun clampViewerOffset(offset: Offset, scale: Float, size: IntSize): Offset {
-    val maxOffsetX = size.width * (scale - 1f) / 2f
-    val maxOffsetY = size.height * (scale - 1f) / 2f
-    return Offset(
-        x = offset.x.coerceIn(-maxOffsetX, maxOffsetX),
-        y = offset.y.coerceIn(-maxOffsetY, maxOffsetY),
-    )
-}
-
-@Composable
 private fun VenueMapImageContent(
     image: VenueMapImage,
     modifier: Modifier,
@@ -540,33 +287,6 @@ private fun VenueMapImageContent(
             placeholder = fallbackPainter,
             error = fallbackPainter,
             modifier = modifier,
-        )
-    }
-}
-
-@Composable
-private fun ViewerControlButton(
-    contentDescription: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    tint: Color,
-    background: Color,
-    modifier: Modifier = Modifier,
-    size: Dp = ViewerControlSize,
-) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(background)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(20.dp),
         )
     }
 }
