@@ -82,7 +82,7 @@ internal fun PullToRefreshContainer(
         object : NestedScrollConnection {
             private fun beginDrag() {
                 animation.job?.cancel()
-                state.beginDrag(refreshing)
+                state.beginDrag(refreshing, enabled)
             }
 
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -125,6 +125,10 @@ internal fun PullToRefreshContainer(
         }
     }
 
+    LaunchedEffect(refreshEnabled) {
+        if (!refreshEnabled) state.disableRefreshForCurrentDrag()
+    }
+
     LaunchedEffect(isRefreshing, state.refreshRequested) {
         state.updateRefreshing(isRefreshing)
         if (!state.isDragging) settle(state.restingOffset(isRefreshing))
@@ -138,6 +142,8 @@ internal fun PullToRefreshContainer(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth().height(RefreshIndicatorHeight)
                     .graphicsLayer {
                         translationY = state.offset.coerceAtLeast(0f) - indicatorHeight
+                        // A refresh started elsewhere must not show a second indicator.
+                        alpha = if (refreshEnabled || isRefreshing || state.refreshRequested) 1f else 0f
                     },
                 contentAlignment = Alignment.Center,
             ) {

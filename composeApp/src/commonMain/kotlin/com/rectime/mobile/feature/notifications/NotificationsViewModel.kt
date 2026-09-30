@@ -17,15 +17,21 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
 
+enum class NotificationRefreshSource { Header, Pull }
+
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
     val isLoading: Boolean = false,
-    val isRefreshing: Boolean = false,
+    val refreshSource: NotificationRefreshSource? = null,
     val error: String? = null,
     // trueのとき、notificationsは通信失敗時にローカルキャッシュから復元した前回取得分。
     val isOffline: Boolean = false,
     val readIds: Set<Int> = emptySet(),
-)
+) {
+    val isRefreshing: Boolean get() = refreshSource != null
+    val isPullRefreshing: Boolean get() = refreshSource == NotificationRefreshSource.Pull
+    val isHeaderRefreshing: Boolean get() = refreshSource == NotificationRefreshSource.Header
+}
 
 class NotificationsViewModel(
     private val feedStore: NotificationFeedStore = NotificationFeedStore.shared,
@@ -37,7 +43,7 @@ class NotificationsViewModel(
     private var loadJob: Job? = null
 
     init {
-        loadNotifications(isRefresh = false)
+        loadNotifications()
         viewModelScope.launch {
             readStore.restore()
             readStore.readIds.collect { readIds ->
@@ -47,16 +53,23 @@ class NotificationsViewModel(
     }
 
     fun refresh() {
-        loadNotifications(isRefresh = true)
+        loadNotifications(NotificationRefreshSource.Header)
     }
 
-    private fun loadNotifications(isRefresh: Boolean) {
-        if (loadJob?.isActive == true) return
+    fun refreshFromPull() {
+        loadNotifications(NotificationRefreshSource.Pull)
+    }
+
+    private fun loadNotifications(source: NotificationRefreshSource? = null) {
+        // First accepted operation owns the animation; later requests are ignored, never queued.
+        if (_uiState.value.isRefreshing || loadJob?.isActive == true) return
+
+        val isRefresh = source != null
 
         val hasNotifications = _uiState.value.notifications.isNotEmpty()
         _uiState.value = _uiState.value.copy(
             isLoading = !isRefresh && !hasNotifications,
-            isRefreshing = isRefresh,
+            refreshSource = source,
             error = null,
         )
         loadJob = viewModelScope.launch {
@@ -66,7 +79,7 @@ class NotificationsViewModel(
                         _uiState.value = _uiState.value.copy(
                             notifications = result.value,
                             isLoading = false,
-                            isRefreshing = false,
+                            refreshSource = null,
                             isOffline = false,
                             error = null,
                         )
@@ -78,7 +91,7 @@ class NotificationsViewModel(
                         if (errorCode.isNotificationNotFoundOrUnauthorized()) {
                             _uiState.value = _uiState.value.copy(
                                 isLoading = false,
-                                isRefreshing = false,
+                                refreshSource = null,
                                 isOffline = false,
                                 error = result.error.toNotificationErrorMessage(),
                             )
@@ -86,7 +99,7 @@ class NotificationsViewModel(
                             _uiState.value = _uiState.value.copy(
                                 notifications = result.value,
                                 isLoading = false,
-                                isRefreshing = false,
+                                refreshSource = null,
                                 isOffline = true,
                                 error = null,
                             )
@@ -120,7 +133,7 @@ class NotificationsViewModel(
                     readIds = _uiState.value.readIds,
                 )
             } finally {
-                _uiState.value = _uiState.value.copy(isLoading = false, isRefreshing = false)
+                _uiState.value = _uiState.value.copy(isLoading = false, refreshSource = null)
             }
         }
     }

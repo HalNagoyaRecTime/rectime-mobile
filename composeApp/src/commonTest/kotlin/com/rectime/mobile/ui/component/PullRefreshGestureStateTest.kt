@@ -53,6 +53,29 @@ class PullRefreshGestureStateTest {
     }
 
     @Test
+    fun dragStartedDuringHeaderRefreshCannotRefreshAfterHeaderCompletes() {
+        val state = state()
+        state.beginDrag(refreshing = false, enabled = false)
+        state.dragBy(500f)
+        assertTrue(state.offset > 80f)
+        val release = state.release(refreshing = false, enabled = true)
+        assertFalse(release.requestRefresh)
+        assertEquals(0f, release.targetOffset)
+    }
+
+    @Test
+    fun headerRefreshInvalidatesAnExistingPullUntilFingerIsReleased() {
+        val state = state()
+        state.beginDrag(false)
+        state.dragBy(500f)
+        state.disableRefreshForCurrentDrag()
+        assertFalse(state.release(refreshing = false, enabled = true).requestRefresh)
+        state.beginDrag(refreshing = false, enabled = true)
+        state.dragBy(500f)
+        assertTrue(state.release(refreshing = false, enabled = true).requestRefresh)
+    }
+
+    @Test
     fun bottomBounceNeverRefreshes() {
         val state = state()
         state.beginDrag(false)

@@ -22,15 +22,22 @@ internal class PullRefreshGestureState(private val holdDistance: Float) {
 
     fun restingOffset(refreshing: Boolean) = if (refreshing || refreshRequested) holdDistance else 0f
 
-    fun beginDrag(refreshing: Boolean) {
-        if (isDragging) return
+    fun beginDrag(refreshing: Boolean, enabled: Boolean = true) {
+        if (isDragging) {
+            if (!enabled || refreshing) dragCanRefresh = false
+            return
+        }
         isDragging = true
-        dragCanRefresh = !refreshing && !refreshRequested
+        dragCanRefresh = enabled && !refreshing && !refreshRequested
         dragOrigin = restingOffset(refreshing)
         val displacement = offset - dragOrigin
         val extent = viewportHeight.coerceAtLeast(holdDistance * 2)
         distance = displacement.sign * abs(displacement) * extent /
             (0.55f * (extent - abs(displacement)).coerceAtLeast(1f))
+    }
+
+    fun disableRefreshForCurrentDrag() {
+        dragCanRefresh = false
     }
 
     fun dragBy(delta: Float) {
