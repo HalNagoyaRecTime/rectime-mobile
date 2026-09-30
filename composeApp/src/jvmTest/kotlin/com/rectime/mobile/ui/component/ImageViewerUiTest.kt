@@ -141,6 +141,7 @@ class ImageViewerUiTest {
         waitUntil(timeoutMillis = 2_000) {
             runCatching { onNodeWithText("会場マップ").fetchSemanticsNode() }.isSuccess
         }
+        onNodeWithText("施設案内マップ 1F").assertIsDisplayed()
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.rectime.mobile.ui.component
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -124,6 +125,7 @@ private data class ViewerSelection(
 @Composable
 fun MapModal(onDismiss: () -> Unit) {
     val sections = remember { venueMapSections() }
+    val listScrollState = rememberScrollState()
     var viewerSelection by remember { mutableStateOf<ViewerSelection?>(null) }
 
     // This is intentionally one Dialog. Switching from the list to the viewer
@@ -147,6 +149,7 @@ fun MapModal(onDismiss: () -> Unit) {
         if (selection == null) {
             VenueMapList(
                 sections = sections,
+                scrollState = listScrollState,
                 onDismiss = onDismiss,
                 onOpenViewer = { section, index ->
                     viewerSelection = ViewerSelection(section = section, initialIndex = index)
@@ -165,6 +168,7 @@ fun MapModal(onDismiss: () -> Unit) {
 @Composable
 private fun VenueMapList(
     sections: List<VenueMapSection>,
+    scrollState: ScrollState,
     onDismiss: () -> Unit,
     onOpenViewer: (VenueMapSection, Int) -> Unit,
 ) {
@@ -185,7 +189,7 @@ private fun VenueMapList(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(horizontal = ModalHorizontalPadding),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
