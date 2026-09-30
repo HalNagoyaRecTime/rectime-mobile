@@ -138,7 +138,6 @@ internal fun PullToRefreshContainer(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth().height(RefreshIndicatorHeight)
                     .graphicsLayer {
                         translationY = state.offset.coerceAtLeast(0f) - indicatorHeight
-                        alpha = (state.offset / holdDistance).coerceIn(0f, 1f)
                     },
                 contentAlignment = Alignment.Center,
             ) {

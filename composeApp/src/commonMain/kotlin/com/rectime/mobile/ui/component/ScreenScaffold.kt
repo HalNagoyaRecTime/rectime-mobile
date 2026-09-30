@@ -25,8 +25,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -54,6 +60,12 @@ fun RootScreenScaffold(
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
+    var headerHeightPx by remember { mutableIntStateOf(0) }
+    val headerBottom = if (headerHeightPx > 0) {
+        with(LocalDensity.current) { headerHeightPx.toDp() }
+    } else {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction
+    }
 
     val topInset = if (contentTopPadding) {
         WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + spacing + AppTheme.layout.headerAction + spacing
@@ -92,8 +104,7 @@ fun RootScreenScaffold(
                 isRefreshing = isRefreshing,
                 refreshEnabled = refreshEnabled,
                 onRefresh = onRefresh,
-                indicatorTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
-                    spacing + AppTheme.layout.headerAction + spacing,
+                indicatorTopInset = headerBottom,
                 modifier = Modifier.fillMaxSize(),
             ) {
                 listContent()
@@ -116,7 +127,7 @@ fun RootScreenScaffold(
         }
         RootHeader(
             title = title,
-            modifier = Modifier,
+            modifier = Modifier.onSizeChanged { headerHeightPx = it.height },
             onTrailingClick = onTrailingClick,
             trailing = trailing,
         )
