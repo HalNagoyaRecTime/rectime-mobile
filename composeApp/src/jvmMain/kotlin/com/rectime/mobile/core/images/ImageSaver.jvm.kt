@@ -1,5 +1,6 @@
 package com.rectime.mobile.core.images
 
+import coil3.request.ImageRequest
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
@@ -37,3 +38,5 @@ actual fun rememberPlatformImageSaver(): ImageSaver = remember {
         }
     }
 }
+
+internal actual fun ImageRequest.Builder.exportableImage(): ImageRequest.Builder = this

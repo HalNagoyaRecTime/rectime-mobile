@@ -1,6 +1,13 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -57,7 +64,7 @@ class ImageViewerUiTest {
         val bitmap = onRoot().captureToImage()
         Image.makeFromBitmap(bitmap.asSkiaBitmap()).use { image ->
             requireNotNull(image.encodeToData(EncodedImageFormat.PNG)).use {
-                File("/tmp/rectime-image-viewer.png").writeBytes(it.bytes)
+                File(System.getProperty("java.io.tmpdir"), "rectime-image-viewer.png").writeBytes(it.bytes)
             }
         }
     }
@@ -106,6 +113,9 @@ class ImageViewerUiTest {
         waitForIdle()
         onNodeWithText("1 / 2").assertExists()
         assertEquals(0, closes)
+        val bitmap = onNodeWithTag("image-viewer-image").captureToImage()
+        val color = bitmap.toPixelMap()[bitmap.width / 2, bitmap.height / 2]
+        assertTrue(color.red + color.green + color.blue > 0.2f, "Image must remain visible after pinch/pan release")
     }
 
     @Test
@@ -130,6 +140,64 @@ class ImageViewerUiTest {
         onNodeWithTag("image-viewer-image").performTouchInput { click(center) }
         waitUntil(timeoutMillis = 2_000) {
             runCatching { onNodeWithText("会場マップ").fetchSemanticsNode() }.isSuccess
+        }
+    }
+
+    @Test
+    fun failedRemoteUsesAndSavesTheVisibleFallback() = runComposeUiTest {
+        var savedName: String? = null
+        val saver = object : ImageSaver {
+            override suspend fun save(image: ImageBitmap, fileName: String): ImageSaveResult {
+                savedName = fileName
+                return ImageSaveResult.Saved
+            }
+        }
+        val failedImage = listOf(ImageViewerItem("Fallback", Res.drawable.map_1f, "unsupported://image"))
+        setContent { AppTheme(ThemeStateHolder()) { ImageViewerContent(failedImage, 0, {}, saver) } }
+        waitUntil(timeoutMillis = 2_000) {
+            runCatching { onNodeWithText("代替画像を表示中 · タップで再読み込み").fetchSemanticsNode() }.isSuccess
+        }
+        onNodeWithContentDescription("画像を保存").performClick()
+        waitForIdle()
+        assertEquals("Fallback.png", savedName)
+    }
+
+    @Test
+    fun permissionDenialReleasesTheSaveButtonForRetry() = runComposeUiTest {
+        var calls = 0
+        val saver = object : ImageSaver {
+            override suspend fun save(image: ImageBitmap, fileName: String): ImageSaveResult {
+                calls++
+                return if (calls == 1) ImageSaveResult.PermissionDenied else ImageSaveResult.Saved
+            }
+        }
+        setContent { AppTheme(ThemeStateHolder()) { ImageViewerContent(images, 0, {}, saver) } }
+        onNodeWithContentDescription("画像を保存").performClick()
+        waitForIdle()
+        onNodeWithText("写真への保存を許可してください").assertExists()
+        onNodeWithContentDescription("画像を保存").performClick()
+        waitForIdle()
+        assertEquals(2, calls)
+        onNodeWithText("画像を保存しました").assertExists()
+    }
+
+    @Test
+    fun narrowPhoneKeepsTitleAndControlsVisible() = runComposeUiTest {
+        val image = listOf(ImageViewerItem("施設案内マップ ".repeat(20), Res.drawable.map_2f))
+        setContent {
+            AppTheme(ThemeStateHolder()) {
+                Box(Modifier.size(320.dp, 640.dp).testTag("viewer-phone")) {
+                    ImageViewerContent(image, 0, {})
+                }
+            }
+        }
+        onNodeWithContentDescription("閉じる").assertIsDisplayed()
+        onNodeWithContentDescription("画像を保存").assertIsDisplayed()
+        val bitmap = onNodeWithTag("viewer-phone").captureToImage()
+        Image.makeFromBitmap(bitmap.asSkiaBitmap()).use { image ->
+            requireNotNull(image.encodeToData(EncodedImageFormat.PNG)).use {
+                File(System.getProperty("java.io.tmpdir"), "rectime-image-viewer-phone.png").writeBytes(it.bytes)
+            }
         }
     }
 

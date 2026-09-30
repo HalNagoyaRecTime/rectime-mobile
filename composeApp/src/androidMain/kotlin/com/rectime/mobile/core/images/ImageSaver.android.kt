@@ -6,6 +6,8 @@ import android.os.Build
 import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import coil3.request.ImageRequest
+import coil3.request.allowHardware
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
@@ -74,3 +76,5 @@ actual fun rememberPlatformImageSaver(): ImageSaver {
 private class DocumentRequest {
     var continuation: CancellableContinuation<String?>? = null
 }
+
+internal actual fun ImageRequest.Builder.exportableImage(): ImageRequest.Builder = allowHardware(false)
