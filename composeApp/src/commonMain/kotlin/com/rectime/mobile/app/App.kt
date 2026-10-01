@@ -35,7 +35,7 @@ import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
-import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
+import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import okio.Path.Companion.toPath
@@ -91,10 +91,14 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
     val themeStateHolder = remember { ThemeStateHolder() }
+    val pushTokenLifecycle = remember { platformPushTokenLifecycle() }
     val authViewModel: AuthViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
-                AuthViewModel(photoRepository = ProfilePhotoRepository(getCacheDir(platformContext)))
+                AuthViewModel(
+                    photoRepository = ProfilePhotoRepository(getCacheDir(platformContext)),
+                    pushTokenLifecycle = pushTokenLifecycle,
+                )
             }
         }
     )
@@ -111,8 +115,8 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         }
         hadSession = authState.session != null
     }
-    LaunchedEffect(authState.session?.accessToken) {
-        updatePushTokenRegistration(authState.session?.accessToken)
+    LaunchedEffect(authState.session) {
+        pushTokenLifecycle.updateSession(authState.session)
     }
     LaunchedEffect(Unit) {
         NotificationNavigationHandler.targets.collect {
