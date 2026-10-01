@@ -13,6 +13,7 @@ import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -515,7 +516,27 @@ class AuthApiTest {
     // ---- logout ----
 
     @Test
-    fun logoutSendsBearerTokenAndRefreshTokenId() = runTest {
+    fun logoutSendsBearerTokenRefreshTokenIdAndOptionalFcmToken() = runTest {
+        var captured: HttpRequestData? = null
+        val api = AuthApi(
+            mockClient { request ->
+                captured = request
+                respond(content = "", status = HttpStatusCode.NoContent)
+            },
+        )
+
+        api.logout(storedSession, fcmToken = "fcm-token")
+
+        val request = requireNotNull(captured)
+        assertEquals("/api/v1/auth/logout", request.url.encodedPath)
+        assertEquals("Bearer access-token", request.headers[HttpHeaders.Authorization])
+        val body = request.body.toByteArray().decodeToString()
+        assertTrue(body.contains(""""refresh_token_id":"refresh-token-id"""), body)
+        assertTrue(body.contains(""""fcm_token":"fcm-token"""), body)
+    }
+
+    @Test
+    fun logoutOmitsFcmTokenWhenItIsUnavailable() = runTest {
         var captured: HttpRequestData? = null
         val api = AuthApi(
             mockClient { request ->
@@ -526,13 +547,10 @@ class AuthApiTest {
 
         api.logout(storedSession)
 
-        val request = requireNotNull(captured)
-        assertEquals("/api/v1/auth/logout", request.url.encodedPath)
-        assertEquals("Bearer access-token", request.headers[HttpHeaders.Authorization])
-        val body = request.body.toByteArray().decodeToString()
-        assertTrue(body.contains(""""refresh_token_id":"refresh-token-id""""), body)
+        val body = requireNotNull(captured).body.toByteArray().decodeToString()
+        assertTrue(body.contains(""""refresh_token_id":"refresh-token-id"""), body)
+        assertFalse(body.contains("fcm_token"), body)
     }
-
     @Test
     fun logoutFailsWhenServerReturnsError() = runTest {
         val api = AuthApi(

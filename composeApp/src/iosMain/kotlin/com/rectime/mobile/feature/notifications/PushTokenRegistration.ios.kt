@@ -10,10 +10,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-actual fun updatePushTokenRegistration(accessToken: String?) {
-    IosPushTokenRegistrar.updateAccessToken(accessToken)
-}
-
 /** SwiftのMessagingDelegateとKMPの認証/API層を接続するiOS専用ブリッジ。 */
 object IosPushTokenRegistrar {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

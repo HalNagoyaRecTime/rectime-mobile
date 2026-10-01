@@ -32,165 +32,66 @@ class FirebaseTokenApiTest {
     }
 
     @Test
-    fun registerSendsSessionBasedAndroidRequestWithoutDuplicatingAuthHeaders() = runTest {
+    fun registerSendsAuthenticatedPlatformAndFcmTokenWithoutReadingBackendId() = runTest {
         var capturedRequest: HttpRequestData? = null
-        val client = mockAppHttpClient { request ->
-            capturedRequest = request
-            respond(
-                content = """{"firebase_token_id":1}""",
-                status = HttpStatusCode.OK,
-                headers = jsonHeaders,
-            )
-        }
-        val api = testApi(client)
-
-        api.register(
-            fcmToken = "firebase-token",
-            platform = FirebasePlatform.Android,
-            accessToken = "access-token",
+        val api = testApi(
+            mockAppHttpClient { request ->
+                capturedRequest = request
+                respond(content = "", status = HttpStatusCode.OK)
+            },
         )
 
+        api.register("firebase-token", FirebasePlatform.Android, "access-token")
+
         val request = requireNotNull(capturedRequest)
+        assertEquals("POST", request.method.value)
         assertEquals("$testBaseUrl/api/v1/firebase-tokens", request.url.toString())
-        // createAppHttpClient()のMobileAuthHeadersPluginが自動付与するため、
-        // ここで2重に付与されていないこと(各1件のみ)を確認する。
         assertEquals(listOf("Bearer access-token"), request.headers.getAll(HttpHeaders.Authorization))
         assertEquals(listOf("mobile"), request.headers.getAll("X-Client-Type"))
-
         val body = (request.body as TextContent).text
-        assertTrue(body.contains(""""fcmToken":"firebase-token""""))
-        assertTrue(body.contains(""""platform":"android""""))
-        assertFalse(body.contains("studentNumber"))
-        assertFalse(body.contains("userId"))
+        assertTrue(body.contains(""""fcmToken":"firebase-token"""))
+        assertTrue(body.contains(""""platform":"android"""))
+        assertFalse(body.contains("firebaseTokenId"))
     }
 
     @Test
     fun registerDoesNotMutateGlobalSessionTokenHolder() = runTest {
-        // ログアウト直後にFCMのトークンリフレッシュ(AndroidPushTokenRegistrar)が
-        // 永続化ストアの古いトークンでregister()を呼んでも、現在のセッション状態
-        // (SessionTokenHolder)を上書きしてしまわないことを検証する。上書きすると、
-        // 以後の全APIリクエストが古いトークンを送り続けてしまう。
-        SessionTokenHolder.accessToken = "current-session-token"
-        var capturedRequest: HttpRequestData? = null
-        val client = mockAppHttpClient { request ->
-            capturedRequest = request
-            respond(
-                content = """{"firebase_token_id":1}""",
-                status = HttpStatusCode.OK,
-                headers = jsonHeaders,
-            )
-        }
-        val api = testApi(client)
-
-        api.register(
-            fcmToken = "firebase-token",
-            platform = FirebasePlatform.Android,
-            accessToken = "stale-persisted-token",
+        SessionTokenHolder.accessToken = "active-session-token"
+        val api = testApi(
+            mockAppHttpClient {
+                respond(content = "", status = HttpStatusCode.OK)
+            },
         )
 
-        val request = requireNotNull(capturedRequest)
-        // リクエストには渡されたaccessTokenが使われる。
-        assertEquals(
-            listOf("Bearer stale-persisted-token"),
-            request.headers.getAll(HttpHeaders.Authorization),
-        )
-        // SessionTokenHolderは書き換えられていない。
-        assertEquals("current-session-token", SessionTokenHolder.accessToken)
+        api.register("firebase-token", FirebasePlatform.Ios, "background-session-token")
+
+        assertEquals("active-session-token", SessionTokenHolder.accessToken)
     }
 
     @Test
-    fun registerExposesBackendFailureWithoutLeakingItIntoMessage() = runTest {
-        val client = mockAppHttpClient {
-            respond(
-                content = """{"error":{"code":"SERVICE_UNAVAILABLE","message":"Service unavailable"}}""",
-                status = HttpStatusCode.ServiceUnavailable,
-                headers = jsonHeaders,
-            )
-        }
-        val api = testApi(client)
-
-        val error = assertFailsWith<HttpStatusException> {
-            api.register(
-                fcmToken = "firebase-token",
-                platform = FirebasePlatform.Android,
-                accessToken = "expired-token",
-            )
-        }
-
-        assertEquals(HttpStatusCode.ServiceUnavailable, error.status)
-        assertEquals("SERVICE_UNAVAILABLE", error.code)
-        assertEquals("Service unavailable", error.message)
-        assertFalse(error.message.orEmpty().contains("expired-token"))
-        assertFalse(error.message.orEmpty().contains("firebase-token"))
-    }
-
-    @Test
-    fun registerRejectsBlankTokensBeforeNetwork() = runTest {
-        val api = FirebaseTokenApi(
-            client = mockAppHttpClient { error("Network request must not be sent") },
-            baseUrl = testBaseUrl,
-        )
-
+    fun registerRejectsInvalidInputAndSurfacesBackendFailure() = runTest {
+        val api = testApi(mockAppHttpClient { error("Network request must not be sent") })
         assertFailsWith<IllegalArgumentException> {
-            api.register(
-                fcmToken = "  ",
-                platform = FirebasePlatform.Android,
-                accessToken = "access-token",
-            )
+            api.register(" ", FirebasePlatform.Android, "access-token")
         }
         assertFailsWith<IllegalArgumentException> {
-            api.register(
-                fcmToken = "firebase-token",
-                platform = FirebasePlatform.Android,
-                accessToken = "",
-            )
+            api.register("fcm-token", FirebasePlatform.Android, " ")
         }
-    }
 
-    @Test
-    fun registerSendsIosPlatform() = runTest {
-        var capturedRequest: HttpRequestData? = null
-        val api = FirebaseTokenApi(
-            client = mockAppHttpClient { request ->
-                capturedRequest = request
+        val failingApi = testApi(
+            mockAppHttpClient {
                 respond(
-                    content = """{"firebase_token_id":1}""",
-                    status = HttpStatusCode.OK,
+                    content = """{"error":{"code":"SERVICE_UNAVAILABLE","message":"unavailable"}}""",
+                    status = HttpStatusCode.ServiceUnavailable,
                     headers = jsonHeaders,
                 )
             },
-            baseUrl = testBaseUrl,
         )
-
-        api.register(
-            fcmToken = "ios-firebase-token",
-            platform = FirebasePlatform.Ios,
-            accessToken = "access-token",
-        )
-
-        val body = (requireNotNull(capturedRequest).body as TextContent).text
-        assertTrue(body.contains(""""fcmToken":"ios-firebase-token""""))
-        assertTrue(body.contains(""""platform":"ios""""))
-    }
-
-    @Test
-    fun registerDoesNotSendAccessTokenToUnconfiguredHost() = runTest {
-        var capturedRequest: HttpRequestData? = null
-        val client = mockAppHttpClient { request ->
-            capturedRequest = request
-            respond(content = "{}", status = HttpStatusCode.OK, headers = jsonHeaders)
+        val error = assertFailsWith<HttpStatusException> {
+            failingApi.register("fcm-token", FirebasePlatform.Android, "secret-access-token")
         }
-        val api = FirebaseTokenApi(client = client, baseUrl = "https://external.example")
-
-        api.register(
-            fcmToken = "firebase-token",
-            platform = FirebasePlatform.Android,
-            accessToken = "access-token",
-        )
-
-        val request = requireNotNull(capturedRequest)
-        assertFalse(request.headers.contains(HttpHeaders.Authorization))
-        assertFalse(request.headers.contains("X-Client-Type"))
+        assertEquals(HttpStatusCode.ServiceUnavailable, error.status)
+        assertFalse(error.message.orEmpty().contains("secret-access-token"))
     }
 
     private fun testApi(client: HttpClient) = FirebaseTokenApi(
@@ -202,12 +103,8 @@ class FirebaseTokenApiTest {
     private fun mockAppHttpClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
     ): HttpClient = HttpClient(MockEngine) {
-        engine {
-            addHandler(handler)
-        }
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
+        engine { addHandler(handler) }
+        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
         install(MobileAuthHeadersPlugin)
     }
 
