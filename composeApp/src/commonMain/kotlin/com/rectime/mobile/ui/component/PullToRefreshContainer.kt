@@ -1,12 +1,7 @@
 package com.rectime.mobile.ui.component
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -27,9 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -158,19 +151,7 @@ internal fun PullToRefreshContainer(
 private fun RefreshIndicator(isRefreshing: Boolean, isReady: Boolean) {
     val color = AppTheme.colors.themeColorFirst
     if (isRefreshing) {
-        val transition = rememberInfiniteTransition()
-        val rotation by transition.animateFloat(
-            initialValue = 0f,
-            targetValue = 360f,
-            animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart),
-        )
-        Canvas(Modifier.size(24.dp).graphicsLayer { rotationZ = rotation }) {
-            val stroke = Stroke(4.dp.toPx())
-            val inset = stroke.width / 2f
-            val arcSize = Size(size.width - stroke.width, size.height - stroke.width)
-            drawArc(color.copy(alpha = 0.3f), -90f, 360f, false, Offset(inset, inset), arcSize, style = stroke)
-            drawArc(color, -90f, 270f, false, Offset(inset, inset), arcSize, style = stroke)
-        }
+        AppLoadingIndicator()
     } else {
         val rotation by animateFloatAsState(if (isReady) 180f else 0f, tween(300))
         Canvas(Modifier.size(32.dp).graphicsLayer { rotationZ = rotation }) {
