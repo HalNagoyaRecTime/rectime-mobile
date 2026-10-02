@@ -46,6 +46,8 @@ import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
 import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -135,13 +137,19 @@ private fun NotificationRefreshIcon(isRefreshing: Boolean) {
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
             while (true) {
-                rotation.animateTo(rotation.value + 360f, tween(600, easing = LinearEasing))
+                // A new request can interrupt the final turn of the previous one.
+                // Always reach a full-turn boundary before resetting the angle.
+                val endAngle = nextRefreshRotationTarget(rotation.value)
+                rotation.animateTo(
+                    endAngle,
+                    tween(refreshRotationDurationMillis(rotation.value, endAngle), easing = LinearEasing),
+                )
                 rotation.snapTo(0f)
             }
         } else {
             // Finish the current turn before resetting, rather than jumping backwards.
             val endAngle = ceil(rotation.value / 360f) * 360f
-            val remainingMillis = ((endAngle - rotation.value) / 360f * 600).toInt()
+            val remainingMillis = refreshRotationDurationMillis(rotation.value, endAngle)
             if (remainingMillis > 0) {
                 rotation.animateTo(endAngle, tween(remainingMillis, easing = LinearEasing))
             }
@@ -155,6 +163,12 @@ private fun NotificationRefreshIcon(isRefreshing: Boolean) {
         modifier = Modifier.size(29.dp).graphicsLayer { rotationZ = rotation.value },
     )
 }
+
+internal fun nextRefreshRotationTarget(angle: Float): Float =
+    (floor(angle / 360f) + 1f) * 360f
+
+internal fun refreshRotationDurationMillis(startAngle: Float, endAngle: Float): Int =
+    ((endAngle - startAngle) / 360f * 600).roundToInt().coerceAtLeast(0)
 
 @Composable
 private fun NotificationCard(
