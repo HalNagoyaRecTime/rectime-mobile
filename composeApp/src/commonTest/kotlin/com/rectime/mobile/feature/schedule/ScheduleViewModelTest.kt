@@ -60,6 +60,93 @@ class ScheduleViewModelTest {
         Dispatchers.resetMain()
     }
 
+    @Test
+    fun savedScheduleIsVisibleAndRefreshIsBlockedUntilInitialUpdateCompletes() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson))
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++; gate.await(); respondJson(eventsJson)
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isLoading)
+        assertTrue(viewModel.isUpdating)
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun logoutDuringMinimumRefreshDurationCannotRestoreOldSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJson) }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.isEmpty())
+        assertFalse(viewModel.isRefreshing)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun eventListReadsAllPagesBeforeSavingCompleteFeed() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val body = Json.decodeFromString<EventsResponse>(eventsJson)
+        val offsets = mutableListOf<Int>()
+        val viewModel = buildViewModel(mockClient { request ->
+            val offset = requireNotNull(request.url.parameters["offset"]).toInt()
+            offsets += offset
+            assertEquals("100", request.url.parameters["limit"])
+            val page = if (offset == 0) body.copy(total = 3) else body.copy(
+                events = listOf(body.events.first().copy(eventId = 99)), total = 3, offset = offset)
+            respondJson(Json.encodeToString(page))
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(0, 2), offsets)
+        assertEquals(3, viewModel.events.value.size)
+        assertEquals(3, cache.load<EventsResponse>("schedule_events_v1")?.events?.size)
+    }
+
+    @Test
+    fun laterPageFailureDoesNotOverwriteFullSavedSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val saved = Json.decodeFromString<EventsResponse>(eventsJson)
+        cache.save("schedule_events_v1", saved)
+        val viewModel = buildViewModel(mockClient { request ->
+            if (request.url.parameters["offset"] != "0") error("offline on second page")
+            respondJson(Json.encodeToString(saved.copy(total = 3)))
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(saved, cache.load<EventsResponse>("schedule_events_v1"))
+        assertEquals(2, viewModel.events.value.size)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun forbiddenResponseClearsSavedSchedulePreview() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson))
+        val viewModel = buildViewModel(mockClient {
+            respondJson("""{"error":{"code":"FORBIDDEN"}}""", HttpStatusCode.Forbidden)
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals("スケジュールを表示する権限がありません", viewModel.error)
+    }
+
     // ---- 引っ張って更新 ----
 
     @Test
@@ -198,7 +285,7 @@ class ScheduleViewModelTest {
 
         assertEquals(
             "https://api.example.com/api/v1/events",
-            requireNotNull(capturedRequest).url.toString(),
+            requireNotNull(capturedRequest).url.toString().substringBefore('?'),
         )
     }
 
