@@ -60,6 +60,127 @@ class ScheduleViewModelTest {
         Dispatchers.resetMain()
     }
 
+    // ---- 引っ張って更新 ----
+
+    @Test
+    fun refreshKeepsExistingEventsUntilMinimumDurationCompletes() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            respondJson(if (calls == 1) eventsJson else """{"events":[],"total":0,"limit":50,"offset":0}""")
+        })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.isRefreshing)
+        assertFalse(viewModel.isLoading)
+        assertEquals(2, viewModel.events.value.size)
+        testDispatcher.scheduler.advanceTimeBy(599)
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.isRefreshing)
+        assertEquals(2, viewModel.events.value.size)
+        testDispatcher.scheduler.advanceTimeBy(1)
+        testDispatcher.scheduler.runCurrent()
+        assertFalse(viewModel.isRefreshing)
+        assertTrue(viewModel.events.value.isEmpty())
+    }
+
+    @Test
+    fun refreshIgnoresDuplicateRequestsAndAllowsNextRefreshAfterCompletion() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.refresh()
+        viewModel.refresh()
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertTrue(viewModel.isRefreshing)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isRefreshing)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertFalse(viewModel.isRefreshing)
+    }
+
+    @Test
+    fun initialLoadRejectsRefreshUntilItCompletes() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.fetchEvents()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertTrue(viewModel.isLoading)
+        assertFalse(viewModel.isRefreshing)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertFalse(viewModel.isLoading)
+        assertFalse(viewModel.isRefreshing)
+    }
+
+    @Test
+    fun failedRefreshReleasesGuardAndCanBeRetried() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) error("offline")
+            respondJson(eventsJson)
+        })
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        testDispatcher.scheduler.advanceTimeBy(599)
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.isRefreshing)
+        assertNull(viewModel.error)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isRefreshing)
+        assertFalse(viewModel.isLoading)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
+        viewModel.refresh()
+        assertNull(viewModel.error)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isRefreshing)
+    }
+
+    @Test
+    fun cancelledRefreshReleasesGuardWithoutReportingFailure() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) throw CancellationException("画面を離れた")
+            respondJson(eventsJson)
+        })
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.error)
+        assertFalse(viewModel.isLoading)
+        assertFalse(viewModel.isRefreshing)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isRefreshing)
+    }
+
     // ---- fetchEvents 正常系 ----
 
     @Test
