@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.event
 
 import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.core.network.EventVenueResponse
@@ -16,6 +17,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -39,6 +41,7 @@ class EventDetailViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        CacheGeneration.resetForTest()
     }
 
     @AfterTest
@@ -115,6 +118,79 @@ class EventDetailViewModelTest {
 
     private fun throwing(): MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData =
         { throw RuntimeException("network down") }
+
+    private fun gatedClient(
+        gate: CompletableDeferred<Unit>, blockedPath: String,
+    ): HttpClient = HttpClient(MockEngine) {
+        engine {
+            dispatcher = testDispatcher
+            addHandler { request ->
+                if (request.url.encodedPath.endsWith(blockedPath)) gate.await()
+                val body = when {
+                    request.url.encodedPath.endsWith("/members") -> """[{"gathering_id":10,"user_id":5}]"""
+                    request.url.encodedPath.endsWith("/gatherings") -> validGatheringsBody
+                    else -> validEventBody
+                }
+                respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            }
+        }
+        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+    }
+
+    @Test
+    fun savedDetailAndGatheringsAreVisibleBeforeEventRequestCompletes() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(1, cache)
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/events/1"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("100m走", viewModel.uiState.value.eventDetail?.eventName)
+        assertEquals(10, viewModel.uiState.value.gatherings.single().gatheringId)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun freshEventBodyIsVisibleBeforeGatheringRequestCompletes() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/gatherings"),
+            cache = LocalCache(InMemoryKeyValueStore()))
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("100m走", viewModel.uiState.value.eventDetail?.eventName)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(10, viewModel.uiState.value.gatherings.single().gatheringId)
+    }
+
+    @Test
+    fun logoutDuringGatheringRequestDoesNotRestoreEvent() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/gatherings"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.eventDetail)
+        assertNull(cache.load<EventDetailResponse>("event_detail_v1_1"))
+        assertNull(cache.load<List<GatheringResponse>>("event_gathering_v1_1"))
+    }
+
+    @Test
+    fun logoutDuringMemberRequestDoesNotSaveParticipationOrRestoreEvent() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, currentUserId = 5,
+            httpClient = gatedClient(gate, "/members"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.eventDetail)
+        assertNull(cache.load<Int?>("event_attending_gathering_v1_1"))
+    }
 
     // ---- 正常系 ----
 

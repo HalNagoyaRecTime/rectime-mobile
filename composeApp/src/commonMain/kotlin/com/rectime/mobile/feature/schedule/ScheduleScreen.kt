@@ -105,6 +105,7 @@ object ScheduleScreen : Screen {
             events = events,
             isLoading = viewModel.isLoading,
             isRefreshing = viewModel.isRefreshing,
+            isUpdating = viewModel.isUpdating,
             onRefresh = viewModel::refresh,
             error = viewModel.error,
         )
@@ -118,6 +119,7 @@ private fun ScheduleScreenUI(
     events: List<TimelineEvent>,
     isLoading: Boolean,
     isRefreshing: Boolean,
+    isUpdating: Boolean,
     onRefresh: () -> Unit,
     error: String?,
 ) {
@@ -187,7 +189,7 @@ private fun ScheduleScreenUI(
             title = "スケジュール",
             lazyListState = lazyListState,
             isRefreshing = isRefreshing,
-            refreshEnabled = !isLoading,
+            refreshEnabled = !isUpdating,
             onRefresh = onRefresh,
             contentBackground = {
                 // This surface and the list share the same bounce/refresh transform.
