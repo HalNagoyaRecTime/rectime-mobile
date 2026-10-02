@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -30,6 +31,7 @@ class NotificationDetailViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        CacheGeneration.resetForTest()
     }
 
     @AfterTest
@@ -38,6 +40,89 @@ class NotificationDetailViewModelTest {
     }
 
     // ---- 初回ロード 正常系 ----
+
+    @Test
+    fun bodyIsVisibleBeforeParticipationRequestCompletes() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val related = NotificationRelatedEvent(7, "競技", emptyList(), "0915", "0945")
+        val viewModel = NotificationDetailViewModel(15,
+            gateway = FakeGateway { notification(it).copy(relatedEvent = related) },
+            cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore(),
+            myEventsGateway = FakeMyEventsGateway { gate.await(); setOf(7) })
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(15, viewModel.uiState.value.notification?.id)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun offlineDetailUsesSavedParticipationWithoutAnotherNetworkRequest() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val related = NotificationRelatedEvent(7, "競技", emptyList(), "0915", "0945")
+        cache.save("notification_detail_v1_15", notification(15).copy(relatedEvent = related))
+        cache.save("notification_my_event_ids_v1", setOf(7))
+        var participationRequests = 0
+        val viewModel = NotificationDetailViewModel(15,
+            gateway = FakeGateway { error("offline") }, cache = cache, readStore = readStore(),
+            myEventsGateway = FakeMyEventsGateway { participationRequests++; emptySet() })
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, participationRequests)
+        assertTrue(viewModel.uiState.value.isOffline)
+        assertTrue(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun logoutDuringParticipationRequestCannotRestoreDetail() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val related = NotificationRelatedEvent(7, "競技", emptyList(), "0915", "0945")
+        val viewModel = NotificationDetailViewModel(15,
+            gateway = FakeGateway { notification(it).copy(relatedEvent = related) },
+            cache = cache, readStore = readStore(),
+            myEventsGateway = FakeMyEventsGateway { gate.await(); setOf(7) })
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.notification)
+        assertNull(cache.load<Set<Int>>("notification_my_event_ids_v1"))
+    }
+
+    @Test
+    fun savedDetailIsVisibleWhileNetworkIsPending() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notification_detail_v1_15", notification(15))
+        val gate = CompletableDeferred<Unit>()
+        val readStore = readStore()
+        val viewModel = NotificationDetailViewModel(15,
+            gateway = FakeGateway { gate.await(); notification(it).copy(title = "updated") },
+            cache = cache, readStore = readStore)
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("通知15", viewModel.uiState.value.notification?.title)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(15 in readStore.readIds.value)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("updated", viewModel.uiState.value.notification?.title)
+    }
+
+    @Test
+    fun logoutBeforeDetailResponseClearsPreviewAndDoesNotSaveResponse() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notification_detail_v1_15", notification(15))
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = NotificationDetailViewModel(15,
+            gateway = FakeGateway { gate.await(); notification(it) },
+            cache = cache, readStore = readStore())
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.notification)
+        assertNull(cache.load<UserNotification>("notification_detail_v1_15"))
+    }
 
     @Test
     fun uiStateIsLoadingUntilFirstResponseArrives() = runTest(testDispatcher) {

@@ -23,7 +23,7 @@ class NotificationBadgeViewModel(
         if (loadedUserId == userId) return
         loadedUserId = userId
         viewModelScope.launch {
-            feedStore.reset()
+            feedStore.bindSession(userId)
             readStore.restore()
             feedStore.load()
         }

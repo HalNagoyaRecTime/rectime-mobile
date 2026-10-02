@@ -44,6 +44,56 @@ class NotificationsViewModelTest {
     // ---- 初回ロード 正常系 ----
 
     @Test
+    fun savedNotificationsAreVisibleWhileInitialNetworkRequestIsPending() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(1)))
+        val gate = CompletableDeferred<Unit>()
+        val gateway = FakeGateway { limit, offset ->
+            gate.await(); page(listOf(notification(2)), 1, limit, offset)
+        }
+        val viewModel = NotificationsViewModel(NotificationFeedStore(gateway, cache), readStore())
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(listOf(1), viewModel.uiState.value.notifications.map(UserNotification::id))
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.isUpdating)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(2), viewModel.uiState.value.notifications.map(UserNotification::id))
+        assertFalse(viewModel.uiState.value.isUpdating)
+    }
+
+    @Test
+    fun logoutDuringMinimumRefreshDurationCannotRestoreOldNotifications() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val viewModel = NotificationsViewModel(NotificationFeedStore(gateway, cache), readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refreshFromPull()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.notifications.isEmpty())
+        assertFalse(viewModel.uiState.value.isUpdating)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+    }
+
+    @Test
+    fun unauthorizedRefreshClearsVisibleCachedNotifications() = runTest(testDispatcher) {
+        var calls = 0
+        val gateway = FakeGateway { limit, offset ->
+            calls++
+            if (calls > 1) throw notificationApiError(statusCode = 401)
+            page(listOf(notification(1)), 1, limit, offset)
+        }
+        val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.notifications.isEmpty())
+        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
     fun uiStateIsLoadingUntilFirstResponseArrives() = runTest(testDispatcher) {
         val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), total = 1, limit, offset) }
         val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
@@ -300,10 +350,9 @@ class NotificationsViewModelTest {
     }
 
     @Test
-    fun failedRefreshWithNoCacheAvailableClearsPreviouslyLoadedNotifications() = runTest(testDispatcher) {
-        // キャッシュも通信も両方失敗しFailedになった場合、既にロード済みの一覧を
-        // .copy()で残してはならない。この一覧は別ユーザーのログイン等で既に
-        // 無効になっている可能性があるため(CacheGeneration参照)。
+    fun failedRefreshWithDiskUnavailableKeepsValidInMemoryNotifications() = runTest(testDispatcher) {
+        // Disk failure does not invalidate the in-memory feed for the current session.
+        // Session changes are checked separately by CacheRequestGeneration.
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
             callCount++
@@ -324,18 +373,14 @@ class NotificationsViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertTrue(state.notifications.isEmpty())
-        assertEquals(LOAD_FAILED_MESSAGE, state.error)
-        assertFalse(state.isOffline)
+        assertEquals(listOf(1), state.notifications.map(UserNotification::id))
+        assertNull(state.error)
+        assertTrue(state.isOffline)
     }
 
     @Test
     fun failedRefreshDoesNotResetAlreadyReadNotificationIds() = runTest(testDispatcher) {
-        // Failed経路で_uiStateをNotificationsUiState(...)で丸ごと作り直すと、
-        // NotificationReadStoreが別管理するreadIdsまで巻き込まれて空に戻ってしまい、
-        // 既読済みの通知が電波復帰時のrefresh失敗などで未読扱いに戻ってしまう不具合の
-        // 回帰テスト。初回ロードを成功させてreadIdsが_uiStateへ反映された状態にしてから
-        // refreshを失敗させ、readStoreの再emitに頼らずとも保持されることを確認する。
+        // Refresh failure must preserve both valid memory data and independent read IDs.
         val store = readStore()
         store.markRead(1)
 
@@ -359,7 +404,7 @@ class NotificationsViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertTrue(state.notifications.isEmpty())
+        assertEquals(listOf(1), state.notifications.map(UserNotification::id))
         assertEquals(setOf(1), state.readIds)
     }
 
