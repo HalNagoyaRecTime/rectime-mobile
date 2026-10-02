@@ -91,7 +91,7 @@ internal fun AccountDeletionSection(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        text = "遷移先で認証を行ってください。",
+                        text = "Microsoft 365アカウント自体は削除されません。遷移先で認証し、内容を確認してください。",
                         fontSize = 13.sp,
                         color = AppTheme.colors.textSettingModalBody,
                         textAlign = TextAlign.Center,

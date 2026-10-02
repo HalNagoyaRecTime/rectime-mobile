@@ -60,7 +60,6 @@ import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.NotificationPermissionStatus
 import com.rectime.mobile.ui.component.LogoutConfirmationModal
 import com.rectime.mobile.ui.component.RootScreenScaffold
-import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.theme.AppTheme
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext

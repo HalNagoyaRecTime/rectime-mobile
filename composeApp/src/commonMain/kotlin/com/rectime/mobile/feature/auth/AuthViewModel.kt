@@ -75,14 +75,26 @@ class AuthViewModel(
 
             val stored = sessionStore.load()
             if (stored == null) {
-                photoRepository?.clear()
-                _uiState.update {
-                    it.copy(isLoading = false, message = "", pendingAuth = storedPending)
+                sessionTransitionMutex.withLock {
+                    // cold start中にOAuth callbackが先に新Sessionを保存した場合、
+                    // 古いrestore処理で新ユーザーの写真を消さない。
+                    if (sessionStore.load() == null) {
+                        photoFetchJob?.cancel()
+                        photoRepository?.clear()
+                        _uiState.update {
+                            it.copy(isLoading = false, message = "", pendingAuth = storedPending)
+                        }
+                    }
                 }
                 return@launch
             }
 
-            photoRepository?.restore(stored.user.id)
+            sessionTransitionMutex.withLock {
+                // callback等でSessionが切り替わっていない場合だけ保存済み写真を復元する。
+                if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                    photoRepository?.restore(stored.user.id)
+                }
+            }
 
             try {
                 val user = api.currentUser(stored.accessToken)
@@ -340,9 +352,22 @@ class AuthViewModel(
         val targetSession = _uiState.value.session ?: return
         pushTokenLifecycle.beginLogout(targetSession)
         viewModelScope.launch {
-            photoFetchJob?.cancel()
-            // サーバーのログアウトがタイムアウトしても写真は即座に端末から消す。
-            val photoCleared = photoRepository?.clear() ?: true
+            val photoCleared = sessionTransitionMutex.withLock {
+                val stored = sessionStore.load()
+                val storedSessionIsTarget = stored == null || (
+                    stored.refreshTokenId == targetSession.refreshTokenId &&
+                        stored.user.id == targetSession.user.id
+                    )
+                if (!storedSessionIsTarget) {
+                    // logout開始前に新しいSessionへ切り替わっていた場合は、
+                    // 新ユーザーの取得中/保存済み写真を古いlogoutで触らない。
+                    true
+                } else {
+                    photoFetchJob?.cancel()
+                    // サーバーのlogout完了を待たず、対象Sessionの写真は端末から消す。
+                    photoRepository?.clear() ?: true
+                }
+            }
             _uiState.update { it.copy(isLoading = true, error = null) }
             val pendingAtLogoutStart = runCatching { sessionStore.loadPendingAuth() }.getOrNull()
             try {
@@ -503,6 +528,7 @@ class AuthViewModel(
     }
 
     override fun onCleared() {
+        photoFetchJob?.cancel()
         api.close()
         photoRepository?.close()
         super.onCleared()
