@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,6 +44,7 @@ import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.auth.LocalUserProfile
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.MapModal
 import com.rectime.mobile.ui.component.PushScreenScaffold
@@ -107,7 +107,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                     .padding(top = headerTitleBarHeight() + 32.dp, bottom = 32.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                CircularProgressIndicator()
+                                AppLoadingIndicator()
                             }
                         }
 

@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.notifications
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,6 +27,7 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.PressSurface
@@ -70,9 +71,12 @@ data class NotificationDetailScreen(val id: Int) : Screen {
             item {
                 when {
                     uiState.isLoading -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(vertical = LoadingIndicatorPadding),
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = LoadingIndicatorPadding),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            AppLoadingIndicator()
+                        }
                     }
 
                     uiState.error != null -> {

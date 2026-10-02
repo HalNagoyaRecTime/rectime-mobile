@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +50,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppModal
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
@@ -511,7 +511,7 @@ private fun ScheduleScreenUI(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(
+                AppLoadingIndicator(
                     modifier = Modifier.size(56.dp),
                     strokeWidth = 5.dp,
                 )
