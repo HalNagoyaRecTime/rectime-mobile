@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import coil3.compose.LocalPlatformContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
@@ -24,6 +25,8 @@ import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
+import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
+import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.event.EventDetailScreen
@@ -41,6 +44,7 @@ import okio.Path.Companion.toPath
 @Composable
 @Preview
 fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
+    val platformContext = LocalPlatformContext.current
     val configurationError = apiBaseUrlConfigurationError
     if (configurationError != null) {
         AppTheme(themeStateHolder = remember { ThemeStateHolder() }) {
@@ -90,7 +94,12 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     val pushTokenLifecycle = remember { platformPushTokenLifecycle() }
     val authViewModel: AuthViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { AuthViewModel(pushTokenLifecycle = pushTokenLifecycle) }
+            initializer {
+                AuthViewModel(
+                    photoRepository = ProfilePhotoRepository(getCacheDir(platformContext)),
+                    pushTokenLifecycle = pushTokenLifecycle,
+                )
+            }
         }
     )
 
@@ -149,13 +158,15 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     .background(AppTheme.colors.surfacePrimary)
                     .fillMaxSize(),
             ) {
-                NavigationHost(
-                    navigationController = navigationController,
-                    session = session,
-                    onLogout = onLogout,
-                    hasUnreadNotifications = hasUnreadNotifications,
-                    notificationPermissionStartup = notificationPermissionStartup,
-                )
+                CompositionLocalProvider(LocalProfilePhotoRepository provides authViewModel.photoRepository) {
+                    NavigationHost(
+                        navigationController = navigationController,
+                        session = session,
+                        onLogout = onLogout,
+                        hasUnreadNotifications = hasUnreadNotifications,
+                        notificationPermissionStartup = notificationPermissionStartup,
+                    )
+                }
             }
         }
     }

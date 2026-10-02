@@ -9,3 +9,5 @@ val apiBaseUrlConfigurationError: String?
     get() = (apiBaseUrlResult as? ApiBaseUrlResult.Invalid)?.reason
 
 expect val isDebugBuild: Boolean
+
+expect val appVersion: String

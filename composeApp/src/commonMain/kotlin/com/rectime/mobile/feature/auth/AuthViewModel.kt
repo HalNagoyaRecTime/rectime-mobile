@@ -8,6 +8,7 @@ import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
 import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,7 @@ class AuthViewModel(
     private val api: AuthApi = AuthApi(),
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
+    val photoRepository: ProfilePhotoRepository? = null,
     private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
@@ -36,6 +38,7 @@ class AuthViewModel(
     private val sessionTransitionMutex = Mutex()
     private var refreshAttemptCount = 0
     private var refreshWindowStartedAt = 0L
+    private var photoFetchJob: Job? = null
 
     init {
         restoreSession()
@@ -72,10 +75,25 @@ class AuthViewModel(
 
             val stored = sessionStore.load()
             if (stored == null) {
-                _uiState.update {
-                    it.copy(isLoading = false, message = "", pendingAuth = storedPending)
+                sessionTransitionMutex.withLock {
+                    // cold start中にOAuth callbackが先に新Sessionを保存した場合、
+                    // 古いrestore処理で新ユーザーの写真を消さない。
+                    if (sessionStore.load() == null) {
+                        photoFetchJob?.cancel()
+                        photoRepository?.clear()
+                        _uiState.update {
+                            it.copy(isLoading = false, message = "", pendingAuth = storedPending)
+                        }
+                    }
                 }
                 return@launch
+            }
+
+            sessionTransitionMutex.withLock {
+                // callback等でSessionが切り替わっていない場合だけ保存済み写真を復元する。
+                if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                    photoRepository?.restore(stored.user.id)
+                }
             }
 
             try {
@@ -83,12 +101,18 @@ class AuthViewModel(
                 val session = stored.copy(user = user)
                 sessionTransitionMutex.withLock {
                     if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                        if (user.id != stored.user.id) {
+                            photoFetchJob?.cancel()
+                            photoRepository?.clear()
+                            photoRepository?.restore(user.id)
+                        }
                         sessionStore.save(session)
                         if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
                             sessionStore.clearPendingAuth()
                         }
                         pushTokenLifecycle.updateSession(session)
                         _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
+                        fetchPhotoIfDue(session)
                     }
                 }
             } catch (error: Throwable) {
@@ -120,6 +144,7 @@ class AuthViewModel(
                             }
                             pushTokenLifecycle.updateSession(refreshed)
                             _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
+                            fetchPhotoIfDue(refreshed)
                         }
                     }
                 } catch (refreshError: Throwable) {
@@ -282,6 +307,8 @@ class AuthViewModel(
                     if (sessionStore.loadPendingAuth() != pending) {
                         false
                     } else {
+                        photoFetchJob?.cancel()
+                        check(photoRepository?.clear() != false) { "保存済みのプロフィール写真を削除できませんでした" }
                         sessionStore.save(session)
                         sessionStore.clearPendingAuth()
                         // 共有端末では、新規ログイン時に前ユーザーのキャッシュを消去する。
@@ -299,6 +326,7 @@ class AuthViewModel(
                     }
                 }
                 if (!committed) return@launch
+                fetchPhotoIfDue(session, force = true)
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 if (error is AuthApiException) {
@@ -324,6 +352,22 @@ class AuthViewModel(
         val targetSession = _uiState.value.session ?: return
         pushTokenLifecycle.beginLogout(targetSession)
         viewModelScope.launch {
+            val photoCleared = sessionTransitionMutex.withLock {
+                val stored = sessionStore.load()
+                val storedSessionIsTarget = stored == null || (
+                    stored.refreshTokenId == targetSession.refreshTokenId &&
+                        stored.user.id == targetSession.user.id
+                    )
+                if (!storedSessionIsTarget) {
+                    // logout開始前に新しいSessionへ切り替わっていた場合は、
+                    // 新ユーザーの取得中/保存済み写真を古いlogoutで触らない。
+                    true
+                } else {
+                    photoFetchJob?.cancel()
+                    // サーバーのlogout完了を待たず、対象Sessionの写真は端末から消す。
+                    photoRepository?.clear() ?: true
+                }
+            }
             _uiState.update { it.copy(isLoading = true, error = null) }
             val pendingAtLogoutStart = runCatching { sessionStore.loadPendingAuth() }.getOrNull()
             try {
@@ -368,7 +412,7 @@ class AuthViewModel(
                         else -> sessionStore.clearPendingAuth()
                     }
                     cache.clearAll()
-                    val cleared = sessionCleared && pendingCleared
+                    val cleared = sessionCleared && pendingCleared && photoCleared
                     _uiState.value = if (cleared) {
                         AuthUiState(message = "Logged out")
                     } else {
@@ -454,12 +498,24 @@ class AuthViewModel(
             if (expectedSession != null && current != null && current.refreshTokenId != expectedSession.refreshTokenId) return@withLock
             val stored = sessionStore.load()
             if (expectedSession != null && stored?.refreshTokenId != expectedSession.refreshTokenId) return@withLock
+            photoFetchJob?.cancel()
+            photoRepository?.clear()
             sessionStore.clear()
             if (expectedPendingAuth != null && sessionStore.loadPendingAuth() == expectedPendingAuth) {
                 sessionStore.clearPendingAuth()
             }
             cache.clearAll()
             _uiState.value = AuthUiState(error = message)
+        }
+    }
+
+    /** ログイン時、または起動時に24時間経過している場合だけ写真を取得する。 */
+    private fun fetchPhotoIfDue(session: AuthSession, force: Boolean = false) {
+        val repository = photoRepository ?: return
+        photoFetchJob?.cancel()
+        photoFetchJob = viewModelScope.launch {
+            repository.restore(session.user.id)
+            repository.refresh(session.user.id, session.accessToken, force)
         }
     }
 
@@ -472,7 +528,9 @@ class AuthViewModel(
     }
 
     override fun onCleared() {
+        photoFetchJob?.cancel()
         api.close()
+        photoRepository?.close()
         super.onCleared()
     }
 
@@ -499,6 +557,7 @@ private fun createDevSession() = AuthSession(
         displayName = "Dev User",
         studentIdNumber = "55000",
         classRoomName = "IA12A203",
+        classCode = "IA12A203",
     ),
 )
 

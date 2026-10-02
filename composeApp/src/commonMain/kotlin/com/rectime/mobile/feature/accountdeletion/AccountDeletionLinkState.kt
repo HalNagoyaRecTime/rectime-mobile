@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 internal const val ACCOUNT_DELETION_OPEN_ERROR =
-    "削除手続きページを開けませんでした。もう一度お試しください。"
+    "アカウント削除ページを開けませんでした。もう一度お試しください。"
 
 internal class AccountDeletionLinkState(
     private val openPage: suspend () -> Boolean,

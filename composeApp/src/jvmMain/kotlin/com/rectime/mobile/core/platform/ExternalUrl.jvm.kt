@@ -8,3 +8,6 @@ internal actual suspend fun openPlatformExternalUrl(url: String): Boolean =
         if (!Desktop.isDesktopSupported()) return false
         Desktop.getDesktop().browse(URI(url))
     }.isSuccess
+
+internal actual suspend fun openPlatformInAppBrowser(url: String): Boolean =
+    openPlatformExternalUrl(url)

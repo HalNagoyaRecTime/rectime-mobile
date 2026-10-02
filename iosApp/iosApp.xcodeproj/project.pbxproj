@@ -129,11 +129,11 @@
 			);
 			mainGroup = F58E6188F88C2CE9FBD77065;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
-			productRefGroup = B575E86706B6F6ADE5C16A16 /* Products */;
 			packageReferences = (
 				7A1FC0100000000000000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B575E86706B6F6ADE5C16A16 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (

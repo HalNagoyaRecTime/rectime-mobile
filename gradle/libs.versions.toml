@@ -7,6 +7,7 @@ android-targetSdk = "36"
 androidx-activity = "1.13.0"
 androidx-appcompat = "1.7.1"
 androidx-core = "1.18.0"
+androidx-browser = "1.10.0"
 androidx-fragment = "1.9.0"
 androidx-splashscreen = "1.0.1"
 androidx-espresso = "3.7.0"
@@ -28,6 +29,7 @@ googleServices = "4.4.4"
 ktor = "3.5.2"
 
 [libraries]
+androidx-browser = { module = "androidx.browser:browser", version.ref = "androidx-browser" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }
