@@ -89,7 +89,6 @@
 				2F0AE4496ED667AFBB9C727B /* Sources */,
 				D1B24F4DC74BBBEC30899C33 /* Frameworks */,
 				A34B12F9D778718FCB2AF7D5 /* Resources */,
-				C962A10BF348417D983FDADF /* Prepare Settings App Icon */,
 			);
 			buildRules = (
 			);
@@ -130,11 +129,11 @@
 			);
 			mainGroup = F58E6188F88C2CE9FBD77065;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
-			productRefGroup = B575E86706B6F6ADE5C16A16 /* Products */;
 			packageReferences = (
 				7A1FC0100000000000000002 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = B575E86706B6F6ADE5C16A16 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -172,22 +171,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n";
-		};
-		C962A10BF348417D983FDADF /* Prepare Settings App Icon */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = ();
-			inputPaths = (
-				"$(SRCROOT)/iosApp/Assets.xcassets/AppIcon.appiconset",
-			);
-			name = "Prepare Settings App Icon";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SettingsAppIcon.png",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -eu\nicon_dir=\"$SRCROOT/iosApp/Assets.xcassets/AppIcon.appiconset\"\nicon_name=$(/usr/bin/plutil -extract images.0.filename raw -o - \"$icon_dir/Contents.json\")\n/bin/cp \"$icon_dir/$icon_name\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/SettingsAppIcon.png\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
