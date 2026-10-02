@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
-import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.cache.fetchWithCacheFirst
+import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.network.HttpStatusException
+import io.ktor.http.HttpStatusCode
 import com.rectime.mobile.core.util.nowMinuteStateFlow
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import kotlinx.coroutines.CancellationException
@@ -17,11 +19,14 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
 
+private const val MY_EVENTS_CACHE_KEY = "notification_my_event_ids_v1"
+
 enum class NotificationRefreshSource { Header, Pull }
 
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
     val isLoading: Boolean = false,
+    val isUpdating: Boolean = false,
     val refreshSource: NotificationRefreshSource? = null,
     val error: String? = null,
     // trueのとき、notificationsは通信失敗時にローカルキャッシュから復元した前回取得分。
@@ -43,6 +48,16 @@ class NotificationsViewModel(
     private var loadJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            feedStore.cachedNotifications.collect { cached ->
+                if (!_uiState.value.isRefreshing) {
+                    _uiState.value = _uiState.value.copy(
+                        notifications = cached.orEmpty(),
+                        isLoading = if (cached != null) false else _uiState.value.isLoading,
+                    )
+                }
+            }
+        }
         loadNotifications()
         viewModelScope.launch {
             readStore.restore()
@@ -69,12 +84,14 @@ class NotificationsViewModel(
         val hasNotifications = _uiState.value.notifications.isNotEmpty()
         _uiState.value = _uiState.value.copy(
             isLoading = !isRefresh && !hasNotifications,
+            isUpdating = true,
             refreshSource = source,
             error = null,
         )
         loadJob = viewModelScope.launch {
+            val request = CacheRequestGeneration()
             try {
-                when (val result = withMinimumRefreshDuration(isRefresh) { feedStore.load(force = isRefresh) }) {
+                when (val result = request.validate(withMinimumRefreshDuration(isRefresh) { feedStore.load(force = isRefresh) })) {
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = _uiState.value.copy(
                             notifications = result.value,
@@ -87,9 +104,9 @@ class NotificationsViewModel(
 
                     is CachedFetchResult.Cached -> {
                         // セッション切れ・取得失敗(404)はオフライン表示で隠さず、エラーを優先する。
-                        val errorCode = (result.error as? HttpStatusException)?.code
-                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
+                        if (result.error.invalidatesNotificationCache()) {
                             _uiState.value = _uiState.value.copy(
+                                notifications = emptyList(),
                                 isLoading = false,
                                 refreshSource = null,
                                 isOffline = false,
@@ -133,7 +150,7 @@ class NotificationsViewModel(
                     readIds = _uiState.value.readIds,
                 )
             } finally {
-                _uiState.value = _uiState.value.copy(isLoading = false, refreshSource = null)
+                _uiState.value = _uiState.value.copy(isLoading = false, isUpdating = false, refreshSource = null)
             }
         }
     }
@@ -194,18 +211,40 @@ class NotificationDetailViewModel(
     private fun loadNotification() {
         if (loadJob?.isActive == true) return
 
-        _uiState.value = NotificationDetailUiState(isLoading = true)
+        _uiState.value = _uiState.value.copy(isLoading = _uiState.value.notification == null, error = null)
         loadJob = viewModelScope.launch {
+            val request = CacheRequestGeneration()
             try {
                 when (
-                    val result = fetchWithCacheFallback(
+                    val result = fetchWithCacheFirst(
                         fetchLive = { gateway.getNotification(notificationId) },
                         loadCache = { cache.load<UserNotification>(cacheKey) },
                         saveCache = { cache.save(cacheKey, it) },
+                        onCached = {
+                            val participating = cachedParticipation(it)
+                            if (request.isCurrent) {
+                                _uiState.value = _uiState.value.copy(notification = it, isLoading = false,
+                                    isParticipatingInRelatedEvent = participating)
+                                readStore.markRead(notificationId)
+                            }
+                        },
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
+                        // Display the body before waiting for the auxiliary participation request.
+                        val cachedParticipation = cachedParticipation(result.value)
+                        if (!request.isCurrent) {
+                            _uiState.value = NotificationDetailUiState(isLoading = false)
+                            return@launch
+                        }
+                        _uiState.value = _uiState.value.copy(notification = result.value, isLoading = false,
+                            isParticipatingInRelatedEvent = cachedParticipation)
+                        readStore.markRead(notificationId)
                         val isParticipating = fetchIsParticipating(result.value)
+                        if (!request.isCurrent) {
+                            _uiState.value = NotificationDetailUiState(isLoading = false)
+                            return@launch
+                        }
                         _uiState.value = NotificationDetailUiState(
                             notification = result.value,
                             isLoading = false,
@@ -216,19 +255,18 @@ class NotificationDetailViewModel(
 
                     is CachedFetchResult.Cached -> {
                         // 削除済み(404)の古いキャッシュを誤表示し続けないようにする。
-                        val errorCode = (result.error as? HttpStatusException)?.code
-                        if (errorCode.isNotificationNotFoundOrUnauthorized()) {
+                        if (result.error.invalidatesNotificationCache()) {
                             _uiState.value = NotificationDetailUiState(
                                 isLoading = false,
                                 error = result.error.toNotificationErrorMessage(),
                             )
                         } else {
-                            val isParticipating = fetchIsParticipating(result.value)
+                            // Network already failed: do not wait for another timeout.
                             _uiState.value = NotificationDetailUiState(
                                 notification = result.value,
                                 isLoading = false,
                                 isOffline = true,
-                                isParticipatingInRelatedEvent = isParticipating,
+                                isParticipatingInRelatedEvent = _uiState.value.isParticipatingInRelatedEvent,
                             )
                             readStore.markRead(notificationId)
                             // 401/404以外の理由でのフォールバックは「オフライン」として
@@ -256,10 +294,29 @@ class NotificationDetailViewModel(
         }
     }
 
+    private suspend fun cachedParticipation(notification: UserNotification): Boolean {
+        val eventId = notification.relatedEvent?.id ?: return false
+        return try {
+            eventId in cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY).orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     private suspend fun fetchIsParticipating(notification: UserNotification): Boolean {
         val eventId = notification.relatedEvent?.id ?: return false
-        val myEventIds = runCatching { myEventsGateway.getMyEventIds() }.getOrDefault(emptySet())
-        return eventId in myEventIds
+        return when (val result = fetchWithCacheFirst(
+            fetchLive = { myEventsGateway.getMyEventIds() },
+            loadCache = { cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY) },
+            saveCache = { cache.save(MY_EVENTS_CACHE_KEY, it) },
+            onCached = {},
+        )) {
+            is CachedFetchResult.Fresh -> eventId in result.value
+            is CachedFetchResult.Cached -> !result.error.invalidatesNotificationCache() && eventId in result.value
+            is CachedFetchResult.Failed -> false
+        }
     }
 
     override fun onCleared() {
@@ -270,12 +327,15 @@ class NotificationDetailViewModel(
 }
 
 private fun Exception.toNotificationErrorMessage(): String = when {
-    this is HttpStatusException && code == "UNAUTHORIZED" ->
+    this is HttpStatusException && (status == HttpStatusCode.Unauthorized || code == "UNAUTHORIZED") ->
         "ログイン情報の有効期限が切れました"
-    this is HttpStatusException && code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND") ->
+    this is HttpStatusException && (status == HttpStatusCode.NotFound || code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND")) ->
         "通知が見つかりません"
+    this is HttpStatusException && status == HttpStatusCode.Forbidden -> "通知を表示する権限がありません"
     else -> "通知の取得に失敗しました"
 }
 
-private fun String?.isNotificationNotFoundOrUnauthorized(): Boolean =
-    this == "UNAUTHORIZED" || this == "NOTIFICATION_NOT_FOUND" || this == "NOT_FOUND"
+internal fun Exception.invalidatesNotificationCache(): Boolean = this is HttpStatusException && (
+    status == HttpStatusCode.Unauthorized || status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
+        code in setOf("UNAUTHORIZED", "NOTIFICATION_NOT_FOUND", "NOT_FOUND")
+    )

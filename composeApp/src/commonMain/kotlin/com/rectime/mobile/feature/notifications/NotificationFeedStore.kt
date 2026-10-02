@@ -2,7 +2,12 @@ package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
-import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.cache.fetchWithCacheFirst
+import com.rectime.mobile.core.cache.CacheRequestGeneration
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,44 +23,91 @@ class NotificationFeedStore(
     private val _notifications = MutableStateFlow<List<UserNotification>>(emptyList())
     val notifications: StateFlow<List<UserNotification>> = _notifications.asStateFlow()
 
+    // null means no saved feed is available; an empty list is a valid saved feed.
+    private val _cachedNotifications = MutableStateFlow<List<UserNotification>?>(null)
+    val cachedNotifications: StateFlow<List<UserNotification>?> = _cachedNotifications.asStateFlow()
     private val mutex = Mutex()
+    private var inFlight: Deferred<CachedFetchResult<List<UserNotification>>>? = null
+    private var lastResult: CachedFetchResult.Fresh<List<UserNotification>>? = null
+    private var session = CacheRequestGeneration()
+    private var revision = 0
+    private var boundUserId: String? = null
 
-    private var lastResult: CachedFetchResult<List<UserNotification>>? = null
-
-    suspend fun load(force: Boolean = false): CachedFetchResult<List<UserNotification>> {
-        return mutex.withLock {
-            val memoized = lastResult
-            if (!force && memoized != null) return@withLock memoized
-
-            val result = fetchWithCacheFallback(
-                fetchLive = { fetchAllNotifications(gateway) },
-                loadCache = { cache.load<List<UserNotification>>(NOTIFICATIONS_CACHE_KEY) },
-                saveCache = { cache.save(NOTIFICATIONS_CACHE_KEY, it) },
-            )
-
-            when (result) {
-                is CachedFetchResult.Fresh -> {
-                    _notifications.value = result.value
-                    lastResult = result
-                }
-
-                is CachedFetchResult.Cached -> {
-                    _notifications.value = result.value
-                    lastResult = result
-                }
-
-                // 失敗は覚えない。起動時に取得できなくても、通知一覧を開いたときに再試行させる。
-                is CachedFetchResult.Failed -> Unit
+    suspend fun bindSession(userId: String) {
+        mutex.withLock {
+            if (boundUserId != null && boundUserId != userId) {
+                inFlight?.cancel()
+                inFlight = null
+                clearMemory()
             }
-
-            result
+            boundUserId = userId
         }
+    }
+
+    suspend fun load(force: Boolean = false): CachedFetchResult<List<UserNotification>> = coroutineScope {
+        val task = mutex.withLock {
+            if (!session.isCurrent) {
+                inFlight?.cancel()
+                inFlight = null
+                clearMemory()
+            }
+            if (!force) lastResult?.let { return@coroutineScope it }
+            // Badge, list, and manual updates join the same operation rather than queueing requests.
+            inFlight?.takeIf { it.isActive } ?: async {
+                val request = CacheRequestGeneration()
+                val requestRevision = revision
+                val result = fetchWithCacheFirst(
+                    fetchLive = { fetchAllNotifications(gateway) },
+                    loadCache = {
+                        try {
+                            _cachedNotifications.value ?: cache.load<List<UserNotification>>(NOTIFICATIONS_CACHE_KEY)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            _cachedNotifications.value
+                        }
+                    },
+                    saveCache = { cache.save(NOTIFICATIONS_CACHE_KEY, it) },
+                    onCached = {
+                        if (request.isCurrent && requestRevision == revision) publish(it)
+                    },
+                )
+                val valid = request.validate(result)
+                if (requestRevision == revision) {
+                    when (valid) {
+                        is CachedFetchResult.Fresh -> { publish(valid.value); lastResult = valid }
+                        is CachedFetchResult.Cached -> {
+                            if (valid.error.invalidatesNotificationCache()) clearMemory() else publish(valid.value)
+                        }
+                        is CachedFetchResult.Failed -> {
+                            if (!request.isCurrent || valid.error.invalidatesNotificationCache()) clearMemory()
+                        }
+                    }
+                }
+                valid
+            }.also { inFlight = it }
+        }
+        task.await()
+    }
+
+    private fun publish(notifications: List<UserNotification>) {
+        _notifications.value = notifications
+        _cachedNotifications.value = notifications
+    }
+
+    private fun clearMemory() {
+        revision++
+        lastResult = null
+        _notifications.value = emptyList()
+        _cachedNotifications.value = null
+        session = CacheRequestGeneration()
     }
 
     suspend fun reset() {
         mutex.withLock {
-            lastResult = null
-            _notifications.value = emptyList()
+            inFlight?.cancel()
+            inFlight = null
+            clearMemory()
         }
     }
 

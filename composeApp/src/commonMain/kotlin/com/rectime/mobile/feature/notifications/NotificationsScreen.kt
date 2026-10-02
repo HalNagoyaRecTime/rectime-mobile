@@ -81,10 +81,10 @@ object NotificationsScreen : Screen {
         RootScreenScaffold(
             title = "通知一覧",
             isRefreshing = uiState.isPullRefreshing,
-            refreshEnabled = !uiState.isLoading && !uiState.isRefreshing,
+            refreshEnabled = !uiState.isUpdating && !uiState.isRefreshing,
             onRefresh = viewModel::refreshFromPull,
             modifier = Modifier.background(AppTheme.colors.notificationBackground),
-            onTrailingClick = if (uiState.isLoading || uiState.isRefreshing) null else viewModel::refresh,
+            onTrailingClick = if (uiState.isUpdating || uiState.isRefreshing) null else viewModel::refresh,
             trailing = {
                 NotificationRefreshIcon(isRefreshing = uiState.isHeaderRefreshing)
             },
