@@ -96,7 +96,7 @@ class RankingViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // 削除済み(404)・セッション切れ(401)の古いキャッシュを誤表示しないよう、
+                        // 削除済み(404)・閲覧拒否(403)の古いキャッシュを誤表示しないよう、
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
                         if (status.clearsStaleRankingData()) {
@@ -110,7 +110,7 @@ class RankingViewModel(
                                 rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
                                 isOffline = true,
                             )
-                            // 401/404以外の理由でのフォールバックは「オフライン」として
+                            // 通信失敗時のフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
                             result.error.printStackTrace()
                         }
@@ -166,12 +166,11 @@ private suspend fun fetchAllRankings(httpClient: HttpClient, baseUrl: String): R
 
 private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status) {
     HttpStatusCode.NotFound -> "ランキング一覧が見つかりません"
-    HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
     HttpStatusCode.Forbidden -> "ランキングを表示する権限がありません"
     else -> "ランキング情報の取得に失敗しました"
 }
 
-// 削除済み(404)・セッション切れ(401)は、キャッシュや直前の表示内容が
+// 削除済み(404)・閲覧拒否(403)は、キャッシュや直前の表示内容が
 // あっても誤表示しないよう一覧を消してエラーを優先する対象。
 private fun HttpStatusCode?.clearsStaleRankingData(): Boolean =
-    this == HttpStatusCode.NotFound || this == HttpStatusCode.Unauthorized || this == HttpStatusCode.Forbidden
+    this == HttpStatusCode.NotFound || this == HttpStatusCode.Forbidden

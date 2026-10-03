@@ -34,7 +34,7 @@ class AuthViewModel(
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(AuthUiState())
+    private val _uiState = MutableStateFlow(AuthUiState(isRestoringSession = true))
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
     private val refreshMutex = Mutex()
     private val sessionTransitionMutex = Mutex()
@@ -61,54 +61,68 @@ class AuthViewModel(
 
     private fun restoreSession() {
         sessionCheckJob = viewModelScope.launch {
-            if (devAuthBypassEnabled) {
-                SessionTokenHolder.accessToken = "dev-bypass-token"
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        session = createDevSession(),
-                        message = "DEV_BYPASS_AUTH enabled",
-                    )
+            try {
+                if (devAuthBypassEnabled) {
+                    SessionTokenHolder.accessToken = "dev-bypass-token"
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRestoringSession = false,
+                            session = createDevSession(),
+                            message = "DEV_BYPASS_AUTH enabled",
+                        )
+                    }
+                    return@launch
                 }
-                return@launch
-            }
 
-            _uiState.update { it.copy(isLoading = true, message = "Restoring session...") }
+                _uiState.update { it.copy(isLoading = true, message = "Restoring session...") }
 
-            // Restore pending auth so cold-start deep links (process killed mid-flow) still work.
-            val storedPending = sessionStore.loadPendingAuth()
+                // 認証途中で終了した場合も、起動後のコールバックを受け付けられるよう復元する。
+                val storedPending = sessionStore.loadPendingAuth()
 
-            val stored = sessionStore.load()
-            if (stored == null) {
+                val stored = sessionStore.load()
+                if (stored == null) {
+                    sessionTransitionMutex.withLock {
+                        // cold start中にOAuth callbackが先に新Sessionを保存した場合、
+                        // 古いrestore処理で新ユーザーの写真を消さない。
+                        if (sessionStore.load() == null) {
+                            SessionTokenHolder.accessToken = null
+                            photoFetchJob?.cancel()
+                            photoRepository?.clear()
+                            _uiState.update {
+                                it.copy(isLoading = false, isRestoringSession = false, message = "", pendingAuth = storedPending)
+                            }
+                        }
+                    }
+                    return@launch
+                }
+
                 sessionTransitionMutex.withLock {
-                    // cold start中にOAuth callbackが先に新Sessionを保存した場合、
-                    // 古いrestore処理で新ユーザーの写真を消さない。
-                    if (sessionStore.load() == null) {
-                        SessionTokenHolder.accessToken = null
-                        photoFetchJob?.cancel()
-                        photoRepository?.clear()
+                    // callback等でSessionが切り替わっていない場合だけ保存済み写真を復元する。
+                    if (!loggingOut && sessionStore.load()?.let {
+                            it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
+                        } == true) {
+                        photoRepository?.restore(stored.user.id)
+                        SessionTokenHolder.accessToken = stored.accessToken
                         _uiState.update {
-                            it.copy(isLoading = false, message = "", pendingAuth = storedPending)
+                            it.copy(isLoading = false, isRestoringSession = false, session = stored, pendingAuth = storedPending, message = "")
                         }
                     }
                 }
-                return@launch
-            }
 
-            sessionTransitionMutex.withLock {
-                // callback等でSessionが切り替わっていない場合だけ保存済み写真を復元する。
-                if (!loggingOut && sessionStore.load()?.let {
-                        it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
-                    } == true) {
-                    photoRepository?.restore(stored.user.id)
-                    SessionTokenHolder.accessToken = stored.accessToken
-                    _uiState.update {
-                        it.copy(isLoading = false, session = stored, pendingAuth = storedPending, message = "")
-                    }
+                _uiState.update { it.copy(isRestoringSession = false) }
+                checkStoredSession(stored, storedPending, refreshPhoto = true)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                error.printStackTrace()
+                // 端末内の読み込みが失敗しても、起動画面に固定しない。
+                _uiState.update {
+                    it.copy(isLoading = false, error = if (it.session == null) AUTH_FAILED_MESSAGE else null)
                 }
+            } finally {
+                _uiState.update { it.copy(isRestoringSession = false) }
             }
-
-            checkStoredSession(stored, storedPending, refreshPhoto = true)
         }
     }
 

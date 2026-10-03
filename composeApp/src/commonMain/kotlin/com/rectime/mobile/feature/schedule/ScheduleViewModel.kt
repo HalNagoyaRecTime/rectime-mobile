@@ -137,16 +137,12 @@ class ScheduleViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
-                        // errorはスナックバーで一瞬しか表示されないため、消えた後も未検証の
-                        // 古いイベントが表示され続けないよう_eventsもクリアする。
+                        // 失効の確定とログイン画面への遷移は共通の認証処理に任せる。
+                        // 更新を確認できない401では保存済みの内容を維持する。
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status in setOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
+                        if (status == HttpStatusCode.Forbidden) {
                             _events.value = emptyList()
-                            error = when (status) {
-                                HttpStatusCode.Forbidden -> "スケジュールを表示する権限がありません"
-                                else -> "ログイン情報の有効期限が切れました"
-                            }
+                            error = "スケジュールを表示する権限がありません"
                             isOffline = false
                         } else {
                             // 前面復帰の失敗では、表示中の値を古いディスクキャッシュへ戻さない。
@@ -155,7 +151,7 @@ class ScheduleViewModel(
                                 _events.value = timelineResult.events
                             }
                             isOffline = true
-                            // 401以外の理由での フォールバックは「オフライン」として静かに
+                            // 通信失敗時のフォールバックは「オフライン」として静かに
                             // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
                             // 可能性もある)を追えるようログには残す。
                             result.error.printStackTrace()
@@ -175,14 +171,11 @@ class ScheduleViewModel(
                             return@launch
                         }
                         error = when (status) {
-                            HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
                             HttpStatusCode.Forbidden -> "スケジュールを表示する権限がありません"
                             else -> "通信に失敗しました"
                         }
-                        // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
-                        // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
-                        // 401以外(ログアウト・新規ログインによるStaleCacheGenerationException
-                        // 等を含む)でも、有効なキャッシュが無いFailedでは理由を問わずクリアする。
+                        // 保存済みデータがない場合やセッション切替後は、一覧を復元しない。
+                        // 失効が確定した場合の画面遷移は共通の認証処理が行う。
                         _events.value = emptyList()
                         isOffline = false
                         result.error.printStackTrace()

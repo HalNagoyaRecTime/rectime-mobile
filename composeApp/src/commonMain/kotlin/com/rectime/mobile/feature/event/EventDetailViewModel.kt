@@ -112,7 +112,7 @@ class EventDetailViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // 削除済み(404)・セッション切れ(401)の古いキャッシュを誤表示しないよう、
+                        // 削除済み(404)・閲覧拒否(403)の古いキャッシュを誤表示しないよう、
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
                         when (status) {
@@ -122,10 +122,6 @@ class EventDetailViewModel(
                             )
                             HttpStatusCode.Forbidden -> _uiState.value = EventDetailUiState(
                                 error = "イベントを表示する権限がありません",
-                            )
-                            HttpStatusCode.Unauthorized -> _uiState.value = EventDetailUiState(
-                                isLoading = false,
-                                error = "ログイン情報の有効期限が切れました",
                             )
                             else -> {
                                 // イベント自体が既にオフライン(キャッシュ)なので、gatheringも
@@ -143,7 +139,7 @@ class EventDetailViewModel(
                                     attendingGatheringId = attending,
                                     isOffline = true,
                                 )
-                                // 401/404以外の理由でのフォールバックは「オフライン」として
+                                // 通信失敗時のフォールバックは「オフライン」として
                                 // 静かに隠れてしまうため、原因を追えるようログには残す。
                                 result.error.printStackTrace()
                             }
@@ -156,7 +152,6 @@ class EventDetailViewModel(
                             isLoading = false,
                             error = when ((result.error as? HttpStatusException)?.status) {
                                 HttpStatusCode.NotFound -> "イベントが見つかりません"
-                                HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
                                 HttpStatusCode.Forbidden -> "イベントを表示する権限がありません"
                                 else -> "イベント情報の取得に失敗しました"
                             },
@@ -190,10 +185,10 @@ class EventDetailViewModel(
         return when (result) {
             is CachedFetchResult.Fresh -> result.value.toSortedModels() to false
             is CachedFetchResult.Cached -> {
-                // 削除済み(404)・セッション切れ(401)の古いキャッシュを、単なる
+                // 削除済み(404)・閲覧拒否(403)の古いキャッシュを、単なる
                 // オフライン表示として出し続けないようにする。
                 val status = (result.error as? HttpStatusException)?.status
-                if (status in setOf(HttpStatusCode.NotFound, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
+                if (status in setOf(HttpStatusCode.NotFound, HttpStatusCode.Forbidden)) {
                     emptyList<Gathering>() to false
                 } else {
                     result.error.printStackTrace()
