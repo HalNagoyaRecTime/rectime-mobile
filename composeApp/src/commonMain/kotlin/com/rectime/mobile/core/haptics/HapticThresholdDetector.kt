@@ -1,8 +1,8 @@
 package com.rectime.mobile.core.haptics
 
 /**
- * Emits once when a pull distance first reaches the refresh threshold.
- * Crossing back below the threshold arms the next emission.
+ * 引っ張り更新の閾値に到達した時だけ通知する。
+ * 閾値未満へ戻ったら、次の到達を再び通知できるようにする。
  */
 internal class HapticThresholdDetector(
     private val onThresholdReached: () -> Unit,

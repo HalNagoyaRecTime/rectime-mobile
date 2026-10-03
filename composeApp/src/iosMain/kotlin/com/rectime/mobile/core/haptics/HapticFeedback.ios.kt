@@ -13,7 +13,7 @@ private class IosAppHapticFeedback : AppHapticFeedback {
     override fun perform(event: AppHapticEvent) {
         if (event != AppHapticEvent.RefreshThreshold) return
 
-        // UIKit and the OS decide whether feedback is available for the user.
+        // 振動を利用できるかどうかはUIKitとOSの設定に任せる。
         runCatching {
             generator.prepare()
             generator.impactOccurred()

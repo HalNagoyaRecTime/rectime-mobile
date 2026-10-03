@@ -3,10 +3,7 @@ package com.rectime.mobile.core.haptics
 import androidx.compose.runtime.Composable
 
 /**
- * Haptic requests shared by the app.
- *
- * Keeping the event type in common code leaves room for future interactions
- * without coupling screens to Android or UIKit APIs.
+ * アプリ共通の触覚フィードバック。画面側からOS固有のAPIを分離する。
  */
 enum class AppHapticEvent {
     RefreshThreshold,

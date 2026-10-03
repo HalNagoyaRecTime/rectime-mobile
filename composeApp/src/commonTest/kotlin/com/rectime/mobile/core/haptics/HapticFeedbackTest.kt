@@ -1,12 +1,71 @@
 package com.rectime.mobile.core.haptics
 
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class HapticFeedbackTest {
+    @Test
+    fun delayedLoadCannotOverwriteASettingChange() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var stored = "true"
+        val store = object : com.rectime.mobile.core.cache.KeyValueStore {
+            override suspend fun getString(key: String): String {
+                val oldValue = stored
+                started.complete(Unit)
+                release.await()
+                return oldValue
+            }
+            override suspend fun putString(key: String, value: String) { stored = value }
+            override suspend fun clear() = Unit
+        }
+        val preference = HapticPreference(store)
+        val loading = launch { preference.load() }
+        started.await()
+        val changing = launch { preference.setEnabled(false) }
+        testScheduler.runCurrent()
+        release.complete(Unit)
+        loading.join()
+        changing.join()
+        assertFalse(preference.enabled.value)
+        assertEquals("false", stored)
+    }
+
+    @Test
+    fun storageCancellationIsNotSwallowed() = runTest {
+        val store = object : com.rectime.mobile.core.cache.KeyValueStore {
+            override suspend fun getString(key: String): String? = throw CancellationException()
+            override suspend fun putString(key: String, value: String) = throw CancellationException()
+            override suspend fun clear() = Unit
+        }
+        val preference = HapticPreference(store)
+        assertFailsWith<CancellationException> { preference.load() }
+        assertFailsWith<CancellationException> { preference.setEnabled(false) }
+    }
+
+    @Test
+    fun storageFailureDoesNotPreventUsingThePreference() = runTest {
+        val store = object : com.rectime.mobile.core.cache.KeyValueStore {
+            override suspend fun getString(key: String): String? = error("読み込み失敗")
+            override suspend fun putString(key: String, value: String) = error("保存失敗")
+            override suspend fun clear() = Unit
+        }
+        val preference = HapticPreference(store)
+        preference.load()
+        assertTrue(preference.enabled.value)
+        preference.setEnabled(false)
+        assertFalse(preference.enabled.value)
+        preference.load()
+        assertFalse(preference.enabled.value)
+    }
+
     @Test
     fun enabledThresholdCrossingRequestsHapticOnce() {
         var requestCount = 0
