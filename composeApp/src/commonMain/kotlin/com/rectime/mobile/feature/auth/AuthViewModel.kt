@@ -8,6 +8,8 @@ import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
 import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,8 +41,13 @@ class AuthViewModel(
     private var refreshAttemptCount = 0
     private var refreshWindowStartedAt = 0L
     private var photoFetchJob: Job? = null
+    private var previousAccessToken: String? = null
+    private var loggingOut = false
+    private var refreshJob: Deferred<String?>? = null
+    private var refreshRequestToken: String? = null
 
     init {
+        AuthSessionInvalidationHandler.register(this, ::refreshAfterUnauthorized)
         restoreSession()
 
         viewModelScope.launch {
@@ -48,16 +55,13 @@ class AuthViewModel(
                 handleCallbackUrl(callbackUrl)
             }
         }
-        viewModelScope.launch {
-            AuthSessionInvalidationHandler.events.collect { accessToken ->
-                refreshAfterUnauthorized(accessToken)
-            }
-        }
+
     }
 
     private fun restoreSession() {
         viewModelScope.launch {
             if (devAuthBypassEnabled) {
+                SessionTokenHolder.accessToken = "dev-bypass-token"
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -79,6 +83,7 @@ class AuthViewModel(
                     // cold start中にOAuth callbackが先に新Sessionを保存した場合、
                     // 古いrestore処理で新ユーザーの写真を消さない。
                     if (sessionStore.load() == null) {
+                        SessionTokenHolder.accessToken = null
                         photoFetchJob?.cancel()
                         photoRepository?.clear()
                         _uiState.update {
@@ -91,8 +96,14 @@ class AuthViewModel(
 
             sessionTransitionMutex.withLock {
                 // callback等でSessionが切り替わっていない場合だけ保存済み写真を復元する。
-                if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                if (!loggingOut && sessionStore.load()?.let {
+                        it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
+                    } == true) {
                     photoRepository?.restore(stored.user.id)
+                    SessionTokenHolder.accessToken = stored.accessToken
+                    _uiState.update {
+                        it.copy(isLoading = false, session = stored, pendingAuth = storedPending, message = "")
+                    }
                 }
             }
 
@@ -100,13 +111,16 @@ class AuthViewModel(
                 val user = api.currentUser(stored.accessToken)
                 val session = stored.copy(user = user)
                 sessionTransitionMutex.withLock {
-                    if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                    if (!loggingOut && sessionStore.load()?.let {
+                        it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
+                    } == true) {
                         if (user.id != stored.user.id) {
                             photoFetchJob?.cancel()
                             photoRepository?.clear()
                             photoRepository?.restore(user.id)
                         }
                         sessionStore.save(session)
+                        SessionTokenHolder.accessToken = session.accessToken
                         if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
                             sessionStore.clearPendingAuth()
                         }
@@ -120,7 +134,9 @@ class AuthViewModel(
                 // 一時的な通信・Server障害では保存済みSessionとPKCE情報を維持する。
                 if (!error.isUnauthorizedAuthError()) {
                     sessionTransitionMutex.withLock {
-                        if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
+                        if (!loggingOut && sessionStore.load()?.let {
+                                it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
+                            } == true) {
                             _uiState.update {
                                 it.copy(
                                     isLoading = false,
@@ -134,46 +150,8 @@ class AuthViewModel(
                     }
                     return@launch
                 }
-                try {
-                    val refreshed = refreshMutex.withLock { api.refresh(stored) }
-                    sessionTransitionMutex.withLock {
-                        if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
-                            sessionStore.save(refreshed)
-                            if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
-                                sessionStore.clearPendingAuth()
-                            }
-                            pushTokenLifecycle.updateSession(refreshed)
-                            _uiState.update { it.copy(isLoading = false, session = refreshed, message = "Logged in") }
-                            fetchPhotoIfDue(refreshed)
-                        }
-                    }
-                } catch (refreshError: Throwable) {
-                    if (refreshError is CancellationException) throw refreshError
-                    if (refreshError.isUnauthorizedAuthError()) {
-                        invalidateSession(
-                            AUTH_EXPIRED_MESSAGE,
-                            expectedSession = stored,
-                            expectedPendingAuth = storedPending,
-                        )
-                    } else {
-                        val detail = if (isDebugBuild) {
-                            " (${authErrorMessage(refreshError, debugDetailsEnabled = true)})"
-                        } else {
-                            ""
-                        }
-                        sessionTransitionMutex.withLock {
-                            if (sessionStore.load()?.refreshTokenId == stored.refreshTokenId) {
-                                _uiState.update {
-                                    it.copy(
-                                        isLoading = false,
-                                        session = stored,
-                                        message = "Offline",
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                // 一覧等の401と同じ更新処理を共有し、二重にrefreshしない。
+                refreshAfterUnauthorized(stored.accessToken)
             }
         }
     }
@@ -181,6 +159,7 @@ class AuthViewModel(
     fun startLogin() {
         viewModelScope.launch {
             if (devAuthBypassEnabled) {
+                SessionTokenHolder.accessToken = "dev-bypass-token"
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -310,6 +289,11 @@ class AuthViewModel(
                         photoFetchJob?.cancel()
                         check(photoRepository?.clear() != false) { "保存済みのプロフィール写真を削除できませんでした" }
                         sessionStore.save(session)
+                        loggingOut = false
+                        previousAccessToken = null
+                        refreshAttemptCount = 0
+                        refreshWindowStartedAt = 0L
+                        SessionTokenHolder.accessToken = session.accessToken
                         sessionStore.clearPendingAuth()
                         // 共有端末では、新規ログイン時に前ユーザーのキャッシュを消去する。
                         cache.clearAll()
@@ -350,6 +334,9 @@ class AuthViewModel(
 
     fun logout() {
         val targetSession = _uiState.value.session ?: return
+        loggingOut = true
+        previousAccessToken = null
+        SessionTokenHolder.accessToken = null
         pushTokenLifecycle.beginLogout(targetSession)
         viewModelScope.launch {
             val photoCleared = sessionTransitionMutex.withLock {
@@ -404,6 +391,7 @@ class AuthViewModel(
                     }
 
                     // 新しいSessionが保存済みなら、古いlogoutでSessionやcacheを消さない。
+                    SessionTokenHolder.accessToken = null
                     val sessionCleared = sessionStore.clear()
                     val currentPending = sessionStore.loadPendingAuth()
                     val pendingCleared = when {
@@ -425,10 +413,32 @@ class AuthViewModel(
         }
     }
 
-    internal suspend fun refreshAfterUnauthorized(accessToken: String) {
-        refreshMutex.withLock {
-            val current = _uiState.value.session ?: return
-            if (current.accessToken != accessToken) return
+    internal suspend fun refreshAfterUnauthorized(accessToken: String): String? {
+        val job = refreshMutex.withLock {
+            if (loggingOut) return null
+            val current = _uiState.value.session ?: return null
+            if (current.accessToken != accessToken) {
+                return current.accessToken.takeIf { previousAccessToken == accessToken }
+            }
+            refreshJob?.takeIf { it.isActive && refreshRequestToken == accessToken }
+                ?: viewModelScope.async { performRefresh(accessToken) }.also {
+                    refreshRequestToken = accessToken
+                    refreshJob = it
+                }
+        }
+        // 呼び出し元の画面が閉じても更新を継続し、同時401は同じ結果を待つ。
+        val refreshed = job.await()
+        return refreshed.takeIf { !loggingOut && _uiState.value.session?.accessToken == it }
+    }
+
+    private suspend fun performRefresh(accessToken: String): String? =
+        run refresh@{
+            if (loggingOut) return@refresh null
+            val current = _uiState.value.session ?: return@refresh null
+            if (current.accessToken != accessToken) {
+                // 同じセッションの更新を待った通信は、直前のトークンだけを引き継ぐ。
+                return@refresh current.accessToken.takeIf { previousAccessToken == accessToken }
+            }
             val pendingAtRefreshStart = sessionStore.loadPendingAuth()
 
             val now = nowMillis()
@@ -436,15 +446,8 @@ class AuthViewModel(
                 refreshWindowStartedAt = now
                 refreshAttemptCount = 0
             }
-            if (refreshAttemptCount >= MAX_REFRESH_ATTEMPTS) {
-                invalidateSession(
-                    AUTH_EXPIRED_MESSAGE,
-                    expectedAccessToken = accessToken,
-                    expectedSession = current,
-                    expectedPendingAuth = pendingAtRefreshStart,
-                )
-                return
-            }
+            // 通信失敗が続いても、試行回数だけで保存済みログインを消さない。
+            if (refreshAttemptCount >= MAX_REFRESH_ATTEMPTS) return@refresh null
             refreshAttemptCount++
 
             try {
@@ -453,15 +456,29 @@ class AuthViewModel(
                     val latest = _uiState.value.session
                     val stored = sessionStore.load()
                     if (
-                        latest?.accessToken == accessToken &&
+                        !loggingOut && latest?.accessToken == accessToken &&
                         latest.refreshTokenId == current.refreshTokenId &&
                         stored?.refreshTokenId == current.refreshTokenId
                     ) {
                         sessionStore.save(refreshed)
+                        previousAccessToken = accessToken
+                        SessionTokenHolder.accessToken = refreshed.accessToken
                         pushTokenLifecycle.updateSession(refreshed)
                         _uiState.update {
-                            it.copy(session = refreshed, error = null, message = "Logged in")
+                            it.copy(
+                                session = refreshed,
+                                pendingAuth = it.pendingAuth.takeUnless { saved -> saved == pendingAtRefreshStart },
+                                error = null,
+                                message = "Logged in",
+                            )
                         }
+                        if (pendingAtRefreshStart != null && sessionStore.loadPendingAuth() == pendingAtRefreshStart) {
+                            sessionStore.clearPendingAuth()
+                        }
+                        fetchPhotoIfDue(refreshed)
+                        refreshed.accessToken
+                    } else {
+                        null
                     }
                 }
             } catch (error: Throwable) {
@@ -474,17 +491,15 @@ class AuthViewModel(
                         expectedPendingAuth = pendingAtRefreshStart,
                     )
                 } else {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            error = authErrorMessage(error, isDebugBuild),
-                            message = "Offline",
-                        )
+                    sessionTransitionMutex.withLock {
+                        if (!loggingOut && _uiState.value.session?.accessToken == accessToken) {
+                            _uiState.update { it.copy(isLoading = false, message = "Offline") }
+                        }
                     }
                 }
+                null
             }
         }
-    }
 
     private suspend fun invalidateSession(
         message: String,
@@ -494,10 +509,13 @@ class AuthViewModel(
     ) {
         sessionTransitionMutex.withLock {
             val current = _uiState.value.session
+            if (loggingOut) return@withLock
             if (expectedAccessToken != null && current?.accessToken != expectedAccessToken) return@withLock
             if (expectedSession != null && current != null && current.refreshTokenId != expectedSession.refreshTokenId) return@withLock
             val stored = sessionStore.load()
             if (expectedSession != null && stored?.refreshTokenId != expectedSession.refreshTokenId) return@withLock
+            previousAccessToken = null
+            SessionTokenHolder.accessToken = null
             photoFetchJob?.cancel()
             photoRepository?.clear()
             sessionStore.clear()
@@ -528,6 +546,7 @@ class AuthViewModel(
     }
 
     override fun onCleared() {
+        AuthSessionInvalidationHandler.unregister(this)
         photoFetchJob?.cancel()
         api.close()
         photoRepository?.close()

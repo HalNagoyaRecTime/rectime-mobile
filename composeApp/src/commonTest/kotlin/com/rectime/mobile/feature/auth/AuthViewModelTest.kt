@@ -145,6 +145,169 @@ class AuthViewModelTest {
         assertNull(store.pendingAuth)
     }
 
+    @Test
+    fun showsStoredSessionBeforeTheStartupRequestCompletes() = runTest(testDispatcher) {
+        val finishMe = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient {
+                finishMe.await()
+                respond("""{"user":{"id":"6","display_name":"更新後"}}""", HttpStatusCode.OK, jsonHeaders)
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.runCurrent()
+
+        assertEquals(storedSession, viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(storedSession.accessToken, SessionTokenHolder.accessToken)
+
+        finishMe.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.uiState.value.session?.user?.displayName)
+    }
+
+    @Test
+    fun startupResponseDoesNotRestoreTheOldTokenAfterResourceRefresh() = runTest(testDispatcher) {
+        val finishMe = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/me")) {
+                    finishMe.await()
+                    respond("""{"user":{"id":"6","display_name":"古い取得結果"}}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("new-token", viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+        finishMe.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("new-token", store.session?.accessToken)
+        assertEquals("new-token", SessionTokenHolder.accessToken)
+        assertEquals(storedSession.user.displayName, viewModel.uiState.value.session?.user?.displayName)
+    }
+
+    @Test
+    fun concurrentUnauthorizedRequestsShareOneRefreshResult() = runTest(testDispatcher) {
+        var refreshCount = 0
+        val finishRefresh = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                    refreshCount++
+                    finishRefresh.await()
+                    respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = FakeAuthSessionStorage(session = storedSession),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        val first = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        val second = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        finishRefresh.complete(Unit)
+
+        assertEquals("new-token", first.await())
+        assertEquals("new-token", second.await())
+        assertEquals(1, refreshCount)
+        assertNull(viewModel.refreshAfterUnauthorized("other-account-token"))
+    }
+
+    @Test
+    fun logoutDuringStartupDoesNotRestoreTheSession() = runTest(testDispatcher) {
+        val finishMe = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/me")) {
+                    finishMe.await()
+                    respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("{}", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.runCurrent()
+        viewModel.logout()
+        assertNull(SessionTokenHolder.accessToken)
+        testDispatcher.scheduler.runCurrent()
+        finishMe.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+    }
+
+    @Test
+    fun cancelingTheRequestDoesNotCancelTheSharedRefresh() = runTest(testDispatcher) {
+        val finishRefresh = CompletableDeferred<Unit>()
+        var refreshCount = 0
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                    refreshCount++
+                    finishRefresh.await()
+                    respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        val closedScreen = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        closedScreen.cancel()
+        val otherScreen = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        finishRefresh.complete(Unit)
+
+        assertEquals("new-token", otherScreen.await())
+        assertEquals(1, refreshCount)
+        assertEquals("new-token", store.session?.accessToken)
+    }
+
+    @Test
+    fun logoutDuringRefreshDoesNotSaveOrReturnTheNewToken() = runTest(testDispatcher) {
+        val finishRefresh = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                when {
+                    request.url.encodedPath.endsWith("/auth/refresh") -> {
+                        finishRefresh.await()
+                        respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                    }
+                    request.url.encodedPath.endsWith("/auth/me") ->
+                        respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                    else -> respond("{}", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        val request = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        viewModel.logout()
+        testDispatcher.scheduler.runCurrent()
+        finishRefresh.complete(Unit)
+
+        assertNull(request.await())
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(viewModel.uiState.value.session)
+    }
+
     // ---- restoreSession 異常系 ----
 
     @Test
@@ -768,8 +931,8 @@ class AuthViewModelTest {
         viewModel.refreshAfterUnauthorized("refreshed-2")
 
         assertEquals(2, refreshCount)
-        assertNull(viewModel.uiState.value.session)
-        assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+        assertEquals("refreshed-2", viewModel.uiState.value.session?.accessToken)
+        assertNull(viewModel.uiState.value.error)
         assertNull(store.pendingAuth)
     }
 

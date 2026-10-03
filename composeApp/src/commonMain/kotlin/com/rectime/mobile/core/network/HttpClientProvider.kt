@@ -6,6 +6,7 @@ import com.rectime.mobile.feature.auth.AuthSessionInvalidationHandler
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
@@ -24,6 +25,7 @@ expect fun createHttpClient(): HttpClient
 // を、グローバル状態を書き換えずに実現できるようにするため。
 internal class MobileAuthHeadersConfig {
     var baseUrl: String = apiBaseUrl
+    var refreshToken: suspend (String) -> String? = AuthSessionInvalidationHandler::refreshToken
 }
 
 internal val MobileAuthHeadersPlugin = createClientPlugin(
@@ -31,6 +33,7 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
     ::MobileAuthHeadersConfig,
 ) {
     val baseUrl = pluginConfig.baseUrl
+    val refreshToken = pluginConfig.refreshToken
     onRequest { request, _ ->
         if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
         val token = SessionTokenHolder.accessToken?.takeIf(String::isNotBlank) ?: return@onRequest
@@ -38,17 +41,26 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
             request.headers.append(name, value)
         }
     }
-    onResponse { response ->
-        val url = response.call.request.url.toString()
-        val requestToken = response.call.request.headers[HttpHeaders.Authorization]
+    on(Send) { request ->
+        val targetsApi = isApiUrl(request.url.toString(), baseUrl)
+        val originalCall = proceed(request)
+        val url = originalCall.request.url.toString()
+        val requestToken = originalCall.request.headers[HttpHeaders.Authorization]
             ?.takeIf { it.startsWith("Bearer ") }
             ?.removePrefix("Bearer ")
             ?.takeIf(String::isNotBlank)
-        // 認証APIの401はAuthViewModel自身で分類する。リソースAPIの401だけを
-        // refresh要求として通知し、通知時点のTokenも競合判定用に渡す。
-        if (response.status.value == 401 && requestToken != null && !isAuthApiPath(url, baseUrl)) {
-            AuthSessionInvalidationHandler.notifyUnauthorized(requestToken)
-        }
+        // 別ホストや認証APIには更新・再試行を適用しない。
+        if (originalCall.response.status.value != 401 || requestToken == null ||
+            !targetsApi || !isApiUrl(url, baseUrl) || isAuthApiPath(url, baseUrl)
+        ) return@on originalCall
+
+        val refreshed = refreshToken(requestToken)
+            ?.takeIf { it.isNotBlank() && it != requestToken }
+            ?: return@on originalCall
+        request.headers.remove(HttpHeaders.Authorization)
+        request.headers.append(HttpHeaders.Authorization, "Bearer $refreshed")
+        // 再試行した結果が401でも、元のリクエストにつき一度だけ。
+        proceed(request)
     }
 }
 
