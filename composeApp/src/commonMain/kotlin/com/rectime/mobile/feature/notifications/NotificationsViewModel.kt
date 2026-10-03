@@ -271,10 +271,9 @@ class NotificationDetailViewModel(
                                 notification = result.value,
                                 isLoading = false,
                                 isOffline = true,
-                                error = result.error.toNotificationErrorMessage(),
                                 isParticipatingInRelatedEvent = _uiState.value.isParticipatingInRelatedEvent,
                             )
-                            // 401/404以外の理由でのフォールバックは「オフライン」として
+                            // 通信失敗時のフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
                             result.error.printStackTrace()
                         }
@@ -332,8 +331,6 @@ class NotificationDetailViewModel(
 }
 
 private fun Exception.toNotificationErrorMessage(): String = when {
-    this is HttpStatusException && (status == HttpStatusCode.Unauthorized || code == "UNAUTHORIZED") ->
-        "ログイン情報の有効期限が切れました"
     this is HttpStatusException && (status == HttpStatusCode.NotFound || code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND")) ->
         "通知が見つかりません"
     this is HttpStatusException && status == HttpStatusCode.Forbidden -> "通知を表示する権限がありません"
@@ -342,6 +339,6 @@ private fun Exception.toNotificationErrorMessage(): String = when {
 
 internal fun Exception.invalidatesNotificationCache(): Boolean =
     this is HttpStatusException && (
-        status == HttpStatusCode.Unauthorized || status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
-            code in setOf("UNAUTHORIZED", "NOTIFICATION_NOT_FOUND", "NOT_FOUND")
+        status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
+            code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND")
         )

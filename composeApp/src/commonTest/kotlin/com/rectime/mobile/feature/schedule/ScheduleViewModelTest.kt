@@ -3,6 +3,8 @@ package com.rectime.mobile.feature.schedule
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
+import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.core.model.EventVenue
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.feature.event.EventCache
@@ -41,7 +43,6 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 private const val LOAD_FAILED_MESSAGE = "通信に失敗しました"
-private const val SESSION_EXPIRED_MESSAGE = "ログイン情報の有効期限が切れました"
 private fun skippedEventsMessage(count: Int) = "一部の予定を表示できませんでした（${count}件）"
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
@@ -829,7 +830,7 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun fetchEventsReportsSessionExpiredOnUnauthorized() = runTest(testDispatcher) {
+    fun fetchEventsReportsFetchFailureWithoutDeclaringSessionExpired() = runTest(testDispatcher) {
         val viewModel = buildViewModel(
             mockClient {
                 respondJson("""{"error":{"code":"UNAUTHORIZED","message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
@@ -839,9 +840,9 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // キャッシュが無い場合はCachedFetchResult.Failedになり、401は専用メッセージになる
+        // キャッシュがなければ取得失敗。画面側ではログイン失効と断定しない。
         // (他画面のセッション切れ判定と同じ基準)。
-        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertFalse(viewModel.isLoading)
     }
 
@@ -1009,7 +1010,50 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun fetchEventsClearsEventsAndReportsSessionExpiredWhenReloadReturnsUnauthorized() = runTest(testDispatcher) {
+    fun actualAuthRetryFailureKeepsCachedScheduleAndCurrentToken() = runTest(testDispatcher) {
+        var calls = 0
+        var refreshes = 0
+        val refreshGate = CompletableDeferred<Unit>()
+        SessionTokenHolder.accessToken = "stored-token"
+        val client = mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson)
+            else respondJson("""{"error":{"code":"UNAUTHORIZED"}}""", HttpStatusCode.Unauthorized)
+        }.config {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = "https://api.example.com"
+                refreshToken = {
+                    refreshes++
+                    refreshGate.await()
+                    // 認証側がタイムアウト等で更新を確認できなかった場合。
+                    null
+                }
+            }
+        }
+        try {
+            val viewModel = buildViewModel(client)
+            viewModel.fetchEvents()
+            testDispatcher.scheduler.advanceUntilIdle()
+            viewModel.refresh()
+            testDispatcher.scheduler.runCurrent()
+            assertEquals(2, viewModel.events.value.size)
+            refreshGate.complete(Unit)
+            testDispatcher.scheduler.advanceUntilIdle()
+            assertEquals(1, refreshes)
+            assertEquals(2, calls)
+            assertEquals("stored-token", SessionTokenHolder.accessToken)
+            assertEquals(2, viewModel.events.value.size)
+            assertNull(viewModel.error)
+            assertTrue(viewModel.isOffline)
+            assertFalse(viewModel.isRefreshing)
+        } finally {
+            client.close()
+            SessionTokenHolder.accessToken = null
+        }
+    }
+
+    @Test
+    fun fetchEventsKeepsCachedEventsWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -1029,17 +1073,16 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // 401はキャッシュがあっても隠さない。errorはスナックバーで一瞬しか表示され
-        // ないため、未検証の古いイベントが表示され続けないようeventsもクリアする。
-        assertTrue(viewModel.events.value.isEmpty())
-        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
-        assertFalse(viewModel.isOffline)
+        // 認証更新を確認できない401でも、失効が確定するまではキャッシュを維持する。
+        assertEquals(2, viewModel.events.value.size)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
     }
 
     @Test
     fun fetchEventsClearsEventsWhenUnauthorizedAndNoCacheIsAvailable() = runTest(testDispatcher) {
         // CachedFetchResult.Cachedと違い、Failed(キャッシュが無い/読めない)経路でも
-        // 401時に古いeventsが残り続けてはならない。
+        // 保存できなかったデータはキャッシュの復元対象にならない。
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -1061,7 +1104,7 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(viewModel.events.value.isEmpty())
-        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertFalse(viewModel.isOffline)
     }
 

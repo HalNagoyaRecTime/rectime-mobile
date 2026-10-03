@@ -324,7 +324,7 @@ class RankingViewModelTest {
     }
 
     @Test
-    fun fetchRankingsClearsListAndShowsErrorWhenCachedResultIs401() = runTest(testDispatcher) {
+    fun fetchRankingsKeepsCachedListWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
         var requestCount = 0
         val viewModel = buildViewModel(
             client = mockClient {
@@ -342,9 +342,10 @@ class RankingViewModelTest {
         viewModel.fetchRankings()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // セッション切れ(401)は、キャッシュに残っていた一覧を誤表示せず消す。
-        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
-        assertEquals("ログイン情報の有効期限が切れました", viewModel.uiState.value.error)
+        // 認証更新を確認できない401では、失効が確定するまで保存済み一覧を維持する。
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+        assertNull(viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.isOffline)
     }
 
     @Test

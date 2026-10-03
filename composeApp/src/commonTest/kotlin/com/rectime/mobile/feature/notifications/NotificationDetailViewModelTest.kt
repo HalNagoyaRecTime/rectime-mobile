@@ -20,7 +20,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private const val DETAIL_SESSION_EXPIRED_MESSAGE = "ログイン情報の有効期限が切れました"
 private const val DETAIL_NOT_FOUND_MESSAGE = "通知が見つかりません"
 private const val DETAIL_LOAD_FAILED_MESSAGE = "通知の取得に失敗しました"
 
@@ -38,6 +37,20 @@ class NotificationDetailViewModelTest {
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun unauthorizedRefreshKeepsSavedDetailWithoutWarning() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(15)))
+        val viewModel = NotificationDetailViewModel(15, refreshOnOpen = true,
+            gateway = FakeGateway { throw notificationApiError(statusCode = 401) },
+            cache = cache, readStore = readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(15, viewModel.uiState.value.notification?.id)
+        assertNull(viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.isOffline)
+        assertFalse(viewModel.uiState.value.isUpdating)
     }
 
     // ---- 初回ロード 正常系 ----
@@ -260,13 +273,13 @@ class NotificationDetailViewModelTest {
     }
 
     @Test
-    fun unauthorizedResponseReportsExpiredSession() = runTest(testDispatcher) {
+    fun unauthorizedResponseWithoutCacheReportsFetchFailure() = runTest(testDispatcher) {
         val gateway = FakeGateway { throw notificationApiError(statusCode = 401) }
         val viewModel = NotificationDetailViewModel(notificationId = 15, gateway = gateway, cache = LocalCache(InMemoryKeyValueStore()), readStore = readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(DETAIL_SESSION_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+        assertEquals(DETAIL_LOAD_FAILED_MESSAGE, viewModel.uiState.value.error)
     }
 
     @Test
@@ -349,14 +362,14 @@ class NotificationDetailViewModelTest {
     }
 
     @Test
-    fun failedPushRefreshKeepsBodyAndReportsFailure() = runTest(testDispatcher) {
+    fun failedPushRefreshKeepsBodyWithoutWarning() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         cache.save("notifications_v1", listOf(notification(15)))
         val viewModel = NotificationDetailViewModel(15, refreshOnOpen = true,
             gateway = FakeGateway { error("タイムアウト") }, cache = cache, readStore = readStore())
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(15, viewModel.uiState.value.notification?.id)
-        assertEquals(DETAIL_LOAD_FAILED_MESSAGE, viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.error)
         assertFalse(viewModel.uiState.value.isUpdating)
     }
 
