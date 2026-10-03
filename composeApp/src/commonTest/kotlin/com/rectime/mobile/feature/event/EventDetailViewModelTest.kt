@@ -479,6 +479,24 @@ class EventDetailViewModelTest {
     }
 
     @Test
+    fun forbiddenResponseRemovesCachedDetailPreview() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(
+            eventsHandler = statusOnly(HttpStatusCode.Forbidden),
+            gatheringsHandler = jsonOk(validGatheringsBody),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val state = viewModel.uiState.value
+        assertEquals("イベントを表示する権限がありません", state.error)
+        assertNull(state.eventDetail)
+        assertTrue(state.gatherings.isEmpty())
+        assertFalse(state.isLoading)
+        assertFalse(state.isOffline)
+    }
+
+    @Test
     fun fetchEventDetailIgnoresCacheAndShowsNotFoundOn404() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         seedCache(eventId = 1, cache)

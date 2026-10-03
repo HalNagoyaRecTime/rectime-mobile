@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -94,6 +95,21 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                 horizontalPadding = false,
                 contentTopPadding = false,
                 headerEdgeFade = false,
+                contentBackground = {
+                    if (uiState.eventDetail != null && uiState.error == null) {
+                        // 設定画面と同様に、バウンスの背面を上はタイトル帯・下は本文の色にする。
+                        Box(
+                            Modifier.fillMaxSize().background(
+                                Brush.verticalGradient(
+                                    0f to AppTheme.colors.themeColorSecond,
+                                    0.5f to AppTheme.colors.themeColorSecond,
+                                    0.5f to AppTheme.colors.commonBackground,
+                                    1f to AppTheme.colors.commonBackground,
+                                ),
+                            ),
+                        )
+                    }
+                },
             ) {
                 item {
                     val error = uiState.error
@@ -150,7 +166,7 @@ private fun EventDetailContent(
     attendingGatheringId: Int?,
     onOpenMap: () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.commonBackground)) {
         EventTitleBand(title = event.eventName)
 
         Column(
