@@ -11,11 +11,18 @@ import com.rectime.mobile.core.util.nowMinuteStateFlow
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
@@ -23,6 +30,9 @@ import kotlin.time.Clock
 private const val MY_EVENTS_CACHE_KEY = "notification_my_event_ids_v1"
 
 enum class NotificationRefreshSource { Header, Pull }
+
+private enum class CenterLoadingMode { Hidden, Immediate, Delayed }
+private const val AutomaticLoadingDelayMillis = 1_000L
 
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
@@ -46,43 +56,51 @@ class NotificationsViewModel(
     private val feedStore: NotificationFeedStore = NotificationFeedStore.shared,
     private val readStore: NotificationReadStore = NotificationReadStore.shared,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(NotificationsUiState(isLoading = true))
-    val uiState: StateFlow<NotificationsUiState> = _uiState.asStateFlow()
+    private val refreshSource = MutableStateFlow<NotificationRefreshSource?>(null)
+    val uiState: StateFlow<NotificationsUiState> = combine(
+        feedStore.cachedNotifications,
+        feedStore.status,
+        readStore.readIds,
+        refreshSource,
+    ) { cached, status, readIds, source ->
+        NotificationsUiState(
+            notifications = cached.orEmpty(),
+            isLoading = cached == null && status.error == null && source == null,
+            isUpdating = status.isUpdating,
+            hasMore = status.hasMore,
+            isLoadingMore = status.isLoadingMore,
+            pageError = status.pageError?.toNotificationErrorMessage(),
+            refreshSource = source,
+            error = status.error?.toNotificationErrorMessage(),
+            isOffline = status.isOffline,
+            readIds = readIds,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, NotificationsUiState(isLoading = true))
+
+    // 自動更新は短い通信で点滅させず、右上更新は操作直後から表示する。
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val showCenterLoading: StateFlow<Boolean> = uiState.map { state ->
+        when {
+            state.isHeaderRefreshing -> CenterLoadingMode.Immediate
+            state.isPullRefreshing -> CenterLoadingMode.Hidden
+            state.isLoading || state.isUpdating -> CenterLoadingMode.Delayed
+            else -> CenterLoadingMode.Hidden
+        }
+    }.distinctUntilChanged().transformLatest { mode ->
+        if (mode == CenterLoadingMode.Delayed) {
+            emit(false)
+            delay(AutomaticLoadingDelayMillis)
+            emit(true)
+        } else {
+            emit(mode == CenterLoadingMode.Immediate)
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var loadJob: Job? = null
 
     init {
-        viewModelScope.launch {
-            combine(feedStore.cachedNotifications, feedStore.status) { cached, status -> cached to status }
-                .collect { (cached, status) ->
-                    if (!_uiState.value.isRefreshing) {
-                        _uiState.value = _uiState.value.copy(
-                            notifications = cached.orEmpty(),
-                            isLoading = cached == null && status.error == null &&
-                                (status.isUpdating || _uiState.value.isLoading),
-                            isUpdating = status.isUpdating,
-                            hasMore = status.hasMore,
-                            isLoadingMore = status.isLoadingMore,
-                            pageError = status.pageError?.toNotificationErrorMessage(),
-                            isOffline = status.isOffline,
-                            error = status.error?.toNotificationErrorMessage(),
-                        )
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            hasMore = status.hasMore,
-                            isLoadingMore = status.isLoadingMore,
-                            pageError = status.pageError?.toNotificationErrorMessage(),
-                        )
-                    }
-                }
-        }
         loadNotifications()
-        viewModelScope.launch {
-            readStore.restore()
-            readStore.readIds.collect { readIds ->
-                _uiState.value = _uiState.value.copy(readIds = readIds)
-            }
-        }
+        viewModelScope.launch { readStore.restore() }
     }
 
     fun refresh() {
@@ -94,93 +112,30 @@ class NotificationsViewModel(
     }
 
     fun loadMore() {
-        if (_uiState.value.isUpdating || _uiState.value.isRefreshing) return
+        if (feedStore.status.value.isUpdating || refreshSource.value != null) return
         viewModelScope.launch { feedStore.loadMore() }
     }
 
     private fun loadNotifications(source: NotificationRefreshSource? = null) {
-        // 最初に受け付けた更新だけがアニメーションを担当し、更新中の追加要求は無視する。
-        if (_uiState.value.isRefreshing || loadJob?.isActive == true) return
-
-        val isRefresh = source != null
-
-        val hasNotifications = _uiState.value.notifications.isNotEmpty()
-        _uiState.value = _uiState.value.copy(
-            isLoading = !isRefresh && !hasNotifications,
-            isUpdating = true,
-            refreshSource = source,
-            error = null,
-        )
+        // 取得状態はストアだけが管理し、画面は手動更新のアニメーションのみを担当する。
+        if (refreshSource.value != null || loadJob?.isActive == true ||
+            feedStore.status.value.isUpdating || feedStore.status.value.isLoadingMore
+        ) return
+        refreshSource.value = source
         loadJob = viewModelScope.launch {
-            val request = CacheRequestGeneration()
             try {
-                val result = request.validate(
-                    withMinimumRefreshDuration(isRefresh) { feedStore.load(force = isRefresh) },
-                )
-                when (result) {
-                    is CachedFetchResult.Fresh -> {
-                        _uiState.value = _uiState.value.copy(
-                            notifications = result.value,
-                            isLoading = false,
-                            refreshSource = null,
-                            isOffline = false,
-                            error = null,
-                        )
-                    }
-
-                    is CachedFetchResult.Cached -> {
-                        // セッション切れ・取得失敗(404)はオフライン表示で隠さず、エラーを優先する。
-                        if (result.error.invalidatesNotificationCache()) {
-                            _uiState.value = _uiState.value.copy(
-                                notifications = emptyList(),
-                                isLoading = false,
-                                refreshSource = null,
-                                isOffline = false,
-                                error = result.error.toNotificationErrorMessage(),
-                            )
-                        } else {
-                            _uiState.value = _uiState.value.copy(
-                                notifications = result.value,
-                                isLoading = false,
-                                refreshSource = null,
-                                isOffline = true,
-                                error = null,
-                            )
-                            // 401/404以外の理由でのフォールバックは「オフライン」として
-                            // 静かに隠れてしまうため、原因を追えるようログには残す。
-                            result.error.printStackTrace()
-                        }
-                    }
-
-                    is CachedFetchResult.Failed -> {
-                        // 有効なキャッシュが無い(=このプロセス内のnotificationsは
-                        // 前回の成功時点のものに過ぎず、その間にログアウト・別ユーザーの
-                        // ログインが起きている可能性がある)ため、.copy()で前の一覧を
-                        // 残さずここで確実にクリアする。ただしreadIdsはNotificationReadStore
-                        // が別途管理する既読状態であり通信結果とは無関係のため、ここで
-                        // 巻き込んでリセットしてしまうと既読済み通知が未読に戻ってしまう。
-                        _uiState.value = NotificationsUiState(
-                            isLoading = false,
-                            error = result.error.toNotificationErrorMessage(),
-                            readIds = _uiState.value.readIds,
-                        )
-                        result.error.printStackTrace()
-                    }
+                val result = withMinimumRefreshDuration(source != null) {
+                    feedStore.load(force = source != null)
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _uiState.value = NotificationsUiState(
-                    isLoading = false,
-                    error = e.toNotificationErrorMessage(),
-                    readIds = _uiState.value.readIds,
-                )
+                when (result) {
+                    is CachedFetchResult.Cached -> result.error.printStackTrace()
+                    is CachedFetchResult.Failed -> result.error.printStackTrace()
+                    is CachedFetchResult.Fresh -> Unit
+                }
+                // 表示待ち中にログアウトした場合も、古いストアの内容を残さない。
+                feedStore.discardStaleSession()
             } finally {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    isUpdating = false,
-                    refreshSource = null,
-                )
+                refreshSource.value = null
             }
         }
     }

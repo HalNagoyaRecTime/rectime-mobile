@@ -152,6 +152,60 @@ class NotificationsPaginationTest {
         assertEquals(100, cache.load<List<UserNotification>>("notifications_v1")?.size)
     }
 
+    @Test
+    fun refreshKeepsLoadedPagesWhilePendingAndMergesNewHeadWithoutDuplicates() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        var updated = false
+        val offsets = mutableListOf<Int>()
+        val cache = LocalCache(MemoryStore())
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            offsets += offset
+            val all = if (updated) {
+                listOf(notification(101)) + (1..100).map { notification(it).copy(title = "更新後") }
+            } else {
+                (1..100).map(::notification)
+            }
+            if (updated && offset == 0) gate.await()
+            page(all.drop(offset).take(limit), all.size, offset)
+        }, cache)
+        store.load()
+        store.loadMore()
+        assertEquals(40, store.notifications.value.size)
+        updated = true
+        val refresh = async { store.load(force = true) }
+        runCurrent()
+        assertEquals(40, store.notifications.value.size)
+        gate.complete(Unit)
+        refresh.await()
+        assertEquals(listOf(101) + (1..40).toList(), store.notifications.value.map { it.id })
+        store.loadMore()
+        assertEquals(listOf(0, 20, 0, 20), offsets)
+        assertEquals(41, store.notifications.value.size)
+        assertEquals("更新後", store.notifications.value.first { it.id == 25 }.title)
+        store.loadMore()
+        assertEquals((listOf(101) + (1..59).toList()), store.notifications.value.map { it.id })
+        assertEquals(60, NotificationHistoryCache(cache).load()?.size)
+    }
+
+    @Test
+    fun failedRefreshDoesNotDiscardAlreadyLoadedPages() = runTest {
+        var offline = false
+        val cache = LocalCache(MemoryStore())
+        cache.save("notifications_v1", (1..100).map(::notification))
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            if (offline) error("接続できません")
+            page((offset + 1..offset + limit).map(::notification), 100, offset)
+        }, cache)
+        store.load()
+        store.loadMore()
+        offline = true
+        store.load(force = true)
+        assertEquals(40, store.notifications.value.size)
+        assertTrue(store.status.value.isOffline)
+        store.loadMore()
+        assertEquals(60, store.notifications.value.size)
+    }
+
     private fun page(values: List<UserNotification>, total: Int, offset: Int) =
         NotificationPage(values, total, 20, offset)
 

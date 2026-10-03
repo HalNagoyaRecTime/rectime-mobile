@@ -22,10 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +59,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
+private const val NotificationItemAnimationMillis = 220
 private val RelativeTimeTick = 30.seconds
 private val UnreadDotSize = 12.dp
 private val ChevronSize = 14.dp
@@ -75,10 +79,19 @@ object NotificationsScreen : Screen {
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel(key = key) { NotificationsViewModel() }
         val uiState by viewModel.uiState.collectAsState()
+        val showCenterLoading by viewModel.showCenterLoading.collectAsState()
         val now by produceState(Clock.System.now()) {
             while (true) {
                 delay(RelativeTimeTick)
                 value = Clock.System.now()
+            }
+        }
+
+        // 初めに表示する保存済み一覧は即時表示し、それ以降の追加だけフェードする。
+        var initialNotificationIds by remember(viewModel) { mutableStateOf<Set<Int>?>(null) }
+        SideEffect {
+            if (initialNotificationIds == null && !uiState.isLoading && uiState.error == null) {
+                initialNotificationIds = uiState.notifications.map { it.id }.toSet()
             }
         }
 
@@ -117,7 +130,7 @@ object NotificationsScreen : Screen {
                         )
                     }
 
-                    uiState.notifications.isEmpty() && !uiState.isUpdating -> item {
+                    uiState.notifications.isEmpty() -> item {
                         NotificationMessage(message = "通知はありません")
                     }
 
@@ -128,6 +141,13 @@ object NotificationsScreen : Screen {
                         ) { index ->
                             val notification = uiState.notifications[index]
                             NotificationCard(
+                                modifier = Modifier.animateItem(
+                                    fadeInSpec = if (initialNotificationIds != null &&
+                                        notification.id !in initialNotificationIds.orEmpty()
+                                    ) tween(NotificationItemAnimationMillis) else null,
+                                    placementSpec = tween(NotificationItemAnimationMillis),
+                                    fadeOutSpec = tween(NotificationItemAnimationMillis),
+                                ),
                                 notification = notification,
                                 now = now,
                                 isRead = notification.id in uiState.readIds,
@@ -157,9 +177,9 @@ object NotificationsScreen : Screen {
                     }
                 }
             }
-            if ((uiState.isLoading || uiState.isUpdating) && !uiState.isRefreshing) {
+            if (showCenterLoading) {
                 Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
-                    AppLoadingIndicator()
+                    AppLoadingIndicator(modifier = Modifier.size(32.dp))
                 }
             }
         }
@@ -211,6 +231,7 @@ private fun NotificationCard(
     now: Instant,
     isRead: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val titleColor = if (isRead) {
         AppTheme.colors.textReadNotificationTitle
@@ -241,7 +262,7 @@ private fun NotificationCard(
         onClick = onClick,
         color = AppTheme.colors.commonBackground,
         shape = cardShape,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(vertical = AppTheme.spacing.xs)
             .outerShadow(

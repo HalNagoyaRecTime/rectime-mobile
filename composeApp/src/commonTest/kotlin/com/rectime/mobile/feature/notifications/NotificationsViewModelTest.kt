@@ -4,6 +4,7 @@ import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -74,6 +75,115 @@ class NotificationsViewModelTest {
         viewModel.refresh()
         testDispatcher.scheduler.advanceUntilIdle()
         assertTrue(reads.readIds.value.isEmpty())
+    }
+
+    @Test
+    fun automaticRefreshShowsCenterLoadingOnlyAfterOneSecond() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            if (requests > 1) gate.await()
+            page(emptyList(), 0, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationsViewModel(feed, readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        val update = async { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        assertFalse(viewModel.showCenterLoading.value)
+        assertFalse(viewModel.uiState.value.isLoading)
+        testDispatcher.scheduler.advanceTimeBy(999)
+        testDispatcher.scheduler.runCurrent()
+        assertFalse(viewModel.showCenterLoading.value)
+        testDispatcher.scheduler.advanceTimeBy(1)
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.showCenterLoading.value)
+        gate.complete(Unit)
+        update.await()
+        testDispatcher.scheduler.runCurrent()
+        assertFalse(viewModel.showCenterLoading.value)
+    }
+
+    @Test
+    fun quickAutomaticRefreshDoesNotShowCenterLoading() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            if (requests > 1) gate.await()
+            page(listOf(notification(1)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationsViewModel(feed, readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        val update = async { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        testDispatcher.scheduler.advanceTimeBy(100)
+        gate.complete(Unit)
+        update.await()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.showCenterLoading.value)
+    }
+
+    @Test
+    fun headerRefreshShowsCenterLoadingImmediatelyButPullDoesNot() = runTest(testDispatcher) {
+        val gateway = FakeGateway { limit, offset -> page(emptyList(), 0, limit, offset) }
+        val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.showCenterLoading.value)
+        assertTrue(viewModel.uiState.value.notifications.isEmpty())
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.showCenterLoading.value)
+        viewModel.refreshFromPull()
+        testDispatcher.scheduler.runCurrent()
+        assertFalse(viewModel.showCenterLoading.value)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun newAutomaticResponseWinsOverOldManualAnimationResult() = runTest(testDispatcher) {
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            page(listOf(notification(requests)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationsViewModel(feed, readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        feed.load(force = true)
+        testDispatcher.scheduler.runCurrent()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(feed.notifications.value.map { it.id }, viewModel.uiState.value.notifications.map { it.id })
+    }
+
+    @Test
+    fun manualAnimationDoesNotClearConcurrentAutomaticUpdatingState() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            if (requests == 3) gate.await()
+            page(listOf(notification(requests)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationsViewModel(feed, readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        val automatic = async { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        testDispatcher.scheduler.advanceTimeBy(600)
+        testDispatcher.scheduler.runCurrent()
+        val stillUpdating = viewModel.uiState.value.isUpdating
+        gate.complete(Unit)
+        automatic.await()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(stillUpdating)
     }
 
     @Test

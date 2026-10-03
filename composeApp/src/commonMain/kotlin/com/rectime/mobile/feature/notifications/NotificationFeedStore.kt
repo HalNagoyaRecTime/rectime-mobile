@@ -81,15 +81,20 @@ class NotificationFeedStore(
                                 total = page.total.coerceIn(0, NotificationHistoryLimit)
                                 nextOffset = page.notifications.size.coerceAtMost(NotificationPageSize)
                             }
-                            page.notifications.take(NotificationPageSize)
+                            val newest = page.notifications.take(NotificationPageSize)
+                            // 更新済みの先頭と表示中の履歴を結合し、追加ページを消さない。
+                            if (newest.isEmpty()) emptyList() else {
+                                (newest + _notifications.value).distinctBy { it.id }
+                                    .take(page.total.coerceIn(0, NotificationHistoryLimit))
+                            }
                         },
                         loadCache = {
                             try {
-                                (_cachedNotifications.value ?: history.load())?.take(NotificationPageSize)
+                                _cachedNotifications.value ?: history.load()?.take(NotificationPageSize)
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                _cachedNotifications.value?.take(NotificationPageSize)
+                                _cachedNotifications.value
                             }
                         },
                         saveCache = { history.merge(it, total) },
@@ -97,7 +102,7 @@ class NotificationFeedStore(
                             if (request.isCurrent && requestRevision == revision) {
                                 nextOffset = it.size
                                 publish(it)
-                                _status.value = _status.value.copy(hasMore = it.size >= NotificationPageSize)
+                                _status.value = _status.value.copy(hasMore = it.size >= NotificationPageSize && it.size < total)
                             }
                         },
                     )
@@ -162,8 +167,10 @@ class NotificationFeedStore(
                 }
                 total = page.total.coerceIn(0, NotificationHistoryLimit)
                 val values = page.notifications.take(minOf(NotificationPageSize, NotificationHistoryLimit - nextOffset))
-                nextOffset += values.size
-                val combined = (_notifications.value + values).distinctBy { it.id }.take(NotificationHistoryLimit)
+                val followingOffset = nextOffset + values.size
+                val updates = values.associateBy { it.id }
+                val combined = (_notifications.value.map { updates[it.id] ?: it } + values)
+                    .distinctBy { it.id }.take(NotificationHistoryLimit)
                 try {
                     history.merge(combined, total)
                 } catch (e: CancellationException) {
@@ -175,6 +182,7 @@ class NotificationFeedStore(
                     if (requestRevision == revision) clearMemory()
                     return
                 }
+                nextOffset = followingOffset
                 publish(combined)
                 lastResult = if (_status.value.isOffline) null else CachedFetchResult.Fresh(combined)
                 _status.value = _status.value.copy(hasMore = values.isNotEmpty() && nextOffset < total)
@@ -209,6 +217,16 @@ class NotificationFeedStore(
         nextOffset = 0
         total = NotificationHistoryLimit
         _status.value = NotificationFeedStatus()
+    }
+
+    internal suspend fun discardStaleSession() {
+        mutex.withLock {
+            if (!session.isCurrent) {
+                inFlight?.cancel()
+                inFlight = null
+                clearMemory()
+            }
+        }
     }
 
     suspend fun reset() {
