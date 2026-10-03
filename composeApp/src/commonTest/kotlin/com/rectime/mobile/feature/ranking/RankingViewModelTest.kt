@@ -440,6 +440,22 @@ class RankingViewModelTest {
         assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
     }
 
+    @Test
+    fun sessionChangeBeforeScheduledRequestPreventsFetch() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            requests++
+            respondJson(rankingsJsonOf(RankingFixture(1, 42, "古い要求のチーム", 321)))
+        })
+        // viewModelScopeのlaunchが実行される前にセッションが切り替わる。
+        cache.clearAll()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, requests)
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
     private fun buildViewModel(
         client: HttpClient,
         initialMyTeamId: Int? = null,

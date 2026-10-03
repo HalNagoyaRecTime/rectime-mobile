@@ -81,6 +81,11 @@ class RankingViewModel(
             displayedGeneration = generationAtStart
         }
         fetchJob = viewModelScope.launch {
+            // 起動がキュー待ちしている間にログアウトした要求も開始しない。
+            if (generationAtStart != CacheGeneration.value) {
+                _uiState.value = RankingUiState(error = rankingErrorMessage(null))
+                return@launch
+            }
             // 手動更新時に一覧が一瞬空にならないよう、既存のrankingItemsは
             // 保持したままローディング状態にする。isOfflineは今回の結果が
             // 出るまで意味を持たないため、古い表示を引きずらないようリセットする。
