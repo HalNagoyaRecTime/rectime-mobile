@@ -7,7 +7,7 @@ import platform.UIKit.UIImpactFeedbackStyle
 
 private class IosAppHapticFeedback : AppHapticFeedback {
     private val generator = UIImpactFeedbackGenerator(
-        style = UIImpactFeedbackStyle.UIImpactFeedbackStyleLight,
+        style = UIImpactFeedbackStyle.UIImpactFeedbackStyleMedium,
     )
 
     override fun perform(event: AppHapticEvent) {

@@ -36,7 +36,7 @@ internal val SettingsCornerRadius = 26.dp
 
 internal enum class SettingsIcon(val path: String) {
     Notification(""),
-    Haptic("M12,4 L12,20 M7,7 C4,9 4,15 7,17 M17,7 C20,9 20,15 17,17"),
+    Haptic("M9,3 H15 Q17,3 17,5 V19 Q17,21 15,21 H9 Q7,21 7,19 V5 Q7,3 9,3 Z M10,18 H14 M3,7 L1,10 L3,13 L1,16 M21,7 L23,10 L21,13 L23,16"),
     Contact("M3,4 L21,4 L21,20 L3,20 Z M3,5 L12,12 L21,5"),
     Terms("M6,2 L15,2 L20,7 L20,22 L6,22 Z M15,2 L15,7 L20,7 M9,12 L17,12 M9,16 L17,16"),
     Privacy("M12,2 L21,6 L20,14 C19,18 16,21 12,23 C8,21 5,18 4,14 L3,6 Z M9,11 L9,16 L15,16 L15,11 Z M10,11 L10,9 C10,6 14,6 14,9 L14,11"),
