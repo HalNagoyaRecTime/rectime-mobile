@@ -33,6 +33,7 @@ import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
+import com.rectime.mobile.feature.schedule.scheduleViewModelFactory
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationFeedStore
 import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
@@ -135,7 +136,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             SessionTokenHolder.accessToken = session.accessToken
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
-            val scheduleViewModel: ScheduleViewModel = viewModel()
+            val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
             val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {

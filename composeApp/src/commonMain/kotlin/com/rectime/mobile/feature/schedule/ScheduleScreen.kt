@@ -91,7 +91,7 @@ object ScheduleScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        val viewModel = viewModel { ScheduleViewModel() }
+        val viewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
         val events by viewModel.events
 
