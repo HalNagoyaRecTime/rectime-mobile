@@ -146,6 +146,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             }
             key(session.user.id) {
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    authViewModel.onForeground()
                     badgeViewModel.onForeground(session.user.id)
                     foregroundScope.launch { scheduleViewModel.onForeground() }
                 }

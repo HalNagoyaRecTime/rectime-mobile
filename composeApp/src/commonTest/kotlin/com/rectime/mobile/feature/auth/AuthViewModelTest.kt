@@ -46,6 +46,105 @@ class AuthViewModelTest {
         Dispatchers.resetMain()
     }
 
+    @Test
+    fun startupDeactivationReturnsToLoginWithoutRefreshingAndClearsCache() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val gate = CompletableDeferred<Unit>()
+        val paths = mutableListOf<String>()
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            paths += request.url.encodedPath
+            gate.await()
+            respond(deactivatedBody, HttpStatusCode.Unauthorized, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.runCurrent()
+        assertNotNull(viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        viewModel.onForeground()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf("/api/v1/auth/me"), paths)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(cache.load<String>("saved"))
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun foregroundCheckKeepsContentVisibleAndDoesNotDuplicateRequestsOnFailure() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            calls++
+            if (calls > 1) {
+                gate.await()
+                respond("server error", HttpStatusCode.InternalServerError)
+            } else respond(meBody, HttpStatusCode.OK, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val session = store.session
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        assertEquals(session, viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(session, store.session)
+        assertEquals(session, viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun foregroundDeactivationReturnsToLoginWithSpecificError() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        var calls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            calls++
+            if (calls == 1) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deactivatedBody, HttpStatusCode.Unauthorized, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun refreshDeactivationUsesSpecificErrorInsteadOfExpiredMessage() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/me")) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deactivatedBody, HttpStatusCode.Unauthorized, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+        assertNull(store.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun unrelatedOldTokenCannotDeactivateCurrentSession() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(okApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleAccountDeactivated("different-session-token")
+        assertNotNull(store.session)
+        assertNotNull(viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    private val meBody = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}"""
+    private val deactivatedBody = """{"error":{"code":"USER_DEACTIVATED","message":"このアカウントは無効化されています"}}"""
+
     // ---- restoreSession 正常系 ----
 
     @Test

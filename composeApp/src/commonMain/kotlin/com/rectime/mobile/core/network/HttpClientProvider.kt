@@ -3,11 +3,13 @@ package com.rectime.mobile.core.network
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.auth.AuthSessionInvalidationHandler
+import com.rectime.mobile.feature.auth.USER_DEACTIVATED_CODE
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
 import io.ktor.serialization.kotlinx.json.json
@@ -26,6 +28,7 @@ expect fun createHttpClient(): HttpClient
 internal class MobileAuthHeadersConfig {
     var baseUrl: String = apiBaseUrl
     var refreshToken: suspend (String) -> String? = AuthSessionInvalidationHandler::refreshToken
+    var accountDeactivated: suspend (String) -> Unit = AuthSessionInvalidationHandler::accountDeactivated
 }
 
 internal val MobileAuthHeadersPlugin = createClientPlugin(
@@ -34,6 +37,7 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
 ) {
     val baseUrl = pluginConfig.baseUrl
     val refreshToken = pluginConfig.refreshToken
+    val accountDeactivated = pluginConfig.accountDeactivated
     onRequest { request, _ ->
         if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
         val token = SessionTokenHolder.accessToken?.takeIf(String::isNotBlank) ?: return@onRequest
@@ -54,13 +58,24 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
             !targetsApi || !isApiUrl(url, baseUrl) || isAuthApiPath(url, baseUrl)
         ) return@on originalCall
 
+        // アカウント無効化は更新で復旧できないため、通常の期限切れと区別する。
+        if (apiErrorException(originalCall.response.status, originalCall.response.bodyAsText()).code == USER_DEACTIVATED_CODE) {
+            accountDeactivated(requestToken)
+            return@on originalCall
+        }
         val refreshed = refreshToken(requestToken)
             ?.takeIf { it.isNotBlank() && it != requestToken }
             ?: return@on originalCall
         request.headers.remove(HttpHeaders.Authorization)
         request.headers.append(HttpHeaders.Authorization, "Bearer $refreshed")
         // 再試行した結果が401でも、元のリクエストにつき一度だけ。
-        proceed(request)
+        val retriedCall = proceed(request)
+        if (retriedCall.response.status.value == 401 && isApiUrl(retriedCall.request.url.toString(), baseUrl) &&
+            apiErrorException(retriedCall.response.status, retriedCall.response.bodyAsText()).code == USER_DEACTIVATED_CODE
+        ) {
+            accountDeactivated(refreshed)
+        }
+        retriedCall
     }
 }
 

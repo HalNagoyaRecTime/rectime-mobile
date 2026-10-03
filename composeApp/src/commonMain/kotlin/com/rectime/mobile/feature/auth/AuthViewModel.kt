@@ -45,9 +45,10 @@ class AuthViewModel(
     private var loggingOut = false
     private var refreshJob: Deferred<String?>? = null
     private var refreshRequestToken: String? = null
+    private var sessionCheckJob: Job? = null
 
     init {
-        AuthSessionInvalidationHandler.register(this, ::refreshAfterUnauthorized)
+        AuthSessionInvalidationHandler.register(this, ::refreshAfterUnauthorized, ::handleAccountDeactivated)
         restoreSession()
 
         viewModelScope.launch {
@@ -59,7 +60,7 @@ class AuthViewModel(
     }
 
     private fun restoreSession() {
-        viewModelScope.launch {
+        sessionCheckJob = viewModelScope.launch {
             if (devAuthBypassEnabled) {
                 SessionTokenHolder.accessToken = "dev-bypass-token"
                 _uiState.update {
@@ -107,53 +108,82 @@ class AuthViewModel(
                 }
             }
 
-            try {
-                val user = api.currentUser(stored.accessToken)
-                val session = stored.copy(user = user)
+            checkStoredSession(stored, storedPending, refreshPhoto = true)
+        }
+    }
+
+    /** 前面復帰時も画面を維持し、起動時と同じ確認を裏で行う。 */
+    fun onForeground() {
+        if (devAuthBypassEnabled || loggingOut || sessionCheckJob?.isActive == true) return
+        val stored = _uiState.value.session ?: return
+        sessionCheckJob = viewModelScope.launch {
+            checkStoredSession(stored, sessionStore.loadPendingAuth())
+        }
+    }
+
+    private suspend fun checkStoredSession(stored: AuthSession, storedPending: PendingAuth?, refreshPhoto: Boolean = false) {
+        if (loggingOut || _uiState.value.session?.accessToken != stored.accessToken) return
+        try {
+            val user = api.currentUser(stored.accessToken)
+            val session = stored.copy(user = user)
+            sessionTransitionMutex.withLock {
+                if (!loggingOut && sessionStore.load()?.let {
+                    it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
+                } == true) {
+                    if (user.id != stored.user.id) {
+                        photoFetchJob?.cancel()
+                        photoRepository?.clear()
+                        photoRepository?.restore(user.id)
+                    }
+                    sessionStore.save(session)
+                    SessionTokenHolder.accessToken = session.accessToken
+                    if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
+                        sessionStore.clearPendingAuth()
+                    }
+                    pushTokenLifecycle.updateSession(session)
+                    _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
+                    if (refreshPhoto) fetchPhotoIfDue(session)
+                }
+            }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (error is AuthApiException && error.errorCode == USER_DEACTIVATED_CODE && error.statusCode == 401) {
+                handleAccountDeactivated(stored.accessToken)
+                return
+            }
+            // 一時的な通信・Server障害では保存済みSessionとPKCE情報を維持する。
+            if (!error.isUnauthorizedAuthError()) {
                 sessionTransitionMutex.withLock {
                     if (!loggingOut && sessionStore.load()?.let {
-                        it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
-                    } == true) {
-                        if (user.id != stored.user.id) {
-                            photoFetchJob?.cancel()
-                            photoRepository?.clear()
-                            photoRepository?.restore(user.id)
-                        }
-                        sessionStore.save(session)
-                        SessionTokenHolder.accessToken = session.accessToken
-                        if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
-                            sessionStore.clearPendingAuth()
-                        }
-                        pushTokenLifecycle.updateSession(session)
-                        _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
-                        fetchPhotoIfDue(session)
-                    }
-                }
-            } catch (error: Throwable) {
-                if (error is CancellationException) throw error
-                // 一時的な通信・Server障害では保存済みSessionとPKCE情報を維持する。
-                if (!error.isUnauthorizedAuthError()) {
-                    sessionTransitionMutex.withLock {
-                        if (!loggingOut && sessionStore.load()?.let {
-                                it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
-                            } == true) {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    session = stored,
-                                    pendingAuth = storedPending,
-                                    message = "Offline",
-                                    error = null,
-                                )
-                            }
+                            it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
+                        } == true) {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                session = stored,
+                                pendingAuth = storedPending,
+                                message = "Offline",
+                                error = null,
+                            )
                         }
                     }
-                    return@launch
                 }
-                // 一覧等の401と同じ更新処理を共有し、二重にrefreshしない。
-                refreshAfterUnauthorized(stored.accessToken)
+                return
             }
+            // 一覧等の401と同じ更新処理を共有し、二重にrefreshしない。
+            refreshAfterUnauthorized(stored.accessToken)
         }
+    }
+
+    internal suspend fun handleAccountDeactivated(accessToken: String) {
+        val current = _uiState.value.session ?: return
+        // 別ユーザーのログイン後に届いた、古い通信の拒否では締め出さない。
+        if (accessToken != current.accessToken && accessToken != previousAccessToken) return
+        invalidateSession(
+            AUTH_DEACTIVATED_MESSAGE,
+            expectedAccessToken = current.accessToken,
+            expectedSession = current,
+        )
     }
 
     fun startLogin() {
@@ -483,7 +513,9 @@ class AuthViewModel(
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                if (error.isUnauthorizedAuthError()) {
+                if (error is AuthApiException && error.statusCode == 401 && error.errorCode == USER_DEACTIVATED_CODE) {
+                    handleAccountDeactivated(accessToken)
+                } else if (error.isUnauthorizedAuthError()) {
                     invalidateSession(
                         AUTH_EXPIRED_MESSAGE,
                         expectedAccessToken = accessToken,
