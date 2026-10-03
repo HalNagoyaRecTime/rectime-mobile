@@ -63,6 +63,20 @@ class NotificationsViewModelTest {
     }
 
     @Test
+    fun openingAndRefreshingListDoesNotMarkNotificationsRead() = runTest(testDispatcher) {
+        val reads = readStore()
+        val gateway = FakeGateway { limit, offset ->
+            page(listOf(notification(1)), 1, limit, offset)
+        }
+        val viewModel = NotificationsViewModel(feedStore(gateway), reads)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(reads.readIds.value.isEmpty())
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(reads.readIds.value.isEmpty())
+    }
+
+    @Test
     fun logoutDuringMinimumRefreshDurationCannotRestoreOldNotifications() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }

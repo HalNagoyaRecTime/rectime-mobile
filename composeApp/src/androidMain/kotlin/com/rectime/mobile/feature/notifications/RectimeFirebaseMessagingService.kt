@@ -13,6 +13,7 @@ class RectimeFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        NotificationNavigationHandler.onNotificationReceived()
 
         val notification = IncomingPushNotification.from(
             notificationTitle = message.notification?.title,

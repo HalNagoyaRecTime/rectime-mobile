@@ -18,7 +18,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 interface NotificationGateway {
-    suspend fun getNotifications(limit: Int = 100, offset: Int = 0): NotificationPage
+    suspend fun getNotifications(limit: Int = NotificationPageSize, offset: Int = 0): NotificationPage
 
     suspend fun getNotification(notificationId: Int): UserNotification
 

@@ -10,6 +10,9 @@ import coil3.compose.LocalPlatformContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -135,6 +138,18 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             val hasUnreadNotifications by badgeViewModel.hasUnreadNotifications.collectAsState()
             LaunchedEffect(session.user.id) {
                 badgeViewModel.onSession(session.user.id)
+            }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                badgeViewModel.onForeground(session.user.id)
+            }
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            LaunchedEffect(badgeViewModel, session.user.id, lifecycle) {
+                NotificationNavigationHandler.updates.collect {
+                    // バックグラウンド中は通信せず、次の前面復帰で更新する。
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        badgeViewModel.onPush(session.user.id)
+                    }
+                }
             }
             LaunchedEffect(notificationNavigationTarget) {
                 when (val target = notificationNavigationTarget) {

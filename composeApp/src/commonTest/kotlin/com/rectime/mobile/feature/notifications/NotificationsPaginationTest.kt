@@ -1,152 +1,177 @@
 package com.rectime.mobile.feature.notifications
 
-import com.rectime.mobile.core.network.HttpStatusException
+import com.rectime.mobile.core.cache.CacheGeneration
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class NotificationsPaginationTest {
-    @Test
-    fun fetchAllNotificationsRequestsPagesUntilTotalIsReached() = runTest {
-        val requestedOffsets = mutableListOf<Int>()
-        val gateway = FakeNotificationGateway { limit, offset ->
-            requestedOffsets += offset
-            val notifications = when (offset) {
-                0 -> listOf(notification(1), notification(2))
-                2 -> listOf(notification(3), notification(4))
-                4 -> listOf(notification(5))
-                else -> error("Unexpected offset: $offset")
-            }
-            NotificationPage(
-                notifications = notifications,
-                total = 5,
-                limit = limit,
-                offset = offset,
-            )
-        }
-
-        val result = fetchAllNotifications(gateway = gateway, pageSize = 2)
-
-        assertEquals(listOf(0, 2, 4), requestedOffsets)
-        assertEquals(listOf(1, 2, 3, 4, 5), result.map(UserNotification::id))
+    @BeforeTest
+    fun resetGeneration() {
+        CacheGeneration.resetForTest()
     }
 
     @Test
-    fun fetchAllNotificationsStopsWhenBackendReturnsEmptyPage() = runTest {
-        val requestedOffsets = mutableListOf<Int>()
-        val gateway = FakeNotificationGateway { limit, offset ->
-            requestedOffsets += offset
-            NotificationPage(
-                notifications = if (offset == 0) listOf(notification(1)) else emptyList(),
-                total = 3,
-                limit = limit,
-                offset = offset,
-            )
-        }
-
-        val result = fetchAllNotifications(gateway = gateway, pageSize = 2)
-
-        assertEquals(listOf(0, 1), requestedOffsets)
-        assertEquals(listOf(1), result.map(UserNotification::id))
+    fun initialLoadFetchesOnlyTwentyAndPagingStopsAtOneHundred() = runTest {
+        val offsets = mutableListOf<Int>()
+        val cache = LocalCache(MemoryStore())
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            assertEquals(20, limit)
+            offsets += offset
+            page((offset + 1..offset + limit).map(::notification), total = 200, offset = offset)
+        }, cache)
+        store.load()
+        assertEquals(listOf(0), offsets)
+        assertEquals(20, store.notifications.value.size)
+        repeat(10) { store.loadMore() }
+        assertEquals(listOf(0, 20, 40, 60, 80), offsets)
+        assertEquals(100, store.notifications.value.size)
+        assertEquals(100, NotificationHistoryCache(cache).load()?.size)
+        assertFalse(store.status.value.hasMore)
     }
 
     @Test
-    fun fetchAllNotificationsPassesPageSizeAsLimit() = runTest {
-        val requestedLimits = mutableListOf<Int>()
-        val gateway = FakeNotificationGateway { limit, offset ->
-            requestedLimits += limit
-            NotificationPage(
-                notifications = listOf(notification(1)),
-                total = 1,
-                limit = limit,
-                offset = offset,
-            )
-        }
-
-        fetchAllNotifications(gateway = gateway, pageSize = 25)
-
-        assertEquals(listOf(25), requestedLimits)
+    fun emptyPageStopsFurtherRequests() = runTest {
+        var calls = 0
+        val store = NotificationFeedStore(Gateway { _, offset ->
+            calls++
+            page(emptyList(), total = 100, offset = offset)
+        }, LocalCache(MemoryStore()))
+        store.load()
+        store.loadMore()
+        assertEquals(1, calls)
+        assertFalse(store.status.value.hasMore)
     }
 
     @Test
-    fun fetchAllNotificationsStopsWhenBackendReportsSmallerTotal() = runTest {
-        val requestedOffsets = mutableListOf<Int>()
-        val gateway = FakeNotificationGateway { limit, offset ->
-            requestedOffsets += offset
-            NotificationPage(
-                notifications = listOf(notification(1), notification(2)),
-                total = 1,
-                limit = limit,
-                offset = offset,
-            )
-        }
-
-        val result = fetchAllNotifications(gateway = gateway, pageSize = 2)
-
-        assertEquals(listOf(0), requestedOffsets)
-        assertEquals(listOf(1, 2), result.map(UserNotification::id))
+    fun pageFailureKeepsRowsAndCanRetryWithoutSkippingOffset() = runTest {
+        var fail = true
+        val offsets = mutableListOf<Int>()
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            offsets += offset
+            if (offset > 0 && fail) error("offline")
+            page((offset + 1..offset + limit).map(::notification), total = 40, offset = offset)
+        }, LocalCache(MemoryStore()))
+        store.load()
+        store.loadMore()
+        assertEquals(20, store.notifications.value.size)
+        assertTrue(store.status.value.pageError != null)
+        fail = false
+        store.loadMore()
+        assertEquals(listOf(0, 20, 20), offsets)
+        assertEquals(40, store.notifications.value.size)
+        assertFalse(store.status.value.hasMore)
     }
 
     @Test
-    fun fetchAllNotificationsReturnsEmptyListWhenBackendHasNoNotification() = runTest {
-        val gateway = FakeNotificationGateway { limit, offset ->
-            NotificationPage(
-                notifications = emptyList(),
-                total = 0,
-                limit = limit,
-                offset = offset,
-            )
-        }
-
-        val result = fetchAllNotifications(gateway = gateway, pageSize = 100)
-
-        assertEquals(emptyList(), result)
+    fun overlappingPagesDoNotDuplicateRows() = runTest {
+        val store = NotificationFeedStore(Gateway { _, offset ->
+            page(if (offset == 0) (1..20).map(::notification) else (20..39).map(::notification), total = 40, offset = offset)
+        }, LocalCache(MemoryStore()))
+        store.load()
+        store.loadMore()
+        assertEquals(39, store.notifications.value.size)
+        assertEquals(39, store.notifications.value.map { it.id }.distinct().size)
     }
 
     @Test
-    fun fetchAllNotificationsRejectsNonPositivePageSize() = runTest {
-        val gateway = FakeNotificationGateway { _, _ ->
-            error("Notification list must not be requested")
-        }
-
-        assertFailsWith<IllegalArgumentException> {
-            fetchAllNotifications(gateway = gateway, pageSize = 0)
-        }
-        assertFailsWith<IllegalArgumentException> {
-            fetchAllNotifications(gateway = gateway, pageSize = -1)
-        }
+    fun offlinePagingUsesSavedHistoryWithoutMoreNetworkTimeouts() = runTest {
+        val cache = LocalCache(MemoryStore())
+        cache.save("notifications_v1", (1..100).map(::notification))
+        var calls = 0
+        val store = NotificationFeedStore(Gateway { _, _ ->
+            calls++
+            error("offline")
+        }, cache)
+        store.load()
+        assertEquals(20, store.notifications.value.size)
+        repeat(4) { store.loadMore() }
+        assertEquals(1, calls)
+        assertEquals(100, store.notifications.value.size)
+        assertFalse(store.status.value.hasMore)
     }
 
     @Test
-    fun fetchAllNotificationsPropagatesGatewayFailure() = runTest {
-        val gateway = FakeNotificationGateway { _, _ ->
-            throw notificationApiError(statusCode = 401)
-        }
-
-        val error = assertFailsWith<HttpStatusException> {
-            fetchAllNotifications(gateway = gateway, pageSize = 100)
-        }
-
-        assertEquals(401, error.status.value)
+    fun refreshPreservesStoredOlderPagesAndUpdatesSameId() = runTest {
+        val cache = LocalCache(MemoryStore())
+        cache.save("notifications_v1", (1..100).map(::notification))
+        val store = NotificationFeedStore(Gateway { _, offset ->
+            page((1..20).map { notification(it).copy(title = "更新後") }, 100, offset)
+        }, cache)
+        store.load()
+        val saved = NotificationHistoryCache(cache).load().orEmpty()
+        assertEquals(100, saved.size)
+        assertEquals("更新後", saved.first().title)
+        assertEquals(100, saved.last().id)
     }
+
+    @Test
+    fun logoutDuringNextPageDiscardsOldRowsAndResponse() = runTest {
+        val cache = LocalCache(MemoryStore())
+        val gate = CompletableDeferred<Unit>()
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            if (offset > 0) gate.await()
+            page((offset + 1..offset + limit).map(::notification), 40, offset)
+        }, cache)
+        store.load()
+        val next = async { store.loadMore() }
+        runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        next.await()
+        assertTrue(store.notifications.value.isEmpty())
+        assertTrue(NotificationHistoryCache(cache).load() == null)
+    }
+
+    @Test
+    fun detailCacheAlsoRespectsLimitAndSharesTheListEntry() = runTest {
+        val history = NotificationHistoryCache(LocalCache(MemoryStore()))
+        history.merge((1..100).map(::notification))
+        history.saveDetail(notification(10).copy(body = "更新後の本文"))
+        assertEquals("更新後の本文", history.load()?.first { it.id == 10 }?.body)
+        history.saveDetail(notification(101).copy(scheduledAt = "2026-08-01T09:00:00Z"))
+        assertEquals(100, history.load()?.size)
+        assertEquals(101, history.load()?.first()?.id)
+    }
+
+    @Test
+    fun previouslySavedLargeHistoryIsReducedToOneHundred() = runTest {
+        val cache = LocalCache(MemoryStore())
+        cache.save("notifications_v1", (1..150).map(::notification))
+        assertEquals(100, NotificationHistoryCache(cache).load()?.size)
+        assertEquals(100, cache.load<List<UserNotification>>("notifications_v1")?.size)
+    }
+
+    private fun page(values: List<UserNotification>, total: Int, offset: Int) =
+        NotificationPage(values, total, 20, offset)
 
     private fun notification(id: Int) = UserNotification(
-        id = id,
-        type = "manual",
-        title = "通知$id",
-        body = "本文$id",
-        scheduledAt = "2026-07-31T09:00:00+09:00",
-        relatedEvent = null,
+        id, "manual", "通知$id", "本文$id", "2026-07-31T09:00:00Z", null,
     )
-}
 
-private class FakeNotificationGateway(
-    private val pageProvider: suspend (limit: Int, offset: Int) -> NotificationPage,
-) : NotificationGateway {
-    override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage =
-        pageProvider(limit, offset)
+    private class Gateway(private val provider: suspend (Int, Int) -> NotificationPage) : NotificationGateway {
+        override suspend fun getNotifications(limit: Int, offset: Int) = provider(limit, offset)
+        override suspend fun getNotification(notificationId: Int): UserNotification = error("unused")
+    }
 
-    override suspend fun getNotification(notificationId: Int): UserNotification =
-        error("Notification detail is not used in pagination tests")
+    private class MemoryStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+        override suspend fun getString(key: String) = values[key]
+        override suspend fun putString(key: String, value: String) {
+            values[key] = value
+        }
+        override suspend fun clear() {
+            values.clear()
+        }
+    }
 }

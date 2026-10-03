@@ -61,7 +61,7 @@ class NotificationDetailViewModelTest {
     fun offlineDetailUsesSavedParticipationWithoutAnotherNetworkRequest() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         val related = NotificationRelatedEvent(7, "競技", emptyList(), "0915", "0945")
-        cache.save("notification_detail_v1_15", notification(15).copy(relatedEvent = related))
+        cache.save("notifications_v1", listOf(notification(15).copy(relatedEvent = related)))
         cache.save("notification_my_event_ids_v1", setOf(7))
         var participationRequests = 0
         val viewModel = NotificationDetailViewModel(15,
@@ -93,7 +93,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun savedDetailIsVisibleWhileNetworkIsPending() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
-        cache.save("notification_detail_v1_15", notification(15))
+        cache.save("notifications_v1", listOf(notification(15)))
         val gate = CompletableDeferred<Unit>()
         val readStore = readStore()
         val viewModel = NotificationDetailViewModel(15,
@@ -111,7 +111,7 @@ class NotificationDetailViewModelTest {
     @Test
     fun logoutBeforeDetailResponseClearsPreviewAndDoesNotSaveResponse() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
-        cache.save("notification_detail_v1_15", notification(15))
+        cache.save("notifications_v1", listOf(notification(15)))
         val gate = CompletableDeferred<Unit>()
         val viewModel = NotificationDetailViewModel(15,
             gateway = FakeGateway { gate.await(); notification(it) },
@@ -121,7 +121,7 @@ class NotificationDetailViewModelTest {
         gate.complete(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
         assertNull(viewModel.uiState.value.notification)
-        assertNull(cache.load<UserNotification>("notification_detail_v1_15"))
+        assertNull(cache.load<List<UserNotification>>("notifications_v1"))
     }
 
     @Test
