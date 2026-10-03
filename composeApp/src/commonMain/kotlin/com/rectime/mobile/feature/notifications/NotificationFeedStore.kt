@@ -1,11 +1,11 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
-import com.rectime.mobile.core.cache.CacheRequestGeneration
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +23,7 @@ class NotificationFeedStore(
     private val _notifications = MutableStateFlow<List<UserNotification>>(emptyList())
     val notifications: StateFlow<List<UserNotification>> = _notifications.asStateFlow()
 
-    // null means no saved feed is available; an empty list is a valid saved feed.
+    // nullは保存情報なし。空のリストは「通知が0件」という有効な保存情報。
     private val _cachedNotifications = MutableStateFlow<List<UserNotification>?>(null)
     val cachedNotifications: StateFlow<List<UserNotification>?> = _cachedNotifications.asStateFlow()
     private val mutex = Mutex()
@@ -52,7 +52,7 @@ class NotificationFeedStore(
                 clearMemory()
             }
             if (!force) lastResult?.let { return@coroutineScope it }
-            // Badge, list, and manual updates join the same operation rather than queueing requests.
+            // 未読バッジ・一覧・手動更新が同時に要求された場合は、進行中の同じ取得を共有する。
             inFlight?.takeIf { it.isActive } ?: async {
                 val request = CacheRequestGeneration()
                 val requestRevision = revision
@@ -75,7 +75,10 @@ class NotificationFeedStore(
                 val valid = request.validate(result)
                 if (requestRevision == revision) {
                     when (valid) {
-                        is CachedFetchResult.Fresh -> { publish(valid.value); lastResult = valid }
+                        is CachedFetchResult.Fresh -> {
+                            publish(valid.value)
+                            lastResult = valid
+                        }
                         is CachedFetchResult.Cached -> {
                             if (valid.error.invalidatesNotificationCache()) clearMemory() else publish(valid.value)
                         }
