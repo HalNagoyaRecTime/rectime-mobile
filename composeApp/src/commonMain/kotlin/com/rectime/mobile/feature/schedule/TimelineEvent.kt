@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.schedule
 
+import com.rectime.mobile.core.model.EventVenue
+import com.rectime.mobile.core.network.toModel
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.format.Padding
 import kotlinx.datetime.format.char
@@ -11,7 +13,7 @@ import kotlinx.datetime.format.char
 data class TimelineEvent(
     val eventId: Int,
     val title: String,
-    val venue: String,
+    val venues: List<EventVenue>,
     val startMinuteOfDay: Int,
     val durationMinutes: Int,
     val lane: Int,
@@ -44,7 +46,7 @@ internal fun EventResponse.toTimelineEvent(): TimelineEvent {
     return TimelineEvent(
         eventId = eventId,
         title = eventName,
-        venue = venue,
+        venues = venues.map { it.toModel() },
         startMinuteOfDay = startMinuteOfDay,
         durationMinutes = endMinuteOfDay - startMinuteOfDay,
         lane = 0,

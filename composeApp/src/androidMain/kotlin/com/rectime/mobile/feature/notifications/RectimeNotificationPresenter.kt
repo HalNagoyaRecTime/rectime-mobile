@@ -44,7 +44,11 @@ object RectimeNotificationPresenter {
             .setContentIntent(contentIntent)
             .build()
 
-        NotificationManagerCompat.from(context).notify(notificationId, androidNotification)
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, androidNotification)
+        } catch (_: SecurityException) {
+            // 上のチェックとnotify()実行の間に、権限が取り消される場合がある。
+        }
     }
 
     private fun hasNotificationPermission(context: Context): Boolean {

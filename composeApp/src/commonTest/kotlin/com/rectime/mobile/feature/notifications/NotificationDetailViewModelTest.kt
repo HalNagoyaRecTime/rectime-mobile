@@ -72,7 +72,7 @@ class NotificationDetailViewModelTest {
         val relatedEvent = NotificationRelatedEvent(
             id = 7,
             name = "玉入れ",
-            venue = "体育館",
+            venues = emptyList(),
             startTime = "0915",
             endTime = "0945",
         )
@@ -308,7 +308,7 @@ class NotificationDetailViewModelTest {
         val relatedEvent = NotificationRelatedEvent(
             id = 7,
             name = "玉入れ",
-            venue = "体育館",
+            venues = emptyList(),
             startTime = "0915",
             endTime = "0945",
         )
@@ -332,7 +332,7 @@ class NotificationDetailViewModelTest {
         val relatedEvent = NotificationRelatedEvent(
             id = 7,
             name = "玉入れ",
-            venue = "体育館",
+            venues = emptyList(),
             startTime = "0915",
             endTime = "0945",
         )
@@ -373,7 +373,7 @@ class NotificationDetailViewModelTest {
         val relatedEvent = NotificationRelatedEvent(
             id = 7,
             name = "玉入れ",
-            venue = "体育館",
+            venues = emptyList(),
             startTime = "0915",
             endTime = "0945",
         )

@@ -101,6 +101,7 @@ kotlin {
 
     sourceSets {
         androidMain.dependencies {
+            implementation(libs.androidx.browser)
             implementation(libs.androidx.compose.ui.tooling.preview)
             implementation(libs.androidx.activity.compose)
             // 直接は使わないが、play-services-basement が引き込む fragment 1.1.0 では

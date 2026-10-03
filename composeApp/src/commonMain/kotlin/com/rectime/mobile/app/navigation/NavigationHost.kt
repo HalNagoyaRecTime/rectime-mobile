@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.feature.auth.toUserProfile
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
@@ -31,6 +32,7 @@ fun NavigationHost(
     session: AuthSession,
     onLogout: () -> Unit,
     hasUnreadNotifications: Boolean,
+    notificationPermissionStartup: NotificationPermissionStartup?,
 ) {
     val state = navigationController.state
     val coroutineScope = rememberCoroutineScope()
@@ -117,6 +119,7 @@ fun NavigationHost(
             session = session,
             onLogout = onLogout,
             hasUnreadNotifications = hasUnreadNotifications,
+            notificationPermissionStartup = notificationPermissionStartup,
         )
 
         // Layer 2: Push Layer (above Root+BottomNav, all sources)

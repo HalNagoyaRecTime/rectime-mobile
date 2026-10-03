@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.auth
 
+private const val PROFILE_SCHEMA = "profile-v2"
+
 fun encodeAuthSession(session: AuthSession): String =
     listOf(
         session.accessToken,
@@ -13,6 +15,8 @@ fun encodeAuthSession(session: AuthSession): String =
         session.user.studentIdNumber ?: "",
         session.user.classRoomName ?: "",
         session.user.role?.name ?: "",
+        PROFILE_SCHEMA,
+        session.user.classCode ?: "",
         session.user.teamId?.toString() ?: "",
     ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
 
@@ -33,9 +37,10 @@ fun decodePendingAuth(value: String): PendingAuth? {
 
 fun decodeAuthSession(value: String): AuthSession? {
     val parts = value.split(".")
-    if (parts.size !in setOf(6, 8, 9, 11, 12)) return null
+    if (parts.size !in setOf(6, 8, 9, 11, 12, 14)) return null
 
     return runCatching {
+        if (parts.size == 14 && parts[11].decodeBase64UrlToString() != PROFILE_SCHEMA) return null
         val avatarUrl = if (parts.size >= 8) {
             val s = parts[6].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
@@ -52,14 +57,22 @@ fun decodeAuthSession(value: String): AuthSession? {
             val s = parts[9].decodeBase64UrlToString()
             if (s.isEmpty()) null else s
         } else null
-        val role = when (parts.size) {
-            9 -> Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
-            11, 12 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
+        // developとdevelop-v2の旧12要素形式は末尾がclassCode/teamIdで衝突する。
+        // 数字はどちらか判定できないため、認証情報を維持して/auth/meで再取得する。
+        val classCode = when (parts.size) {
+            14 -> parts[12].decodeBase64UrlToString().ifEmpty { null }
+            12 -> parts[11].decodeBase64UrlToString()
+                .takeIf { it.isNotEmpty() && it.toIntOrNull() == null }
             else -> null
         }
-        val teamId = if (parts.size == 12) {
-            parts[11].decodeBase64UrlToString().toIntOrNull()
+        val teamId = if (parts.size == 14) {
+            parts[13].decodeBase64UrlToString().ifEmpty { null }?.toInt()
         } else null
+        val role = when (parts.size) {
+            9 -> Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
+            11, 12, 14 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
+            else -> null
+        }
 
         AuthSession(
             accessToken = parts[0].decodeBase64UrlToString(),
@@ -73,6 +86,7 @@ fun decodeAuthSession(value: String): AuthSession? {
                 avatarUpdatedAt = avatarUpdatedAt,
                 studentIdNumber = studentIdNumber,
                 classRoomName = classRoomName,
+                classCode = classCode,
                 teamId = teamId,
                 role = role,
             ),

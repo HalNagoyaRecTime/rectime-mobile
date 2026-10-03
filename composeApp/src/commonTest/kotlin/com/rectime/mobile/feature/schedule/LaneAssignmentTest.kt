@@ -9,9 +9,9 @@ private fun event(
     startMinuteOfDay: Int,
     durationMinutes: Int,
 ) = TimelineEvent(
+    venues = emptyList(),
     eventId = eventId,
     title = "event-$eventId",
-    venue = "venue-$eventId",
     startMinuteOfDay = startMinuteOfDay,
     durationMinutes = durationMinutes,
     lane = 0,

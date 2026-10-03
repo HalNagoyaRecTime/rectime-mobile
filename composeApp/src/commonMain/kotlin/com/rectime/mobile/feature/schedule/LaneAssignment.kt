@@ -118,7 +118,7 @@ internal fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
                     TimelineEvent(
                         eventId = nextOverflowEventId--,
                         title = "",
-                        venue = "",
+                        venues = emptyList(),
                         startMinuteOfDay = startMin,
                         durationMinutes = endMin - startMin,
                         lane = 3,

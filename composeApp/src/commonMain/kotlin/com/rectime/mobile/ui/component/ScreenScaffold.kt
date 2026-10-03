@@ -40,6 +40,7 @@ fun RootScreenScaffold(
     horizontalPadding: Boolean = true,
     contentTopPadding: Boolean = true,
     contentBottomPadding: Boolean = true,
+    headerEdgeFade: Boolean = true,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     snackbarHostState: SnackbarHostState? = null,
@@ -72,19 +73,21 @@ fun RootScreenScaffold(
             ),
             content = content,
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(AppTheme.layout.headerEdgeFade)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            AppTheme.colors.edgeFadeColor,
-                            AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+        if (headerEdgeFade) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(AppTheme.layout.headerEdgeFade)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                AppTheme.colors.edgeFadeColor,
+                                AppTheme.colors.edgeFadeColor.copy(alpha = 0f),
+                            ),
                         ),
                     ),
-                ),
-        )
+            )
+        }
         RootHeader(
             title = title,
             modifier = Modifier,
