@@ -78,6 +78,23 @@ class NotificationReadStoreTest {
         assertTrue(store.readIds.value.isEmpty())
     }
 
+    @Test
+    fun storageFailureKeepsReadsInMemoryAndLogoutClearsThem() = runTest {
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = error("保存先障害")
+            override suspend fun putString(key: String, value: String) = error("保存先障害")
+            override suspend fun clear() = Unit
+        })
+        val store = NotificationReadStore(cache)
+        store.restore()
+        store.markRead(15)
+        store.restore()
+        assertEquals(setOf(15), store.readIds.value)
+        cache.clearAll()
+        store.restore()
+        assertTrue(store.readIds.value.isEmpty())
+    }
+
     private class InMemoryKeyValueStore : KeyValueStore {
         private val values = mutableMapOf<String, String>()
 

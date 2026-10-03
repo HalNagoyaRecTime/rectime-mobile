@@ -55,12 +55,14 @@ private val RelatedEventSpacing = 6.dp
 private val RelatedEventTitleTopPadding = 8.dp
 private val EventCardHeight = 80.dp
 
-data class NotificationDetailScreen(val id: Int) : Screen {
-    override val key: String = "notification_detail_$id"
+data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = false) : Screen {
+    override val key: String = "notification_detail_${id}_${refreshOnOpen}"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        val viewModel = viewModel(key = key) { NotificationDetailViewModel(id) }
+        val viewModel = viewModel(key = key) {
+            NotificationDetailViewModel(id, refreshOnOpen = refreshOnOpen, feedStore = NotificationFeedStore.shared)
+        }
         val uiState by viewModel.uiState.collectAsState()
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
 
@@ -69,45 +71,56 @@ data class NotificationDetailScreen(val id: Int) : Screen {
             onBack = { navigationController.requestPop() },
         ) {
             item {
-                when {
-                    uiState.isLoading -> {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = LoadingIndicatorPadding),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            AppLoadingIndicator()
+                Column {
+                    if (uiState.isUpdating && !uiState.isLoading) {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                            AppLoadingIndicator(modifier = Modifier.size(32.dp))
                         }
                     }
-
-                    uiState.error != null -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = ErrorContentPadding),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(ErrorContentSpacing),
-                        ) {
-                            Text(
-                                text = requireNotNull(uiState.error),
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Button(onClick = viewModel::retry) {
-                                Text("再読み込み")
+                    if (uiState.error != null && uiState.notification != null) {
+                        Text(requireNotNull(uiState.error), color = AppTheme.colors.textSecondary)
+                        Button(onClick = viewModel::retry) { Text("再読み込み") }
+                    }
+                    when {
+                        uiState.isLoading -> {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = LoadingIndicatorPadding),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AppLoadingIndicator(modifier = Modifier.size(32.dp))
                             }
                         }
-                    }
 
-                    uiState.notification != null -> {
-                        NotificationDetailContent(
-                            notification = requireNotNull(uiState.notification),
-                            isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
-                            nowMinute = nowMinute,
-                            onRelatedEventClick = { eventId ->
-                                navigationController.push(
-                                    EventDetailScreen(eventId = eventId),
+                        uiState.error != null && uiState.notification == null -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = ErrorContentPadding),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(ErrorContentSpacing),
+                            ) {
+                                Text(
+                                    text = requireNotNull(uiState.error),
+                                    color = MaterialTheme.colorScheme.error,
                                 )
-                            },
-                        )
+                                Button(onClick = viewModel::retry) {
+                                    Text("再読み込み")
+                                }
+                            }
+                        }
+
+                        uiState.notification != null -> {
+                            NotificationDetailContent(
+                                notification = requireNotNull(uiState.notification),
+                                isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
+                                nowMinute = nowMinute,
+                                onRelatedEventClick = { eventId ->
+                                    navigationController.push(
+                                        EventDetailScreen(eventId = eventId),
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }

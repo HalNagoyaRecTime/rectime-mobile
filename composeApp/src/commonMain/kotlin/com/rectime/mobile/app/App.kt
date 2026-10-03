@@ -33,6 +33,7 @@ import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationFeedStore
 import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
@@ -114,6 +115,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
         if (authState.session == null && hadSession) {
+            NotificationFeedStore.shared.reset()
             navigationController.reset(ScheduleScreen)
         }
         hadSession = authState.session != null
@@ -162,7 +164,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     }
                     is NotificationNavigationTarget.NotificationDetail -> {
                         navigationController.reset(ScheduleScreen)
-                        navigationController.push(NotificationDetailScreen(target.notificationId))
+                        navigationController.push(NotificationDetailScreen(target.notificationId, refreshOnOpen = true))
                     }
                     null -> Unit
                 }

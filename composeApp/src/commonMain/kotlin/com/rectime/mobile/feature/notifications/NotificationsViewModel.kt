@@ -144,6 +144,7 @@ class NotificationsViewModel(
 data class NotificationDetailUiState(
     val notification: UserNotification? = null,
     val isLoading: Boolean = true,
+    val isUpdating: Boolean = false,
     val isParticipatingInRelatedEvent: Boolean = false,
     val error: String? = null,
     val isOffline: Boolean = false,
@@ -157,6 +158,8 @@ class NotificationDetailViewModel(
     private val myEventsGateway: MyEventsGateway = MyEventsApi(),
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    private val refreshOnOpen: Boolean = false,
+    private val feedStore: NotificationFeedStore? = null,
 ) : ViewModel() {
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
@@ -168,34 +171,47 @@ class NotificationDetailViewModel(
     private var loadJob: Job? = null
 
     init {
-        loadNotification()
+        loadNotification(force = refreshOnOpen)
     }
 
     fun retry() {
-        loadNotification()
+        loadNotification(force = true)
     }
 
-    private fun loadNotification() {
+    private fun loadNotification(force: Boolean) {
         if (loadJob?.isActive == true) return
 
         _uiState.value = _uiState.value.copy(
             isLoading = _uiState.value.notification == null,
+            isUpdating = true,
             error = null,
         )
         loadJob = viewModelScope.launch {
             val request = CacheRequestGeneration()
             try {
+                var available = _uiState.value.notification ?: feedStore?.findNotification(notificationId)
+                var fetched = false
                 when (
                     val result = fetchWithCacheFirst(
-                        fetchLive = { gateway.getNotification(notificationId) },
-                        loadCache = { history.load()?.firstOrNull { it.id == notificationId } },
-                        saveCache = { history.saveDetail(it) },
+                        fetchLive = {
+                            if (!force && available != null) requireNotNull(available)
+                            else {
+                                fetched = true
+                                gateway.getNotification(notificationId)
+                            }
+                        },
+                        loadCache = {
+                            available = available ?: history.load()?.firstOrNull { it.id == notificationId }
+                            available
+                        },
+                        saveCache = { if (fetched) history.saveDetail(it) },
                         onCached = {
                             val participating = cachedParticipation(it)
                             if (request.isCurrent) {
                                 _uiState.value = _uiState.value.copy(
                                     notification = it,
                                     isLoading = false,
+                                    isUpdating = force,
                                     isParticipatingInRelatedEvent = participating,
                                 )
                                 readStore.markRead(notificationId)
@@ -210,9 +226,11 @@ class NotificationDetailViewModel(
                             _uiState.value = NotificationDetailUiState(isLoading = false)
                             return@launch
                         }
+                        feedStore?.updateNotification(result.value)
                         _uiState.value = _uiState.value.copy(
                             notification = result.value,
                             isLoading = false,
+                            isUpdating = false,
                             isParticipatingInRelatedEvent = cachedParticipation,
                         )
                         readStore.markRead(notificationId)
@@ -242,6 +260,7 @@ class NotificationDetailViewModel(
                                 notification = result.value,
                                 isLoading = false,
                                 isOffline = true,
+                                error = result.error.toNotificationErrorMessage(),
                                 isParticipatingInRelatedEvent = _uiState.value.isParticipatingInRelatedEvent,
                             )
                             readStore.markRead(notificationId)

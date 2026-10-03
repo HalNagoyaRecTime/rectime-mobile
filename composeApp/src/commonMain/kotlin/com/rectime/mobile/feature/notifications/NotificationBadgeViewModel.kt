@@ -15,7 +15,7 @@ class NotificationBadgeViewModel(
 ) : ViewModel() {
     val hasUnreadNotifications: StateFlow<Boolean> =
         combine(feedStore.notifications, readStore.readIds) { notifications, readIds ->
-            notifications.take(NotificationPageSize).any { it.id !in readIds }
+            notifications.take(NotificationHistoryLimit).any { it.id !in readIds }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var loadedUserId: String? = null

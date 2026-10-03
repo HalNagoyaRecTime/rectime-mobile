@@ -113,19 +113,21 @@ class NotificationBadgeViewModelTest {
     }
 
     @Test
-    fun olderUnreadPagesDoNotTurnOnBadge() = runTest(testDispatcher) {
+    fun unreadWithinHundredTurnsOnBadgeButOlderDoesNot() = runTest(testDispatcher) {
         val gateway = FakeGateway { limit, offset ->
-            page((offset + 1..offset + limit).map(::notification), 40, limit, offset)
+            page((offset + 1..minOf(120, offset + limit)).map(::notification), 120, limit, offset)
         }
         val feed = feedStore(gateway)
         val reads = readStore()
-        (1..20).forEach { reads.markRead(it) }
+        (1..99).forEach { reads.markRead(it) }
         val viewModel = NotificationBadgeViewModel(feed, reads)
         viewModel.onSession("user-1")
         testDispatcher.scheduler.advanceUntilIdle()
-        feed.loadMore()
+        assertTrue(viewModel.hasUnreadNotifications.value)
+        reads.markRead(100)
+        repeat(5) { feed.loadMore() }
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(40, feed.notifications.value.size)
+        assertEquals(120, feed.notifications.value.size)
         assertFalse(viewModel.hasUnreadNotifications.value)
     }
 
@@ -185,6 +187,21 @@ class NotificationBadgeViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(3, requests)
         assertEquals(listOf(3), feed.notifications.value.map { it.id })
+    }
+
+    @Test
+    fun unreadCacheFailureDoesNotPreventStartupFetch() = runTest(testDispatcher) {
+        val reads = NotificationReadStore(LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = error("保存先障害")
+            override suspend fun putString(key: String, value: String) = error("保存先障害")
+            override suspend fun clear() = Unit
+        }))
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val viewModel = NotificationBadgeViewModel(feedStore(gateway), reads)
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(0), gateway.requestedOffsets)
+        assertTrue(viewModel.hasUnreadNotifications.value)
     }
 
     private fun feedStore(gateway: NotificationGateway) =
