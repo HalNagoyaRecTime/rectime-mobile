@@ -3,7 +3,6 @@ package com.rectime.mobile.feature.auth
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
-import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -1616,7 +1615,8 @@ class AuthViewModelTest {
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
         nowMillis: () -> Long = { 1_000L },
-        pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
+        // 単体テストではOSの共有状態や別Dispatcherの通知処理を呼び出さない。
+        pushTokenLifecycle: PushTokenLifecycle = RecordingPushTokenLifecycle(mutableListOf()),
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
