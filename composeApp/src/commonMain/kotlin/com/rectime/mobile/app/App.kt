@@ -30,7 +30,6 @@ import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
-import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
 import com.rectime.mobile.feature.schedule.scheduleViewModelFactory
@@ -116,7 +115,6 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     }
     var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
-        SessionTokenHolder.accessToken = authState.session?.accessToken
         if (authState.session == null && hadSession) {
             NotificationFeedStore.shared.reset()
             navigationController.reset(ScheduleScreen)
@@ -134,7 +132,6 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
 
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
-            SessionTokenHolder.accessToken = session.accessToken
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
             val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
             val foregroundScope = rememberCoroutineScope()
