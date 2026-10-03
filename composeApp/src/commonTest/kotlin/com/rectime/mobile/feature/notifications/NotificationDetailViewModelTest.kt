@@ -3,6 +3,7 @@ package com.rectime.mobile.feature.notifications
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.LocalCache
+import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -372,6 +373,113 @@ class NotificationDetailViewModelTest {
         assertEquals(0, calls)
         assertEquals(115, viewModel.uiState.value.notification?.id)
         assertEquals((1..100).toList(), NotificationHistoryCache(cache).load()?.map { it.id })
+    }
+
+    @Test
+    fun olderHeadCannotOverwriteNewerPushDetail() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val feedGateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
+                calls++
+                if (calls > 1) gate.await()
+                return NotificationPage(listOf(notification(15).copy(body = "古い本文")), 1, limit, offset)
+            }
+            override suspend fun getNotification(notificationId: Int): UserNotification = error("unused")
+        }
+        val feed = NotificationFeedStore(feedGateway, cache)
+        feed.load()
+        val refresh = async { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        val detail = NotificationDetailViewModel(15, refreshOnOpen = true,
+            gateway = FakeGateway { notification(it).copy(body = "最新本文") },
+            cache = cache, readStore = readStore(), feedStore = feed)
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("最新本文", detail.uiState.value.notification?.body)
+        assertEquals("最新本文", feed.notifications.value.single().body)
+        gate.complete(Unit)
+        refresh.await()
+        assertEquals(listOf("最新本文", "最新本文"), listOf(
+            feed.notifications.value.single().body, NotificationHistoryCache(cache).load()?.single()?.body,
+        ))
+    }
+
+    @Test
+    fun failedHeadCannotRestoreOlderBodyAfterPushDetailUpdate() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val feedGateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
+                if (++calls > 1) { gate.await(); error("タイムアウト") }
+                return NotificationPage(listOf(notification(15)), 1, limit, offset)
+            }
+            override suspend fun getNotification(notificationId: Int): UserNotification = error("unused")
+        }
+        val feed = NotificationFeedStore(feedGateway, cache)
+        feed.load()
+        val refresh = async { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        NotificationDetailViewModel(15, refreshOnOpen = true,
+            gateway = FakeGateway { notification(it).copy(body = "最新本文") },
+            cache = cache, readStore = readStore(), feedStore = feed)
+        testDispatcher.scheduler.runCurrent()
+        gate.complete(Unit)
+        refresh.await()
+        assertEquals("最新本文", feed.notifications.value.single().body)
+        assertEquals("最新本文", NotificationHistoryCache(cache).load()?.single()?.body)
+        assertTrue(feed.status.value.isOffline)
+    }
+
+    @Test
+    fun pendingOlderPageUsesNewerDetailForPreviouslyUnloadedId() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val feedGateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
+                if (offset > 0) gate.await()
+                return NotificationPage((offset + 1..offset + limit).map(::notification), 120, limit, offset)
+            }
+            override suspend fun getNotification(notificationId: Int): UserNotification = error("unused")
+        }
+        val feed = NotificationFeedStore(feedGateway, cache)
+        feed.load()
+        repeat(4) { feed.loadMore() }
+        val paging = async { feed.loadMore() }
+        testDispatcher.scheduler.runCurrent()
+        NotificationDetailViewModel(115, refreshOnOpen = true,
+            gateway = FakeGateway { notification(it).copy(body = "最新本文") },
+            cache = cache, readStore = readStore(), feedStore = feed)
+        testDispatcher.scheduler.runCurrent()
+        gate.complete(Unit)
+        paging.await()
+        assertEquals("最新本文", feed.findNotification(115)?.body)
+        assertEquals((1..100).toList(), NotificationHistoryCache(cache).load()?.map { it.id })
+    }
+
+    @Test
+    fun firstHeadUsesNewerDetailWhenThereWasNoFeedYet() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val feedGateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
+                gate.await()
+                return NotificationPage(listOf(notification(15)), 1, limit, offset)
+            }
+            override suspend fun getNotification(notificationId: Int): UserNotification = error("unused")
+        }
+        val feed = NotificationFeedStore(feedGateway, cache)
+        val initial = async { feed.load() }
+        testDispatcher.scheduler.runCurrent()
+        NotificationDetailViewModel(15, refreshOnOpen = true,
+            gateway = FakeGateway { notification(it).copy(body = "最新本文") },
+            cache = cache, readStore = readStore(), feedStore = feed)
+        testDispatcher.scheduler.runCurrent()
+        gate.complete(Unit)
+        initial.await()
+        assertEquals("最新本文", feed.findNotification(15)?.body)
+        assertEquals("最新本文", NotificationHistoryCache(cache).load()?.single()?.body)
     }
 
     private fun notification(id: Int) = UserNotification(
