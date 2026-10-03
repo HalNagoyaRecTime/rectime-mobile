@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -52,6 +54,7 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
+import com.rectime.mobile.core.haptics.LocalHapticPreference
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.core.platform.openInAppBrowser
@@ -88,6 +91,8 @@ class SettingsScreen(
             mutableStateOf(NotificationPermissionStatus.Unavailable)
         }
         val scope = rememberCoroutineScope()
+        val hapticPreference = LocalHapticPreference.current
+        val hapticEnabled by hapticPreference.enabled.collectAsState()
         val lifecycleOwner = LocalLifecycleOwner.current
         val refreshNotificationPermission = {
             notificationPermissionStartup?.let { startup ->
@@ -158,6 +163,29 @@ class SettingsScreen(
                                 enabled = notificationPermissionStartup != null &&
                                     notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
                                 onClick = { notificationPermissionStartup?.openSystemSettings() },
+                            )
+                            SettingsSeparator()
+                            SettingsRow(
+                                title = "振動",
+                                icon = SettingsIcon.Haptic,
+                                trailingContent = {
+                                    Switch(
+                                        checked = hapticEnabled,
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = AppTheme.colors.themeColorSecond,
+                                            checkedBorderColor = AppTheme.colors.themeColorSecond,
+                                            checkedThumbColor = AppTheme.colors.textThemeColorSecond,
+                                            uncheckedTrackColor = AppTheme.colors.borderSubtle,
+                                            uncheckedBorderColor = AppTheme.colors.borderStrong,
+                                            uncheckedThumbColor = AppTheme.colors.textMuted,
+                                        ),
+                                        onCheckedChange = { enabled ->
+                                            scope.launch {
+                                                hapticPreference.setEnabled(enabled)
+                                            }
+                                        },
+                                    )
+                                },
                             )
                         }
                     }
