@@ -95,11 +95,13 @@ class ScheduleViewModel(
         loadJob = viewModelScope.launch {
             val request = CacheRequestGeneration()
             try {
+                val cacheRequest = eventCache.beginRequest()
                 val result = request.validate(withMinimumRefreshDuration(isRefresh) {
                     fetchWithCacheFirst(
-                        fetchLive = { fetchAllEvents() },
+                        fetchLive = { eventCache.saveEvents(fetchAllEvents(), cacheRequest) },
                         loadCache = { eventCache.loadEvents() },
-                        saveCache = { eventCache.saveEvents(it) },
+                        // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
+                        saveCache = {},
                         onCached = { saved ->
                             if (!isRefresh) {
                                 _events.value = toTimelineEvents(saved).events
@@ -110,7 +112,10 @@ class ScheduleViewModel(
                 })
                 when (result) {
                     is CachedFetchResult.Fresh -> {
-                        val timelineResult = toTimelineEvents(result.value)
+                        // 最低更新時間の待機中に詳細が更新された場合も、古い表示へ戻さない。
+                        val latest = eventCache.reconcileEvents(result.value, cacheRequest)
+                        if (!request.isCurrent) return@launch
+                        val timelineResult = toTimelineEvents(latest)
                         _events.value = timelineResult.events
                         if (timelineResult.skippedCount > 0) {
                             error = skippedEventsMessage(timelineResult.skippedCount)

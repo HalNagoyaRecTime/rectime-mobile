@@ -55,6 +55,7 @@ class EventDetailViewModel(
             _uiState.value = EventDetailUiState(isLoading = true)
 
             try {
+                val cacheRequest = eventCache.beginRequest()
                 when (
                     val result = fetchWithCacheFirst(
                         fetchLive = {
@@ -62,10 +63,11 @@ class EventDetailViewModel(
                             if (!response.status.isSuccess()) {
                                 throw apiErrorException(response.status, response.bodyAsText())
                             }
-                            response.body<EventDetailResponse>()
+                            eventCache.saveDetail(response.body<EventDetailResponse>(), cacheRequest)
                         },
                         loadCache = { eventCache.loadDetail(eventId) },
-                        saveCache = { eventCache.saveDetail(it) },
+                        // 統合済みの値を本文表示にも使う。
+                        saveCache = {},
                         onCached = { saved ->
                             val gatherings = fetchGatheringsFromCacheOnly()
                             val attending = loadAttendingGatheringIdFromCache()
@@ -79,11 +81,13 @@ class EventDetailViewModel(
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
+                        val latest = eventCache.reconcileDetail(result.value, cacheRequest)
+                        if (!request.isCurrent) return@launch
                         // イベント自体は最新でも、呼び出し情報(gathering)は別APIの
                         // 個別キャッシュにフォールバックしている可能性があるため、
                         // その結果に応じてisOfflineを立てる。
                         // 集合情報や参加者の取得が遅くても、イベント本文は先に表示する。
-                        _uiState.value = _uiState.value.copy(isLoading = false, eventDetail = result.value.toModel())
+                        _uiState.value = _uiState.value.copy(isLoading = false, eventDetail = latest.toModel())
                         val (gatherings, gatheringIsOffline) = fetchGatherings()
                         if (!request.isCurrent) {
                             _uiState.value = EventDetailUiState()
@@ -95,9 +99,12 @@ class EventDetailViewModel(
                             _uiState.value = EventDetailUiState()
                             return@launch
                         }
+                        // 集合情報を待つ間に別の取得が完了した場合も、最新の保存内容を使う。
+                        val finalDetail = eventCache.reconcileDetail(latest, cacheRequest)
+                        if (!request.isCurrent) return@launch
                         _uiState.value = EventDetailUiState(
                             isLoading = false,
-                            eventDetail = result.value.toModel(),
+                            eventDetail = finalDetail.toModel(),
                             gatherings = gatherings,
                             attendingGatheringId = attending,
                             isOffline = gatheringIsOffline,
