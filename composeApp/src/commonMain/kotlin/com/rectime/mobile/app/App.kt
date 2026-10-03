@@ -32,6 +32,7 @@ import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
+import com.rectime.mobile.feature.schedule.ScheduleViewModel
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationFeedStore
 import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
@@ -43,6 +44,7 @@ import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import okio.Path.Companion.toPath
+import kotlinx.coroutines.launch
 
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
@@ -132,6 +134,9 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             SessionTokenHolder.accessToken = session.accessToken
+            // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
+            val scheduleViewModel: ScheduleViewModel = viewModel()
+            val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {
                     initializer { NotificationBadgeViewModel() }
@@ -141,8 +146,11 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             LaunchedEffect(session.user.id) {
                 badgeViewModel.onSession(session.user.id)
             }
-            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-                badgeViewModel.onForeground(session.user.id)
+            key(session.user.id) {
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    badgeViewModel.onForeground(session.user.id)
+                    foregroundScope.launch { scheduleViewModel.onForeground() }
+                }
             }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             LaunchedEffect(badgeViewModel, session.user.id, lifecycle) {

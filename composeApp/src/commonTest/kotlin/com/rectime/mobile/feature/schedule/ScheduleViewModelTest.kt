@@ -63,6 +63,158 @@ class ScheduleViewModelTest {
     }
 
     @Test
+    fun firstForegroundAfterScreenEntryDoesNotFetchTwiceEvenAfterInitialLoadCompletes() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient { calls++; respondJson(eventsJson) })
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun foregroundStartsInitialFetchWithoutScheduleBeingOpen() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient { calls++; respondJson(eventsJson) })
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(2, viewModel.events.value.size)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun foregroundUpdateKeepsDisplayedEventsAndDoesNotShowLoading() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) gate.await()
+            respondJson(if (calls == 1) eventsJson else eventsJson.replace("綱引き", "新しい予定"))
+        }, cache = cache)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        // ディスクの値が古くても、更新中は表示中のデータを優先する。
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(displayed, viewModel.events.value)
+        assertTrue(viewModel.isUpdating)
+        assertFalse(viewModel.isLoading)
+        assertFalse(viewModel.isRefreshing)
+        viewModel.refresh()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value == displayed)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun foregroundFailureKeepsDisplayedEventsInsteadOfOlderDiskCache() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) error("接続できません")
+            respondJson(eventsJson)
+        }, cache = cache)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun foregroundFailureKeepsMemoryEventsEvenWhenCacheCannotBeSaved() = runTest(testDispatcher) {
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) { error("保存できません") }
+            override suspend fun clear() = Unit
+        })
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) error("接続できません")
+            respondJson(eventsJson)
+        }, cache = cache)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        assertEquals(2, displayed.size)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+        assertFalse(viewModel.isLoading)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun foregroundDuringManualRefreshKeepsSingleRequestAndRefreshAnimation() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        assertTrue(viewModel.isRefreshing)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isRefreshing)
+    }
+
+    @Test
+    fun foregroundAfterSessionChangeCancelsOldUpdateAndLoadsNewSession() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 2) gate.await()
+            respondJson(if (calls == 3) """{"events":[],"total":0,"limit":100,"offset":0}""" else eventsJson)
+        })
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        CacheGeneration.bump()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(3, calls)
+        assertTrue(viewModel.events.value.isEmpty())
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
     fun returningToScheduleDoesNotFetchAgainAndManualRefreshStillWorks() = runTest(testDispatcher) {
         var calls = 0
         val viewModel = buildViewModel(mockClient {
