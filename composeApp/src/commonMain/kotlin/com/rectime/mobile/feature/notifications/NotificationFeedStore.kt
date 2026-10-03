@@ -39,6 +39,8 @@ class NotificationFeedStore(
     private var nextOffset = 0
     private var total = NotificationHistoryLimit
     private var visibleCount = NotificationPageSize
+    private var verifiedCount = 0
+    private val detailUpdates = mutableMapOf<Int, UserNotification>()
     private val mutex = Mutex()
     private var inFlight: Deferred<CachedFetchResult<List<UserNotification>>>? = null
     private var pageInFlight: Deferred<Unit>? = null
@@ -80,6 +82,7 @@ class NotificationFeedStore(
                 if (!request.isCurrent || requestRevision != revision) {
                     return@async request.validate(CachedFetchResult.Failed(IllegalStateException("通知の取得が取り消されました")))
                 }
+                detailUpdates.clear()
                 lastResult = null
                 _status.value = _status.value.copy(isUpdating = true, error = null, pageError = null)
                 val result = try {
@@ -87,13 +90,19 @@ class NotificationFeedStore(
                         fetchLive = {
                             val page = gateway.getNotifications(limit = NotificationHistoryLimit, offset = 0)
                             val received = page.notifications.take(NotificationHistoryLimit)
-                            val newest = received.distinctBy { it.id }
+                            val newest = applyDetailUpdates(received.distinctBy { it.id })
+                            val previousVisible = _cachedNotifications.value.orEmpty()
+                            val values = if (visibleCount > NotificationHistoryLimit && received.isNotEmpty() && received.size < page.total) {
+                                // 画面に出した履歴は残し、次の無限スクロールで順番に再検証する。
+                                (newest + previousVisible).distinctBy { it.id }
+                            } else newest
                             if (request.isCurrent && requestRevision == revision) {
                                 total = page.total.coerceAtLeast(0)
                                 nextOffset = received.size
+                                verifiedCount = newest.size
+                                if (visibleCount > NotificationHistoryLimit) visibleCount = maxOf(visibleCount, values.size)
                             }
-                            // 最新100件をまとめて更新し、古い取得位置を引き継がない。
-                            newest
+                            values
                         },
                         loadCache = {
                             try {
@@ -104,11 +113,11 @@ class NotificationFeedStore(
                                 _notifications.value.takeIf { _cachedNotifications.value != null }
                             }
                         },
-                        saveCache = { history.saveList(it) },
+                        saveCache = { history.saveList(applyDetailUpdates(it)) },
                         onCached = {
                             if (request.isCurrent && requestRevision == revision) {
                                 nextOffset = it.size
-                                publish(it)
+                                publish(applyDetailUpdates(it))
                                 _status.value = _status.value.copy(hasMore = visibleCount < it.size)
                             }
                         },
@@ -120,17 +129,19 @@ class NotificationFeedStore(
                 if (requestRevision == revision) {
                     when (valid) {
                         is CachedFetchResult.Fresh -> {
-                            publish(valid.value)
-                            lastResult = valid
-                            _status.value = NotificationFeedStatus(hasMore = visibleCount < valid.value.size || (nextOffset < total && valid.value.isNotEmpty()))
+                            val values = applyDetailUpdates(valid.value)
+                            publish(values)
+                            lastResult = CachedFetchResult.Fresh(values)
+                            _status.value = NotificationFeedStatus(hasMore = visibleCount < values.size || (nextOffset < total && values.isNotEmpty()))
                         }
                         is CachedFetchResult.Cached -> {
                             if (valid.error.invalidatesNotificationCache()) {
                                 clearMemory()
                                 _status.value = _status.value.copy(error = valid.error)
                             } else {
-                                publish(valid.value)
-                                _status.value = _status.value.copy(isOffline = true, hasMore = visibleCount < valid.value.size)
+                                val values = applyDetailUpdates(valid.value)
+                                publish(values)
+                                _status.value = _status.value.copy(isOffline = true, hasMore = visibleCount < values.size)
                             }
                         }
                         is CachedFetchResult.Failed -> {
@@ -177,6 +188,7 @@ class NotificationFeedStore(
                     if (requestRevision == revision) clearMemory()
                     return@async
                 }
+                detailUpdates.clear()
                 try {
                     // オンラインの無限スクロールは保存先の状態に依存させない。
                     val page = gateway.getNotifications(limit = NotificationPageSize, offset = nextOffset)
@@ -185,14 +197,18 @@ class NotificationFeedStore(
                         return@async
                     }
                     total = page.total.coerceAtLeast(0)
-                    val values = page.notifications.take(NotificationPageSize)
-                    val followingOffset = nextOffset + values.size
+                    val received = page.notifications.take(NotificationPageSize)
+                    val values = applyDetailUpdates(received)
+                    val followingOffset = nextOffset + received.size
+                    // APIで確認した先頭部分の後ろに挿入し、保持している履歴より前の欠落を埋める。
                     val updates = values.associateBy { it.id }
-                    val combined = (_notifications.value.map { updates[it.id] ?: it } + values)
+                    val verified = (_notifications.value.take(verifiedCount).map { updates[it.id] ?: it } + values)
                         .distinctBy { it.id }
+                    val combined = if (received.isEmpty() || followingOffset >= total) verified
+                        else (verified + _notifications.value.drop(verifiedCount)).distinctBy { it.id }
                     try {
                         // 最新100件だけ保存し、それより古い取得分は永続化しない。
-                        history.saveList(combined)
+                        history.saveList(applyDetailUpdates(combined))
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -203,9 +219,11 @@ class NotificationFeedStore(
                         return@async
                     }
                     nextOffset = followingOffset
+                    verifiedCount = verified.size
                     visibleCount += NotificationPageSize
-                    publish(combined)
-                    lastResult = if (_status.value.isOffline) null else CachedFetchResult.Fresh(combined)
+                    val updated = applyDetailUpdates(combined)
+                    publish(updated)
+                    lastResult = CachedFetchResult.Fresh(updated)
                     _status.value = _status.value.copy(hasMore = values.isNotEmpty() && nextOffset < total)
                 } catch (e: CancellationException) {
                     throw e
@@ -230,10 +248,16 @@ class NotificationFeedStore(
         if (session.isCurrent) _notifications.value.firstOrNull { it.id == id } else null
 
     internal fun updateNotification(notification: UserNotification) {
-        if (!session.isCurrent || _notifications.value.none { it.id == notification.id }) return
+        if (!session.isCurrent) return
+        detailUpdates[notification.id] = notification
+        if (_notifications.value.none { it.id == notification.id }) return
         publish(_notifications.value.map { if (it.id == notification.id) notification else it })
         lastResult = lastResult?.let { CachedFetchResult.Fresh(_notifications.value) }
     }
+
+    // 通信開始後に詳細で取得できた内容を、遅い一覧応答で古い内容に戻さない。
+    private fun applyDetailUpdates(values: List<UserNotification>): List<UserNotification> =
+        values.map { notification -> detailUpdates[notification.id] ?: notification }
 
     private fun publish(notifications: List<UserNotification>) {
         _notifications.value = notifications
@@ -256,6 +280,8 @@ class NotificationFeedStore(
         nextOffset = 0
         total = NotificationHistoryLimit
         visibleCount = NotificationPageSize
+        verifiedCount = 0
+        detailUpdates.clear()
         _status.value = NotificationFeedStatus()
     }
 

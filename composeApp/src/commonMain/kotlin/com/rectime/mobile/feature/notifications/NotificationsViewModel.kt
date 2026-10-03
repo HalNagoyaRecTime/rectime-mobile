@@ -204,7 +204,13 @@ class NotificationDetailViewModel(
                             available = available ?: history.load()?.firstOrNull { it.id == notificationId }
                             available
                         },
-                        saveCache = { if (fetched) history.saveDetail(it) },
+                        saveCache = {
+                            if (fetched) {
+                                // 保存前に取得済み内容を登録し、同時進行の一覧更新にも反映する。
+                                if (request.isCurrent) feedStore?.updateNotification(it)
+                                history.saveDetail(it)
+                            }
+                        },
                         onCached = {
                             val participating = cachedParticipation(it)
                             if (request.isCurrent) {
@@ -226,7 +232,6 @@ class NotificationDetailViewModel(
                             _uiState.value = NotificationDetailUiState(isLoading = false)
                             return@launch
                         }
-                        feedStore?.updateNotification(result.value)
                         _uiState.value = _uiState.value.copy(
                             notification = result.value,
                             isLoading = false,
@@ -244,7 +249,6 @@ class NotificationDetailViewModel(
                             isLoading = false,
                             isParticipatingInRelatedEvent = isParticipating,
                         )
-                        readStore.markRead(notificationId)
                     }
 
                     is CachedFetchResult.Cached -> {

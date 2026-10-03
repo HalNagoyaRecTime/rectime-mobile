@@ -357,6 +357,57 @@ class NotificationsPaginationTest {
         assertEquals(100, store.notifications.value.map { it.id }.distinct().size)
     }
 
+    @Test
+    fun foregroundRefreshKeepsAlreadyViewedOlderRows() = runTest {
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            page((offset + 1..offset + limit).map(::notification), 200, offset)
+        }, LocalCache(MemoryStore()))
+        store.load()
+        repeat(6) { store.loadMore() }
+        assertEquals(140, store.cachedNotifications.value?.size)
+        store.load(force = true)
+        // 新着が0件でも、前面復帰だけで閲覧中の古い通知を消さない。
+        assertEquals(140, store.cachedNotifications.value?.size)
+        assertTrue(store.findNotification(130) != null)
+    }
+
+    @Test
+    fun manyNewArrivalsKeepViewedRowsAndPagingFillsGapInServerOrder() = runTest {
+        var updated = false
+        val offsets = mutableListOf<Int>()
+        val cache = LocalCache(MemoryStore())
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            offsets += offset
+            val all = if (updated) (201..350).map(::notification) + (1..200).map(::notification)
+                else (1..200).map(::notification)
+            page(all.drop(offset).take(limit), all.size, offset)
+        }, cache)
+        store.load()
+        repeat(6) { store.loadMore() }
+        updated = true
+        store.load(force = true)
+        assertTrue(store.cachedNotifications.value.orEmpty().any { it.id == 130 })
+        repeat(3) { store.loadMore() }
+        assertEquals((201..350).toList() + (1..140).toList(), store.notifications.value.map { it.id })
+        assertEquals((201..300).toList(), NotificationHistoryCache(cache).load()?.map { it.id })
+        assertEquals(listOf(0, 100, 120, 0, 100, 120, 140), offsets)
+    }
+
+    @Test
+    fun overlappingPageUpdatesExistingBodyWithoutDuplicatingItsRow() = runTest {
+        val cache = LocalCache(MemoryStore())
+        val store = NotificationFeedStore(Gateway { _, offset ->
+            if (offset == 0) page((1..100).map(::notification), 120, offset)
+            else page(listOf(notification(10).copy(body = "更新後の本文")) + (101..119).map(::notification), 120, offset)
+        }, cache)
+        store.load()
+        repeat(5) { store.loadMore() }
+        assertEquals("更新後の本文", store.findNotification(10)?.body)
+        assertEquals("更新後の本文", NotificationHistoryCache(cache).load()?.first { it.id == 10 }?.body)
+        assertEquals(119, store.notifications.value.size)
+        assertEquals(119, store.notifications.value.map { it.id }.distinct().size)
+    }
+
     private fun page(values: List<UserNotification>, total: Int, offset: Int) =
         NotificationPage(values, total, 20, offset)
 
