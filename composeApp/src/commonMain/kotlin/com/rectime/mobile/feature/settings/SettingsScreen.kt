@@ -168,11 +168,6 @@ class SettingsScreen(
                             SettingsRow(
                                 title = "振動",
                                 icon = SettingsIcon.Haptic,
-                                onClick = {
-                                    scope.launch {
-                                        hapticPreference.setEnabled(!hapticEnabled)
-                                    }
-                                },
                                 trailingContent = {
                                     Switch(
                                         checked = hapticEnabled,
