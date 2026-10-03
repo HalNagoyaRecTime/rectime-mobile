@@ -20,17 +20,15 @@ class FirebaseTokenApi(
 ) {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/firebase-tokens"
 
-    suspend fun register(fcmToken: String, accessToken: String) {
-        require(fcmToken.isNotBlank()) { "FCM token must not be blank" }
-        require(accessToken.isNotBlank()) { "Access token must not be blank" }
+    suspend fun register(
+        fcmToken: String,
+        platform: FirebasePlatform,
+        accessToken: String,
+    ) {
+        require(fcmToken.isNotBlank()) { "FCMトークンを指定してください" }
+        require(accessToken.isNotBlank()) { "アクセストークンを指定してください" }
 
         val response = client.post(endpoint) {
-            // このAPIはFCMのバックグラウンドコールバック(AndroidPushTokenRegistrar)
-            // からも、永続化ストアから読んだaccessTokenで呼ばれる。SessionTokenHolder
-            // (現在ログイン中のセッション用グローバル状態)は書き換えず、渡された
-            // accessTokenをこのリクエストにのみ明示的に付与する。ログアウト直後に
-            // FCMのトークンリフレッシュが走った場合でも、他のAPIリクエストへ古い
-            // トークンが漏れ出さないようにするため。
             headersProvider(endpoint, accessToken)?.forEach { (name, value) ->
                 header(name, value)
             }
@@ -38,7 +36,7 @@ class FirebaseTokenApi(
             setBody(
                 RegisterFirebaseTokenRequest(
                     fcmToken = fcmToken,
-                    platform = ANDROID_PLATFORM,
+                    platform = platform.wireValue,
                 ),
             )
         }
@@ -52,10 +50,13 @@ class FirebaseTokenApi(
     }
 }
 
+enum class FirebasePlatform(val wireValue: String) {
+    Ios("ios"),
+    Android("android"),
+}
+
 @Serializable
 internal data class RegisterFirebaseTokenRequest(
     val fcmToken: String,
     val platform: String,
 )
-
-private const val ANDROID_PLATFORM = "android"

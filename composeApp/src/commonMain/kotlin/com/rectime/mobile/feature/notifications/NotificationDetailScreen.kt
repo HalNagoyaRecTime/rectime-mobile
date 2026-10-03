@@ -177,7 +177,7 @@ private fun NotificationRelatedEventLink(
     EventCard(
         time = "${event.startTime.toShortFormattedTime()}-${event.endTime.toShortFormattedTime()}",
         title = event.name,
-        court = event.venue,
+        venues = event.venues.map { it.venueName },
         isLive = isEventLiveAt(event.startTime, event.endTime, nowMinute),
         isParticipating = isParticipating,
         onClick = onClick,

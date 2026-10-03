@@ -77,14 +77,15 @@ object RankingScreen : Screen {
             }
         }
 
-        LaunchedEffect(uiState.rankingItems) {
+        LaunchedEffect(uiState.rankingItems, uiState.isOffline) {
             if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
                 val myTeamIndex = uiState.rankingItems.indexOfFirst { it.isMyTeam }
                 if (myTeamIndex >= 0) {
                     lazyListState.scrollToItem(index = 0)
                     delay(300.milliseconds)
 
-                    lazyListState.animateScrollToItem(index = (myTeamIndex - 4).coerceAtLeast(0))
+                    val bannerCount = if (uiState.isOffline) 1 else 0
+                    lazyListState.animateScrollToItem(index = (myTeamIndex - 4).coerceAtLeast(0) + bannerCount)
                     // 所属チーム情報がランキングより遅れて届いた場合に備え、対象行が
                     // 見つかった時だけ完了扱いにする。見つからない間は次回の更新で
                     // 再度スクロールを試みる。
@@ -95,6 +96,7 @@ object RankingScreen : Screen {
 
         RootScreenScaffold(
             title = "ランキング",
+            horizontalPadding = false,
             lazyListState = lazyListState,
             snackbarHostState = snackbarHostState,
             onTrailingClick = {

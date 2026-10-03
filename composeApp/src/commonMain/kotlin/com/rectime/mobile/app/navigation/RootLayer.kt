@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.feature.auth.AuthSession
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -27,6 +28,7 @@ fun RootLayer(
     session: AuthSession,
     onLogout: () -> Unit,
     hasUnreadNotifications: Boolean,
+    notificationPermissionStartup: NotificationPermissionStartup?,
 ) {
     val rootScreen = state.rootScreen ?: return
 
@@ -59,6 +61,7 @@ fun RootLayer(
             session = session,
             onLogout = onLogout,
             hasUnreadNotifications = hasUnreadNotifications,
+            notificationPermissionStartup = notificationPermissionStartup,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),

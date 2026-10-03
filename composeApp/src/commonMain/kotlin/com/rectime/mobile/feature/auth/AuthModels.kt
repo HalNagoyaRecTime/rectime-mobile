@@ -10,6 +10,7 @@ data class AuthUser(
     val classRoomName: String? = null,
     val teamId: Int? = null,
     val role: Role? = null,
+    val classCode: String? = null,
 )
 
 data class AuthSession(

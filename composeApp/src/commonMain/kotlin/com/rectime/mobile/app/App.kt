@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import coil3.compose.LocalPlatformContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
@@ -24,6 +25,8 @@ import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
+import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
+import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.event.EventDetailScreen
@@ -31,7 +34,8 @@ import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationTarget
-import com.rectime.mobile.feature.notifications.updatePushTokenRegistration
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
+import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import okio.Path.Companion.toPath
@@ -39,7 +43,8 @@ import okio.Path.Companion.toPath
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
 @Preview
-fun App() {
+fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
+    val platformContext = LocalPlatformContext.current
     val configurationError = apiBaseUrlConfigurationError
     if (configurationError != null) {
         AppTheme(themeStateHolder = remember { ThemeStateHolder() }) {
@@ -86,13 +91,22 @@ fun App() {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
     val themeStateHolder = remember { ThemeStateHolder() }
+    val pushTokenLifecycle = remember { platformPushTokenLifecycle() }
     val authViewModel: AuthViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { AuthViewModel() }
+            initializer {
+                AuthViewModel(
+                    photoRepository = ProfilePhotoRepository(getCacheDir(platformContext)),
+                    pushTokenLifecycle = pushTokenLifecycle,
+                )
+            }
         }
     )
 
     val authState by authViewModel.uiState.collectAsState()
+    LaunchedEffect(notificationPermissionStartup) {
+        notificationPermissionStartup?.requestIfNeeded()
+    }
     var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
@@ -101,8 +115,8 @@ fun App() {
         }
         hadSession = authState.session != null
     }
-    LaunchedEffect(authState.session?.accessToken) {
-        updatePushTokenRegistration(authState.session?.accessToken)
+    LaunchedEffect(authState.session) {
+        pushTokenLifecycle.updateSession(authState.session)
     }
     LaunchedEffect(Unit) {
         NotificationNavigationHandler.targets.collect {
@@ -144,12 +158,15 @@ fun App() {
                     .background(AppTheme.colors.surfacePrimary)
                     .fillMaxSize(),
             ) {
-                NavigationHost(
-                    navigationController = navigationController,
-                    session = session,
-                    onLogout = onLogout,
-                    hasUnreadNotifications = hasUnreadNotifications,
-                )
+                CompositionLocalProvider(LocalProfilePhotoRepository provides authViewModel.photoRepository) {
+                    NavigationHost(
+                        navigationController = navigationController,
+                        session = session,
+                        onLogout = onLogout,
+                        hasUnreadNotifications = hasUnreadNotifications,
+                        notificationPermissionStartup = notificationPermissionStartup,
+                    )
+                }
             }
         }
     }

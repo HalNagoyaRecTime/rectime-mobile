@@ -21,21 +21,25 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 @Composable
 fun LegalDocumentLinks(
     modifier: Modifier = Modifier,
+    openUrl: suspend (String) -> Boolean = ::openExternalUrl,
+    content: (@Composable (Boolean, (LegalDocument) -> Unit) -> Unit)? = null,
 ) {
-    val launcher = remember { LegalDocumentLauncher() }
-    LegalDocumentLinks(modifier = modifier, launcher = launcher)
+    val launcher = remember(openUrl) { LegalDocumentLauncher(openUrl = openUrl) }
+    LegalDocumentLinks(modifier = modifier, launcher = launcher, content = content)
 }
 
 @Composable
 internal fun LegalDocumentLinks(
     modifier: Modifier,
     launcher: LegalDocumentLauncher,
+    content: (@Composable (Boolean, (LegalDocument) -> Unit) -> Unit)? = null,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val state = remember(launcher) {
@@ -56,34 +60,38 @@ internal fun LegalDocumentLinks(
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TextButton(
-                enabled = !state.isOpening,
-                onClick = { open(LegalDocument.Terms) },
-                contentPadding = PaddingValues(horizontal = 8.dp),
-                modifier = Modifier.height(20.dp), // ← 最小タッチサイズ(40dp)を上書きして余白を消す
+        if (content != null) {
+            content(!state.isOpening, ::open)
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "利用規約",
-                    fontSize = 13.sp,
-                    color = AppTheme.colors.themeColorFirst,
-                )
-            }
-            TextButton(
-                enabled = !state.isOpening,
-                onClick = { open(LegalDocument.PrivacyPolicy) },
-                contentPadding = PaddingValues(horizontal = 8.dp),
-                modifier = Modifier.height(20.dp),
-            ) {
-                Text(
-                    text = "プライバシーポリシー",
-                    fontSize = 13.sp,
-                    color = AppTheme.colors.themeColorFirst,
-                )
+                TextButton(
+                    enabled = !state.isOpening,
+                    onClick = { open(LegalDocument.Terms) },
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    modifier = Modifier.height(20.dp), // ← 最小タッチサイズ(40dp)を上書きして余白を消す
+                ) {
+                    Text(
+                        text = "利用規約",
+                        fontSize = 13.sp,
+                        color = AppTheme.colors.themeColorFirst,
+                    )
+                }
+                TextButton(
+                    enabled = !state.isOpening,
+                    onClick = { open(LegalDocument.PrivacyPolicy) },
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    modifier = Modifier.height(20.dp),
+                ) {
+                    Text(
+                        text = "プライバシーポリシー",
+                        fontSize = 13.sp,
+                        color = AppTheme.colors.themeColorFirst,
+                    )
+                }
             }
         }
         state.errorMessage?.let { message ->

@@ -53,7 +53,7 @@ class MobileBackendApiRegressionTest {
         val notification = notificationApi.getNotification(notificationPage.notifications.single().id)
 
         assertEquals("玉入れ", calendarEvent.eventName)
-        assertEquals("体育館", competition.venue)
+        assertEquals(listOf("体育館"), competition.venues.map { it.venueName })
         assertEquals("競技開始のお知らせ", notification.title)
         assertEquals(
             listOf(
@@ -151,7 +151,9 @@ class MobileBackendApiRegressionTest {
                 "event_id": 7,
                 "event_name": "玉入れ",
                 "rule_text": "制限時間内に玉を入れる",
-                "venue": "体育館",
+                "venues": [
+                  {"venue_id": 1, "venue_name": "体育館"}
+                ],
                 "start_time": "09:15",
                 "end_time": "09:45",
                 "created_at": "2026-08-01T00:00:00Z",
@@ -167,7 +169,9 @@ class MobileBackendApiRegressionTest {
             {
               "event_id": 7,
               "event_name": "玉入れ",
-              "venue": "体育館",
+              "venues": [
+                {"venue_id": 1, "venue_name": "体育館"}
+              ],
               "start_time": "09:15",
               "end_time": "09:45",
               "rule_text": "制限時間内に玉を入れる"
@@ -185,7 +189,9 @@ class MobileBackendApiRegressionTest {
                 "related_event": {
                   "event_id": 7,
                   "event_name": "玉入れ",
-                  "venue": "体育館",
+                  "venues": [
+                    {"venue_id": 1, "venue_name": "体育館"}
+                  ],
                   "start_time": "2026-08-31T09:15:00+09:00",
                   "end_time": "2026-08-31T09:45:00+09:00"
                 }
@@ -206,7 +212,9 @@ class MobileBackendApiRegressionTest {
               "related_event": {
                 "event_id": 7,
                 "event_name": "玉入れ",
-                "venue": "体育館",
+                "venues": [
+                  {"venue_id": 1, "venue_name": "体育館"}
+                ],
                 "start_time": "2026-08-31T09:15:00+09:00",
                 "end_time": "2026-08-31T09:45:00+09:00"
               }

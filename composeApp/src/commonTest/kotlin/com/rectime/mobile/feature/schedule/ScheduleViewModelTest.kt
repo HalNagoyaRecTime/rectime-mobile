@@ -3,6 +3,7 @@ package com.rectime.mobile.feature.schedule
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.model.EventVenue
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -93,19 +94,21 @@ class ScheduleViewModelTest {
         val first = events.first()
         assertEquals(3, first.eventId)
         assertEquals("綱引き", first.title)
-        assertEquals("グラウンド", first.venue)
+        assertEquals(listOf(EventVenue(venueId = 5, venueName = "グラウンド")), first.venues)
         assertEquals(10 * 60 + 30, first.startMinuteOfDay)
         assertEquals(30, first.durationMinutes)
         assertEquals("10:30", first.startTimeLabel)
         assertEquals("11:00", first.endTimeLabel)
 
         assertEquals(7, events[1].eventId)
+        assertTrue(events[1].venues.isEmpty())
         assertEquals(13 * 60, events[1].startMinuteOfDay)
         assertEquals(90, events[1].durationMinutes)
 
         assertNull(viewModel.error)
         assertFalse(viewModel.isLoading)
     }
+
 
     @Test
     fun fetchEventsSkipsEventWhoseEndIsNotAfterStart() = runTest(testDispatcher) {
@@ -335,7 +338,7 @@ class ScheduleViewModelTest {
                         {
                           "event_id": 3,
                           "event_name": "綱引き",
-                          "venue": "グラウンド",
+                          "venues": [],
                           "start_time": "10:30",
                           "end_time": "11:00",
                           "created_at": "2026-04-01T00:00:00Z",
@@ -675,7 +678,7 @@ class ScheduleViewModelTest {
                   "event_id": $id,
                   "event_name": "競技$id",
                   "rule_text": null,
-                  "venue": "グラウンド",
+                  "venues": [],
                   "start_time": "$start",
                   "end_time": "$end",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -695,7 +698,7 @@ class ScheduleViewModelTest {
                   "event_id": 99,
                   "event_name": "エラー応答に紛れたイベント",
                   "rule_text": null,
-                  "venue": "グラウンド",
+                  "venues": [],
                   "start_time": "0900",
                   "end_time": "0930",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -715,7 +718,9 @@ class ScheduleViewModelTest {
                   "event_id": 3,
                   "event_name": "綱引き",
                   "rule_text": "8人1組で綱を引く",
-                  "venue": "グラウンド",
+                  "venues": [
+                    {"venue_id": 5, "venue_name": "グラウンド"}
+                  ],
                   "start_time": "1030",
                   "end_time": "1100",
                   "created_at": "2026-04-01T00:00:00Z",
@@ -725,7 +730,7 @@ class ScheduleViewModelTest {
                   "event_id": 7,
                   "event_name": "リレー",
                   "rule_text": null,
-                  "venue": "第1体育館",
+                  "venues": [],
                   "start_time": "1300",
                   "end_time": "1430",
                   "created_at": "2026-04-01T00:00:00Z",

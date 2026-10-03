@@ -20,3 +20,6 @@ actual val apiBaseUrlResult: ApiBaseUrlResult = resolveApiBaseUrl(
             ?: getenv("API_BASE_URL")?.toKString()?.takeIf { isDebugBuild },
     isDebug = isDebugBuild,
 )
+
+actual val appVersion: String
+    get() = NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: "不明"

@@ -239,7 +239,9 @@ class NotificationApiTest {
                   "related_event": {
                     "event_id": 7,
                     "event_name": "玉入れ",
-                    "venue": "体育館",
+                    "venues": [
+                      {"venue_id": 1, "venue_name": "体育館"}
+                    ],
                     "start_time": "0915",
                     "end_time": "0945"
                   }

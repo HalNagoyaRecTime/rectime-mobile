@@ -42,6 +42,7 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.EventDetail
 import com.rectime.mobile.core.model.Gathering
+import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.AppDivider
@@ -163,7 +164,7 @@ private fun EventDetailContent(
         ) {
             DetailSection(heading = "実施場所", onInfoClick = onOpenMap) {
                 DetailBodyText(
-                    text = event.venue,
+                    text = venueDisplayText(event.venues),
                     modifier = Modifier.padding(start = BodyIndent),
                 )
             }

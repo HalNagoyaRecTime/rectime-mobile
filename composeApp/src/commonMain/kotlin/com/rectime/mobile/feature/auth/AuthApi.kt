@@ -101,12 +101,12 @@ class AuthApi(
         )
     }
 
-    suspend fun logout(session: AuthSession) {
+    suspend fun logout(session: AuthSession, fcmToken: String? = null) {
         val response = client.post("$baseUrl/api/v1/auth/logout") {
             header("X-Client-Type", "mobile")
             header(HttpHeaders.Authorization, "Bearer ${session.accessToken}")
             contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(RefreshRequest(refreshTokenId = session.refreshTokenId)))
+            setBody(json.encodeToString(LogoutRequest(refreshTokenId = session.refreshTokenId, fcmToken = fcmToken)))
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
@@ -123,6 +123,7 @@ class AuthApi(
 private val json = Json {
     ignoreUnknownKeys = true
     namingStrategy = JsonNamingStrategy.SnakeCase
+    explicitNulls = false
 }
 
 private inline fun <reified T> decodeBody(body: String): T? =
@@ -157,6 +158,7 @@ private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
         studentIdNumber = studentIdNumber,
         classRoomName = classRoomName,
         teamId = teamId,
+        classCode = classCode,
         role = Role.fromCategories(isStudent = isStudent, isStaff = isStaff, isTeacher = isTeacher),
     )
 }
@@ -176,6 +178,12 @@ private data class TokenExchangeRequest(
 @Serializable
 private data class RefreshRequest(
     val refreshTokenId: String,
+)
+
+@Serializable
+private data class LogoutRequest(
+    val refreshTokenId: String,
+    val fcmToken: String? = null,
 )
 
 @Serializable
@@ -201,6 +209,7 @@ private data class AuthUserResponse(
     val studentIdNumber: String? = null,
     val classRoomName: String? = null,
     val teamId: Int? = null,
+    val classCode: String? = null,
     val isStudent: Boolean = false,
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
