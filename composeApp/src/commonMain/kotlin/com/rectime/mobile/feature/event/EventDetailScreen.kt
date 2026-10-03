@@ -148,7 +148,6 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 
                         event != null -> {
                             EventDetailContent(
-                                modifier = Modifier.fillParentMaxHeight(),
                                 event = event,
                                 gatherings = uiState.gatherings,
                                 attendingGatheringId = uiState.attendingGatheringId,
@@ -174,10 +173,10 @@ private fun EventDetailContent(
     attendingGatheringId: Int?,
     onOpenMap: () -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    // 短い内容でも画面の下端まで本文背景を描き、内容が長ければ自然に伸ばす。
-    Column(modifier = modifier.fillMaxWidth().background(AppTheme.colors.commonBackground)) {
+    // 高さを固定せず、本文全体をLazyColumnのスクロール範囲に含める。
+    // 短い本文の下側はScaffoldのcontentBackgroundが描画する。
+    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.commonBackground)) {
         EventTitleBand(title = event.eventName, onHeightChanged = onTitleBandHeightChanged)
 
         Column(
