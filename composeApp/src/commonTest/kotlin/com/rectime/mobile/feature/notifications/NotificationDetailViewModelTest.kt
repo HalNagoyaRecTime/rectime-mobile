@@ -103,6 +103,9 @@ class NotificationDetailViewModelTest {
         testDispatcher.scheduler.runCurrent()
         assertEquals("通知15", viewModel.uiState.value.notification?.title)
         assertFalse(viewModel.uiState.value.isLoading)
+        assertTrue(readStore.readIds.value.isEmpty())
+        viewModel.onContentVisible()
+        testDispatcher.scheduler.runCurrent()
         assertTrue(15 in readStore.readIds.value)
         gate.complete(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
@@ -319,6 +322,9 @@ class NotificationDetailViewModelTest {
         assertEquals(0, calls)
         assertEquals(15, viewModel.uiState.value.notification?.id)
         assertFalse(viewModel.uiState.value.isUpdating)
+        assertTrue(reads.readIds.value.isEmpty())
+        viewModel.onContentVisible()
+        testDispatcher.scheduler.advanceUntilIdle()
         assertTrue(15 in reads.readIds.value)
     }
 
@@ -514,26 +520,10 @@ class NotificationDetailViewModelTest {
     // ---- 既読 ----
 
     @Test
-    fun openedNotificationIsMarkedAsRead() = runTest(testDispatcher) {
+    fun notificationIsMarkedAsReadOnlyAfterContentBecomesVisible() = runTest(testDispatcher) {
         val gateway = FakeGateway { notification(it) }
         val readStore = readStore()
-        NotificationDetailViewModel(
-            notificationId = 15,
-            gateway = gateway,
-            cache = LocalCache(InMemoryKeyValueStore()),
-            readStore = readStore,
-        )
-
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals(setOf(15), readStore.readIds.value)
-    }
-
-    @Test
-    fun notificationIsNotMarkedAsReadWhenLoadFails() = runTest(testDispatcher) {
-        val gateway = FakeGateway { throw notificationApiError(statusCode = 404) }
-        val readStore = readStore()
-        NotificationDetailViewModel(
+        val viewModel = NotificationDetailViewModel(
             notificationId = 15,
             gateway = gateway,
             cache = LocalCache(InMemoryKeyValueStore()),
@@ -543,6 +533,41 @@ class NotificationDetailViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(readStore.readIds.value.isEmpty())
+        viewModel.onContentVisible()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(setOf(15), readStore.readIds.value)
+    }
+
+    @Test
+    fun notificationIsNotMarkedAsReadWhenLoadFails() = runTest(testDispatcher) {
+        val gateway = FakeGateway { throw notificationApiError(statusCode = 404) }
+        val readStore = readStore()
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = gateway,
+            cache = LocalCache(InMemoryKeyValueStore()),
+            readStore = readStore,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onContentVisible()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(readStore.readIds.value.isEmpty())
+    }
+
+    @Test
+    fun visibleCallbackFromAnOldSessionDoesNotMarkTheNewSessionAsRead() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val reads = readStore()
+        val viewModel = NotificationDetailViewModel(15, gateway = FakeGateway { notification(it) },
+            cache = cache, readStore = reads)
+        testDispatcher.scheduler.advanceUntilIdle()
+        cache.clearAll()
+
+        viewModel.onContentVisible()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(reads.readIds.value.isEmpty())
     }
 
     private fun readStore() = NotificationReadStore(LocalCache(InMemoryKeyValueStore()))

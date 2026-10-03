@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -23,6 +24,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rectime.mobile.app.navigation.NavigationState
+import com.rectime.mobile.app.navigation.PushTransitionMode
+import com.rectime.mobile.app.navigation.ActiveGesture
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.util.toFormattedTime
@@ -65,6 +69,10 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
         }
         val uiState by viewModel.uiState.collectAsState()
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+        val fullyVisible = isNotificationDetailFullyVisible(navigationController.state, this)
+        LaunchedEffect(fullyVisible, uiState.notification?.id) {
+            if (fullyVisible && uiState.notification != null) viewModel.onContentVisible()
+        }
 
         PushScreenScaffold(
             title = "通知詳細",
@@ -127,6 +135,12 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
         }
     }
 }
+
+internal fun isNotificationDetailFullyVisible(state: NavigationState, screen: NotificationDetailScreen): Boolean =
+    state.pushStack.lastOrNull()?.screen == screen &&
+        state.pushTransition.mode == PushTransitionMode.Idle &&
+        !state.isTransitioning && state.activeGesture == ActiveGesture.None &&
+        state.backDragOffsetPx == 0f && state.sheet == null
 
 @Composable
 private fun NotificationDetailContent(

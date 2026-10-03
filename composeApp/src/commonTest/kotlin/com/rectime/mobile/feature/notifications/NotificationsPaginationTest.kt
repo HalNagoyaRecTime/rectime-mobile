@@ -8,6 +8,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
@@ -406,6 +408,31 @@ class NotificationsPaginationTest {
         assertEquals("更新後の本文", NotificationHistoryCache(cache).load()?.first { it.id == 10 }?.body)
         assertEquals(119, store.notifications.value.size)
         assertEquals(119, store.notifications.value.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun refreshingAtTheEndOf150RowsNeverShortensOrReordersTheVisibleList() = runTest {
+        val cache = LocalCache(MemoryStore())
+        val all = (1..150).map(::notification)
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            page(all.drop(offset).take(limit), all.size, offset)
+        }, cache)
+        store.load()
+        repeat(7) { store.loadMore() }
+        assertEquals(all.map { it.id }, store.cachedNotifications.value?.map { it.id })
+        assertEquals(100, NotificationHistoryCache(cache).load()?.size)
+
+        val displayedSnapshots = mutableListOf<List<Int>>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            store.cachedNotifications.collect { displayedSnapshots += it.orEmpty().map { row -> row.id } }
+        }
+        store.load(force = true)
+        // 更新後の末尾到達で、古いページが再検証される場合も同じ順序を保つ。
+        while (store.status.value.hasMore) store.loadMore()
+
+        assertTrue(displayedSnapshots.isNotEmpty())
+        displayedSnapshots.forEach { assertEquals(all.map { it.id }, it) }
+        assertEquals(100, NotificationHistoryCache(cache).load()?.size)
     }
 
     private fun page(values: List<UserNotification>, total: Int, offset: Int) =

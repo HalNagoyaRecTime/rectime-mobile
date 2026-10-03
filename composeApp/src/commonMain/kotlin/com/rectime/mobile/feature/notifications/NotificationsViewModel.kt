@@ -169,6 +169,7 @@ class NotificationDetailViewModel(
     private val history = NotificationHistoryCache(cache)
 
     private var loadJob: Job? = null
+    private val detailSession = CacheRequestGeneration()
 
     init {
         loadNotification(force = refreshOnOpen)
@@ -176,6 +177,14 @@ class NotificationDetailViewModel(
 
     fun retry() {
         loadNotification(force = true)
+    }
+
+    /** 本文が表示され、画面を開くアニメーションが完了してから既読にする。 */
+    fun onContentVisible() {
+        if (_uiState.value.notification == null || !detailSession.isCurrent) return
+        viewModelScope.launch {
+            if (detailSession.isCurrent) readStore.markRead(notificationId)
+        }
     }
 
     private fun loadNotification(force: Boolean) {
@@ -220,7 +229,6 @@ class NotificationDetailViewModel(
                                     isUpdating = force,
                                     isParticipatingInRelatedEvent = participating,
                                 )
-                                readStore.markRead(notificationId)
                             }
                         },
                     )
@@ -238,7 +246,6 @@ class NotificationDetailViewModel(
                             isUpdating = false,
                             isParticipatingInRelatedEvent = cachedParticipation,
                         )
-                        readStore.markRead(notificationId)
                         val isParticipating = fetchIsParticipating(result.value)
                         if (!request.isCurrent) {
                             _uiState.value = NotificationDetailUiState(isLoading = false)
@@ -267,7 +274,6 @@ class NotificationDetailViewModel(
                                 error = result.error.toNotificationErrorMessage(),
                                 isParticipatingInRelatedEvent = _uiState.value.isParticipatingInRelatedEvent,
                             )
-                            readStore.markRead(notificationId)
                             // 401/404以外の理由でのフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
                             result.error.printStackTrace()
