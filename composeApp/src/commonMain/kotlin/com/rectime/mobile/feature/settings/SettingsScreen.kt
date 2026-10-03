@@ -165,7 +165,7 @@ class SettingsScreen(
                             )
                             SettingsSeparator()
                             SettingsRow(
-                                title = "ハプティクス",
+                                title = "振動",
                                 icon = SettingsIcon.Haptic,
                                 onClick = {
                                     scope.launch {
