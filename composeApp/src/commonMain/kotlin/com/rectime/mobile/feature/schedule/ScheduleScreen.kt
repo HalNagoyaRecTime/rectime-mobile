@@ -95,8 +95,8 @@ object ScheduleScreen : Screen {
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
         val events by viewModel.events
 
-        LaunchedEffect(Unit) {
-            viewModel.fetchEvents()
+        LaunchedEffect(viewModel) {
+            viewModel.onEnter()
         }
 
         ScheduleScreenUI(

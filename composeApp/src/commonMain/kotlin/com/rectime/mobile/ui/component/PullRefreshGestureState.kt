@@ -7,9 +7,10 @@ import androidx.compose.runtime.setValue
 import kotlin.math.abs
 import kotlin.math.sign
 
-/** One coordinate for top/bottom bounce, refresh holding, and interrupted return animations. */
-internal class PullRefreshGestureState(private val holdDistance: Float) {
-    var offset by mutableFloatStateOf(0f)
+/** 上下のバウンス、更新中の表示位置、復帰アニメーションの中断を同じ座標で管理する。 */
+internal class PullRefreshGestureState(private val holdDistance: Float, initiallyRefreshing: Boolean = false) {
+    // タブへ戻った時点で更新中なら、表示位置も更新中として復元する。
+    var offset by mutableFloatStateOf(if (initiallyRefreshing) holdDistance else 0f)
     var refreshRequested by mutableStateOf(false)
         private set
     var viewportHeight = holdDistance * 4

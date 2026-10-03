@@ -82,7 +82,7 @@ class EventDetailViewModel(
                         // イベント自体は最新でも、呼び出し情報(gathering)は別APIの
                         // 個別キャッシュにフォールバックしている可能性があるため、
                         // その結果に応じてisOfflineを立てる。
-                        // A slow gathering/member request must not hide the event body.
+                        // 集合情報や参加者の取得が遅くても、イベント本文は先に表示する。
                         _uiState.value = _uiState.value.copy(isLoading = false, eventDetail = result.value.toModel())
                         val (gatherings, gatheringIsOffline) = fetchGatherings()
                         if (!request.isCurrent) {

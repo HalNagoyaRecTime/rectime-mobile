@@ -26,6 +26,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -43,6 +45,8 @@ class ScheduleViewModel(
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
     private val eventCache = EventCache(cache)
+    private var enteredSession: CacheRequestGeneration? = null
+    private var loadJob: Job? = null
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _events = mutableStateOf(listOf<TimelineEvent>())
@@ -64,6 +68,20 @@ class ScheduleViewModel(
     var isOffline by mutableStateOf(false)
         private set
 
+    /** タブへ戻るだけでは再取得せず、ログインが切り替わった場合は初回取得する。 */
+    suspend fun onEnter() {
+        if (enteredSession?.isCurrent == true) return
+        loadJob?.cancelAndJoin()
+        // 起動前にキャンセルされたジョブではfinallyが実行されないため、ここでも解除する。
+        isUpdating = false
+        isLoading = false
+        isRefreshing = false
+        _events.value = emptyList()
+        isOffline = false
+        enteredSession = CacheRequestGeneration()
+        fetchEvents()
+    }
+
     fun fetchEvents() = loadEvents(isRefresh = false)
 
     fun refresh() = loadEvents(isRefresh = true)
@@ -74,7 +92,7 @@ class ScheduleViewModel(
         isLoading = !isRefresh
         isRefreshing = isRefresh
         error = null
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             val request = CacheRequestGeneration()
             try {
                 val result = request.validate(withMinimumRefreshDuration(isRefresh) {
@@ -165,6 +183,10 @@ class ScheduleViewModel(
                 throw apiErrorException(response.status, response.bodyAsText())
             }
             val page = response.body<EventsResponse>()
+            // 全件に達する前の空ページを完全な一覧として保存しない。
+            check(page.events.isNotEmpty() || offset >= page.total) {
+                "イベント一覧の取得が全件に達する前に終了しました"
+            }
             events += page.events
             offset += page.events.size
         } while (page.events.isNotEmpty() && offset < page.total)

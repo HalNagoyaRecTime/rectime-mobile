@@ -61,6 +61,156 @@ class ScheduleViewModelTest {
     }
 
     @Test
+    fun returningToScheduleDoesNotFetchAgainAndManualRefreshStillWorks() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertFalse(viewModel.isUpdating)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertFalse(viewModel.isRefreshing)
+    }
+
+    @Test
+    fun returningDuringInitialLoadKeepsSingleRequest() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertTrue(viewModel.isUpdating)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun enteringAfterSessionChangesCancelsPreviousLoadAndFetchesAgain() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        CacheGeneration.bump()
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun sessionChangeBeforeLoadStartsDoesNotLeaveUpdatingGuardLocked() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        CacheGeneration.bump()
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isUpdating)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun incompleteEmptyPageDoesNotReplaceSavedSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val saved = Json.decodeFromString<EventsResponse>(eventsJson)
+        cache.save("schedule_events_v1", saved)
+        val viewModel = buildViewModel(mockClient { request ->
+            val offset = requireNotNull(request.url.parameters["offset"]).toInt()
+            val page = if (offset == 0) saved.copy(total = 3) else saved.copy(
+                events = emptyList(), total = 3, offset = offset,
+            )
+            respondJson(Json.encodeToString(page))
+        }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(saved, cache.load<EventsResponse>("schedule_events_v1"))
+        assertEquals(2, viewModel.events.value.size)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun returningDuringManualRefreshKeepsRequestAndLoadingState() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 2) gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        assertTrue(viewModel.isRefreshing)
+        assertTrue(viewModel.isUpdating)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isRefreshing)
+        assertFalse(viewModel.isUpdating)
+        assertEquals(2, viewModel.events.value.size)
+    }
+
+    @Test
+    fun logoutDuringLaterPageCannotSaveOrDisplayOldFeed() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val body = Json.decodeFromString<EventsResponse>(eventsJson)
+        cache.save("schedule_events_v1", body)
+        val gate = CompletableDeferred<Unit>()
+        val offsets = mutableListOf<Int>()
+        val viewModel = buildViewModel(mockClient { request ->
+            val offset = requireNotNull(request.url.parameters["offset"]).toInt()
+            offsets += offset
+            val page = if (offset == 0) body.copy(total = 3) else {
+                gate.await()
+                body.copy(events = listOf(body.events.first().copy(eventId = 99)), total = 3, offset = offset)
+            }
+            respondJson(Json.encodeToString(page))
+        }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(listOf(0, 2), offsets)
+        assertEquals(2, viewModel.events.value.size)
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(cache.load<EventsResponse>("schedule_events_v1"))
+        assertTrue(viewModel.events.value.isEmpty())
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
     fun savedScheduleIsVisibleAndRefreshIsBlockedUntilInitialUpdateCompletes() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson))

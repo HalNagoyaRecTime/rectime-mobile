@@ -6,7 +6,7 @@ import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.feature.schedule.EventsResponse
 import kotlinx.coroutines.CancellationException
 
-/** List and detail share the same saved event fields; gathering data remains separate. */
+/** 一覧と詳細でイベントの保存データを共有する。集合情報は別に管理する。 */
 internal class EventCache(private val cache: LocalCache) {
     suspend fun loadEvents(): EventsResponse? = loadOrNull("schedule_events_v1")
 
@@ -15,7 +15,7 @@ internal class EventCache(private val cache: LocalCache) {
     }
 
     suspend fun loadDetail(eventId: Int): EventDetailResponse? {
-        // Prefer the latest full list, so a schedule update also updates detail previews.
+        // 最新の一覧を優先し、スケジュールの更新を詳細のキャッシュ表示にも反映する。
         val event = loadEvents()?.events?.firstOrNull { it.eventId == eventId }
         return event?.let {
             EventDetailResponse(it.eventId, it.eventName, it.venues, it.startTime, it.endTime, it.ruleText)
@@ -27,7 +27,7 @@ internal class EventCache(private val cache: LocalCache) {
         cache.save("event_detail_v1_${detail.eventId}", detail)
         val events = loadEvents() ?: return
         if (!request.isCurrent || events.events.none { it.eventId == detail.eventId }) return
-        // Update only existing list entries; a single detail response is never a complete feed.
+        // 詳細1件の応答で一覧全体を置き換えず、一覧に存在するイベントだけ更新する。
         cache.save("schedule_events_v1", events.copy(events = events.events.map {
             if (it.eventId != detail.eventId) it else it.copy(
                 eventName = detail.eventName, venues = detail.venues,
