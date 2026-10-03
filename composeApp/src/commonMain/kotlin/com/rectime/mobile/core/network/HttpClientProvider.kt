@@ -55,14 +55,20 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
             ?.takeIf(String::isNotBlank)
         // 別ホストや認証APIには更新・再試行を適用しない。
         if (originalCall.response.status.value != 401 || requestToken == null ||
-            !targetsApi || !isApiUrl(url, baseUrl) || isAuthApiPath(url, baseUrl)
+            !targetsApi || !isApiUrl(url, baseUrl)
         ) return@on originalCall
 
+        val authPath = isAuthApiPath(url, baseUrl)
+        val path = Url(url).encodedPath
+        // ログイン前の認証APIの拒否を、現在のログインへの拒否と取り違えない。
+        if (authPath && path !in setOf("/api/v1/auth/me", "/api/v1/auth/me/photo")) return@on originalCall
         // アカウント無効化は更新で復旧できないため、通常の期限切れと区別する。
         if (apiErrorException(originalCall.response.status, originalCall.response.bodyAsText()).code == USER_DEACTIVATED_CODE) {
             accountDeactivated(requestToken)
             return@on originalCall
         }
+        // 認証確認の通常の401は、AuthViewModel自身で更新を判断する。
+        if (authPath) return@on originalCall
         val refreshed = refreshToken(requestToken)
             ?.takeIf { it.isNotBlank() && it != requestToken }
             ?: return@on originalCall

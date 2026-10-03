@@ -179,11 +179,16 @@ class AuthViewModel(
         val current = _uiState.value.session ?: return
         // 別ユーザーのログイン後に届いた、古い通信の拒否では締め出さない。
         if (accessToken != current.accessToken && accessToken != previousAccessToken) return
-        invalidateSession(
-            AUTH_DEACTIVATED_MESSAGE,
-            expectedAccessToken = current.accessToken,
-            expectedSession = current,
-        )
+        val pending = _uiState.value.pendingAuth
+        // 通信元の画面が閉じても、認証情報の削除は最後まで実行する。
+        viewModelScope.async {
+            invalidateSession(
+                AUTH_DEACTIVATED_MESSAGE,
+                expectedAccessToken = current.accessToken,
+                expectedSession = current,
+                expectedPendingAuth = pending,
+            )
+        }.await()
     }
 
     fun startLogin() {
@@ -549,13 +554,26 @@ class AuthViewModel(
             previousAccessToken = null
             SessionTokenHolder.accessToken = null
             photoFetchJob?.cancel()
-            photoRepository?.clear()
-            sessionStore.clear()
-            if (expectedPendingAuth != null && sessionStore.loadPendingAuth() == expectedPendingAuth) {
-                sessionStore.clearPendingAuth()
-            }
-            cache.clearAll()
+            // 利用停止・失効が確定したら、削除処理の成否にかかわらずログイン画面へ戻す。
             _uiState.value = AuthUiState(error = message)
+            suspend fun cleanup(action: suspend () -> Unit) {
+                try {
+                    action()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    // 1つの保存領域が壊れていても、残りの削除処理は続ける。
+                    error.printStackTrace()
+                }
+            }
+            cleanup { check(sessionStore.clear()) { "保存済みログインを削除できませんでした" } }
+            cleanup { check(photoRepository?.clear() != false) { "保存済み写真を削除できませんでした" } }
+            cleanup {
+                if (expectedPendingAuth != null && sessionStore.loadPendingAuth() == expectedPendingAuth) {
+                    check(sessionStore.clearPendingAuth()) { "保存済み認証処理を削除できませんでした" }
+                }
+            }
+            cleanup { cache.clearAll() }
         }
     }
 

@@ -46,6 +46,52 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun cacheDeletionFailureCannotKeepDeactivatedUserLoggedIn() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) = Unit
+            override suspend fun clear(): Unit = error("cache storage failed")
+        })
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleAccountDeactivated(storedSession.accessToken)
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun cancelingDeactivatedRequestDoesNotCancelSessionCleanup() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val started = CompletableDeferred<Unit>()
+        val allowClear = CompletableDeferred<Unit>()
+        var cleared = false
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) = Unit
+            override suspend fun clear() {
+                started.complete(Unit)
+                allowClear.await()
+                cleared = true
+            }
+        })
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val request = async { viewModel.handleAccountDeactivated(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        started.await()
+        assertNull(viewModel.uiState.value.session)
+        request.cancel()
+        allowClear.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(cleared)
+        assertNull(store.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
     fun startupDeactivationReturnsToLoginWithoutRefreshingAndClearsCache() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(session = storedSession)
         val cache = LocalCache(InMemoryKeyValueStore())
