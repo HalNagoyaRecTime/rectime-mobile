@@ -3,7 +3,9 @@ package com.rectime.mobile.feature.notifications
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -108,6 +110,98 @@ class NotificationBadgeViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertTrue(gateway.requestedOffsets.size > callsAfterFirstSession)
+    }
+
+    @Test
+    fun unreadWithinHundredTurnsOnBadgeButOlderDoesNot() = runTest(testDispatcher) {
+        val gateway = FakeGateway { limit, offset ->
+            page((offset + 1..minOf(120, offset + limit)).map(::notification), 120, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val reads = readStore()
+        (1..99).forEach { reads.markRead(it) }
+        val viewModel = NotificationBadgeViewModel(feed, reads)
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.hasUnreadNotifications.value)
+        reads.markRead(100)
+        repeat(5) { feed.loadMore() }
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(120, feed.notifications.value.size)
+        assertFalse(viewModel.hasUnreadNotifications.value)
+    }
+
+    @Test
+    fun foregroundReturnRefreshesEvenForSameUser() = runTest(testDispatcher) {
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val viewModel = NotificationBadgeViewModel(feedStore(gateway), readStore())
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(0, 0), gateway.requestedOffsets)
+    }
+
+    @Test
+    fun pushesDuringFetchAreCoalescedIntoOneFollowUp() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            if (requests == 1) gate.await()
+            page(listOf(notification(requests)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationBadgeViewModel(feed, readStore())
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onForeground("user-1")
+        repeat(5) { viewModel.onPush("user-1") }
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, requests)
+        assertEquals(listOf(2), feed.notifications.value.map { it.id })
+    }
+
+    @Test
+    fun pushDuringManualRequestFetchesNewPageAfterItFinishes() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            val id = requests
+            if (id == 2) gate.await()
+            page(listOf(notification(id)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationBadgeViewModel(feed, readStore())
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        val manualRequest = launch { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onPush("user-1")
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, requests)
+        gate.complete(Unit)
+        manualRequest.join()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(3, requests)
+        assertEquals(listOf(3), feed.notifications.value.map { it.id })
+    }
+
+    @Test
+    fun unreadCacheFailureDoesNotPreventStartupFetch() = runTest(testDispatcher) {
+        val reads = NotificationReadStore(LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = error("保存先障害")
+            override suspend fun putString(key: String, value: String) = error("保存先障害")
+            override suspend fun clear() = Unit
+        }))
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val viewModel = NotificationBadgeViewModel(feedStore(gateway), reads)
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(0), gateway.requestedOffsets)
+        assertTrue(viewModel.hasUnreadNotifications.value)
     }
 
     private fun feedStore(gateway: NotificationGateway) =

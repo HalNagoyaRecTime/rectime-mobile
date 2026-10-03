@@ -10,6 +10,9 @@ import coil3.compose.LocalPlatformContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -30,6 +33,7 @@ import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationFeedStore
 import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
@@ -111,6 +115,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     LaunchedEffect(authState.session) {
         SessionTokenHolder.accessToken = authState.session?.accessToken
         if (authState.session == null && hadSession) {
+            NotificationFeedStore.shared.reset()
             navigationController.reset(ScheduleScreen)
         }
         hadSession = authState.session != null
@@ -136,6 +141,18 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             LaunchedEffect(session.user.id) {
                 badgeViewModel.onSession(session.user.id)
             }
+            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                badgeViewModel.onForeground(session.user.id)
+            }
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            LaunchedEffect(badgeViewModel, session.user.id, lifecycle) {
+                NotificationNavigationHandler.updates.collect {
+                    // バックグラウンド中は通信せず、次の前面復帰で更新する。
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        badgeViewModel.onPush(session.user.id)
+                    }
+                }
+            }
             LaunchedEffect(notificationNavigationTarget) {
                 when (val target = notificationNavigationTarget) {
                     NotificationNavigationTarget.Home -> {
@@ -147,7 +164,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     }
                     is NotificationNavigationTarget.NotificationDetail -> {
                         navigationController.reset(ScheduleScreen)
-                        navigationController.push(NotificationDetailScreen(target.notificationId))
+                        navigationController.push(NotificationDetailScreen(target.notificationId, refreshOnOpen = true))
                     }
                     null -> Unit
                 }
