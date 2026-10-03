@@ -12,8 +12,7 @@ private class AndroidAppHapticFeedback(
     override fun perform(event: AppHapticEvent) {
         if (event != AppHapticEvent.RefreshThreshold) return
 
-        // View.performHapticFeedback uses the system haptic setting and does
-        // not require the VIBRATE permission.
+        // システムの触覚設定に従い、VIBRATE権限を必要としない。
         runCatching {
             view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         }
