@@ -40,9 +40,11 @@ class AuthRequestRecoveryTest {
             }
         }
         try {
-            assertEquals(body, client.get("$BASE/api/v1/events").bodyAsText())
+            for (path in listOf("/api/v1/events", "/api/v1/auth/me", "/api/v1/auth/me/photo")) {
+                assertEquals(body, client.get("$BASE$path").bodyAsText())
+            }
             assertEquals(0, refreshes)
-            assertEquals(listOf("old-token"), rejectedTokens)
+            assertEquals(listOf("old-token", "old-token", "old-token"), rejectedTokens)
         } finally { client.close() }
     }
 
@@ -66,6 +68,23 @@ class AuthRequestRecoveryTest {
             assertEquals(body, client.get("$BASE/api/v1/events").bodyAsText())
             assertEquals(2, calls)
             assertEquals(listOf("new-token"), rejectedTokens)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun rejectionDuringAnotherLoginCannotDeactivateCurrentSession() = runTest {
+        var deactivations = 0
+        SessionTokenHolder.accessToken = "current-user-token"
+        val body = """{"error":{"code":"USER_DEACTIVATED","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Unauthorized) }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                accountDeactivated = { deactivations++ }
+            }
+        }
+        try {
+            assertEquals(body, client.post("$BASE/api/v1/auth/microsoft/token").bodyAsText())
+            assertEquals(0, deactivations)
         } finally { client.close() }
     }
 
