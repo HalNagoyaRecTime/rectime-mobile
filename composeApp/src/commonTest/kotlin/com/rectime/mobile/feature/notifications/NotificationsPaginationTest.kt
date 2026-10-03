@@ -5,6 +5,8 @@ import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -22,21 +24,26 @@ class NotificationsPaginationTest {
     }
 
     @Test
-    fun initialLoadFetchesOnlyTwentyAndPagingStopsAtOneHundred() = runTest {
-        val offsets = mutableListOf<Int>()
+    fun initialLoadFetchesHundredAndRevealsTwentyWithoutNetworkThenPagesOlder() = runTest {
+        val requests = mutableListOf<Pair<Int, Int>>()
         val cache = LocalCache(MemoryStore())
         val store = NotificationFeedStore(Gateway { limit, offset ->
-            assertEquals(20, limit)
-            offsets += offset
-            page((offset + 1..offset + limit).map(::notification), total = 200, offset = offset)
+            requests += limit to offset
+            page((offset + 1..minOf(200, offset + limit)).map(::notification), 200, offset)
         }, cache)
         store.load()
-        assertEquals(listOf(0), offsets)
-        assertEquals(20, store.notifications.value.size)
-        repeat(10) { store.loadMore() }
-        assertEquals(listOf(0, 20, 40, 60, 80), offsets)
+        assertEquals(listOf(100 to 0), requests)
         assertEquals(100, store.notifications.value.size)
-        assertEquals(100, NotificationHistoryCache(cache).load()?.size)
+        assertEquals(20, store.cachedNotifications.value?.size)
+        repeat(4) { store.loadMore() }
+        assertEquals(100, store.cachedNotifications.value?.size)
+        assertEquals(1, requests.size)
+        store.loadMore()
+        assertEquals(listOf(100 to 0, 20 to 100), requests)
+        assertEquals(120, store.cachedNotifications.value?.size)
+        assertEquals((1..100).toList(), NotificationHistoryCache(cache).load()?.map { it.id })
+        repeat(4) { store.loadMore() }
+        assertEquals(200, store.notifications.value.size)
         assertFalse(store.status.value.hasMore)
     }
 
@@ -60,7 +67,7 @@ class NotificationsPaginationTest {
         val store = NotificationFeedStore(Gateway { limit, offset ->
             offsets += offset
             if (offset > 0 && fail) error("offline")
-            page((offset + 1..offset + limit).map(::notification), total = 40, offset = offset)
+            page((offset + 1..offset + minOf(limit, 20)).map(::notification), total = 40, offset = offset)
         }, LocalCache(MemoryStore()))
         store.load()
         store.loadMore()
@@ -94,7 +101,7 @@ class NotificationsPaginationTest {
             error("offline")
         }, cache)
         store.load()
-        assertEquals(20, store.notifications.value.size)
+        assertEquals(20, store.cachedNotifications.value?.size)
         repeat(4) { store.loadMore() }
         assertEquals(1, calls)
         assertEquals(100, store.notifications.value.size)
@@ -102,17 +109,22 @@ class NotificationsPaginationTest {
     }
 
     @Test
-    fun refreshPreservesStoredOlderPagesAndUpdatesSameId() = runTest {
+    fun refreshReplacesLatestHundredIncludingMoreThanTwentyNewArrivals() = runTest {
         val cache = LocalCache(MemoryStore())
         cache.save("notifications_v1", (1..100).map(::notification))
-        val store = NotificationFeedStore(Gateway { _, offset ->
-            page((1..20).map { notification(it).copy(title = "更新後") }, 100, offset)
+        val gate = CompletableDeferred<Unit>()
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            assertEquals(100, limit)
+            gate.await()
+            page((101..200).map(::notification), 200, offset)
         }, cache)
-        store.load()
-        val saved = NotificationHistoryCache(cache).load().orEmpty()
-        assertEquals(100, saved.size)
-        assertEquals("更新後", saved.first().title)
-        assertEquals(100, saved.last().id)
+        val loading = async { store.load() }
+        runCurrent()
+        assertEquals((1..20).toList(), store.cachedNotifications.value?.map { it.id })
+        gate.complete(Unit)
+        loading.await()
+        assertEquals((101..200).toList(), store.notifications.value.map { it.id })
+        assertEquals((101..200).toList(), NotificationHistoryCache(cache).load()?.map { it.id })
     }
 
     @Test
@@ -121,7 +133,7 @@ class NotificationsPaginationTest {
         val gate = CompletableDeferred<Unit>()
         val store = NotificationFeedStore(Gateway { limit, offset ->
             if (offset > 0) gate.await()
-            page((offset + 1..offset + limit).map(::notification), 40, offset)
+            page((offset + 1..offset + minOf(limit, 20)).map(::notification), 40, offset)
         }, cache)
         store.load()
         val next = async { store.loadMore() }
@@ -136,12 +148,13 @@ class NotificationsPaginationTest {
     @Test
     fun detailCacheAlsoRespectsLimitAndSharesTheListEntry() = runTest {
         val history = NotificationHistoryCache(LocalCache(MemoryStore()))
-        history.merge((1..100).map(::notification))
+        history.saveList((1..100).map(::notification))
         history.saveDetail(notification(10).copy(body = "更新後の本文"))
         assertEquals("更新後の本文", history.load()?.first { it.id == 10 }?.body)
         history.saveDetail(notification(101).copy(scheduledAt = "2026-08-01T09:00:00Z"))
         assertEquals(100, history.load()?.size)
-        assertEquals(101, history.load()?.first()?.id)
+        assertEquals(1, history.load()?.first()?.id)
+        assertFalse(history.load().orEmpty().any { it.id == 101 })
     }
 
     @Test
@@ -153,38 +166,27 @@ class NotificationsPaginationTest {
     }
 
     @Test
-    fun refreshKeepsLoadedPagesWhilePendingAndMergesNewHeadWithoutDuplicates() = runTest {
+    fun refreshKeepsVisibleRowsWhilePendingThenRevalidatesHundred() = runTest {
         val gate = CompletableDeferred<Unit>()
         var updated = false
-        val offsets = mutableListOf<Int>()
-        val cache = LocalCache(MemoryStore())
+        val requests = mutableListOf<Pair<Int, Int>>()
         val store = NotificationFeedStore(Gateway { limit, offset ->
-            offsets += offset
-            val all = if (updated) {
-                listOf(notification(101)) + (1..100).map { notification(it).copy(title = "更新後") }
-            } else {
-                (1..100).map(::notification)
-            }
-            if (updated && offset == 0) gate.await()
+            requests += limit to offset
+            val all = if (updated) listOf(notification(101)) + (1..100).map(::notification)
+                else (1..100).map(::notification)
+            if (updated) gate.await()
             page(all.drop(offset).take(limit), all.size, offset)
-        }, cache)
+        }, LocalCache(MemoryStore()))
         store.load()
         store.loadMore()
-        assertEquals(40, store.notifications.value.size)
         updated = true
         val refresh = async { store.load(force = true) }
         runCurrent()
-        assertEquals(40, store.notifications.value.size)
+        assertEquals(40, store.cachedNotifications.value?.size)
         gate.complete(Unit)
         refresh.await()
-        assertEquals(listOf(101) + (1..40).toList(), store.notifications.value.map { it.id })
-        store.loadMore()
-        assertEquals(listOf(0, 20, 0, 20), offsets)
-        assertEquals(41, store.notifications.value.size)
-        assertEquals("更新後", store.notifications.value.first { it.id == 25 }.title)
-        store.loadMore()
-        assertEquals((listOf(101) + (1..59).toList()), store.notifications.value.map { it.id })
-        assertEquals(60, NotificationHistoryCache(cache).load()?.size)
+        assertEquals(listOf(101) + (1..39).toList(), store.cachedNotifications.value?.map { it.id })
+        assertEquals(listOf(100 to 0, 100 to 0), requests)
     }
 
     @Test
@@ -194,7 +196,7 @@ class NotificationsPaginationTest {
         cache.save("notifications_v1", (1..100).map(::notification))
         val store = NotificationFeedStore(Gateway { limit, offset ->
             if (offline) error("接続できません")
-            page((offset + 1..offset + limit).map(::notification), 100, offset)
+            page((offset + 1..offset + minOf(limit, 20)).map(::notification), 100, offset)
         }, cache)
         store.load()
         store.loadMore()
@@ -203,7 +205,156 @@ class NotificationsPaginationTest {
         assertEquals(40, store.notifications.value.size)
         assertTrue(store.status.value.isOffline)
         store.loadMore()
-        assertEquals(60, store.notifications.value.size)
+        assertEquals(40, store.notifications.value.size)
+    }
+
+    @Test
+    fun userSwitchImmediatelyClearsFeedAndCancelsPendingPage() = runTest {
+        val cache = LocalCache(MemoryStore())
+        val gate = CompletableDeferred<Unit>()
+        var cancelled = false
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            if (offset > 0) {
+                try {
+                    gate.await()
+                } finally {
+                    cancelled = true
+                }
+            }
+            page((offset + 1..offset + minOf(limit, 20)).map(::notification), 40, offset)
+        }, cache)
+        store.bindSession("user-A")
+        store.load()
+        val loading = async { store.loadMore() }
+        runCurrent()
+        cache.clearAll()
+        store.bindSession("user-B")
+        assertTrue(store.notifications.value.isEmpty())
+        assertTrue(store.cachedNotifications.value == null)
+        assertFalse(store.status.value.isLoadingMore)
+        runCurrent()
+        assertTrue(cancelled)
+        loading.join()
+        assertTrue(loading.isCancelled)
+        assertTrue(cache.load<List<UserNotification>>("notifications_v1") == null)
+    }
+
+    @Test
+    fun resetDoesNotWaitForPendingPageResponse() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            if (offset > 0) gate.await()
+            page((offset + 1..offset + minOf(limit, 20)).map(::notification), 40, offset)
+        }, LocalCache(MemoryStore()))
+        store.load()
+        val loading = async { store.loadMore() }
+        runCurrent()
+        store.reset()
+        assertTrue(store.cachedNotifications.value == null)
+        assertTrue(store.notifications.value.isEmpty())
+        loading.join()
+        assertTrue(loading.isCancelled)
+    }
+
+    @Test
+    fun freshHeadWaitsForPageWithoutCompetingForOffsets() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val offsets = mutableListOf<Int>()
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            offsets += offset
+            if (offset > 0) gate.await()
+            page((offset + 1..offset + minOf(limit, 20)).map(::notification), 60, offset)
+        }, LocalCache(MemoryStore()))
+        store.load()
+        val paging = async { store.loadMore() }
+        runCurrent()
+        val refresh = async { store.load(force = true) }
+        runCurrent()
+        assertEquals(listOf(0, 20), offsets)
+        gate.complete(Unit)
+        paging.await()
+        refresh.await()
+        assertEquals(listOf(0, 20, 0), offsets)
+        assertEquals(20, store.notifications.value.size)
+    }
+
+    @Test
+    fun reloginWithSameUserAlsoDiscardsPreviousSessionMemory() = runTest {
+        val cache = LocalCache(MemoryStore())
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            page((1..minOf(limit, 20)).map(::notification), 40, offset)
+        }, cache)
+        store.bindSession("user-A")
+        store.load()
+        cache.clearAll()
+        store.bindSession("user-A")
+        assertTrue(store.cachedNotifications.value == null)
+        assertTrue(store.notifications.value.isEmpty())
+    }
+
+    @Test
+    fun cancelledOldPageCannotOverwriteNewUserWhenResponseArrivesLate() = runTest {
+        val cache = LocalCache(MemoryStore())
+        val gate = CompletableDeferred<Unit>()
+        var newUser = false
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            if (offset > 0) {
+                // キャンセル直後にも応答が届くケースを再現する。
+                withContext(NonCancellable) { gate.await() }
+                page((21..40).map(::notification), 40, offset)
+            } else if (newUser) {
+                page(listOf(notification(999)), 1, offset)
+            } else {
+                page((1..minOf(limit, 20)).map(::notification), 40, offset)
+            }
+        }, cache)
+        store.bindSession("user-A")
+        store.load()
+        val oldPage = async { store.loadMore() }
+        runCurrent()
+        cache.clearAll()
+        store.bindSession("user-B")
+        newUser = true
+        store.load()
+        assertEquals(listOf(999), store.notifications.value.map { it.id })
+        gate.complete(Unit)
+        oldPage.join()
+        assertEquals(listOf(999), store.notifications.value.map { it.id })
+        assertEquals(listOf(999), cache.load<List<UserNotification>>("notifications_v1")?.map { it.id })
+    }
+
+    @Test
+    fun unavailableCacheDoesNotPreventOnlinePaging() = runTest {
+        val requests = mutableListOf<Int>()
+        val broken = object : KeyValueStore {
+            override suspend fun getString(key: String): String? = error("保存先障害")
+            override suspend fun putString(key: String, value: String) = error("保存先障害")
+            override suspend fun clear() = Unit
+        }
+        val store = NotificationFeedStore(Gateway { limit, offset ->
+            requests += offset
+            page((offset + 1..offset + limit).map(::notification), 120, offset)
+        }, LocalCache(broken))
+        store.load()
+        repeat(5) { store.loadMore() }
+        assertEquals(listOf(0, 100), requests)
+        assertEquals(120, store.cachedNotifications.value?.size)
+        assertTrue(store.status.value.pageError == null)
+    }
+
+    @Test
+    fun duplicateHeadIdsDoNotCreateDuplicateRowsOrShiftServerOffset() = runTest {
+        val offsets = mutableListOf<Int>()
+        val store = NotificationFeedStore(Gateway { _, offset ->
+            offsets += offset
+            if (offset == 0) page((1..99).map(::notification) + notification(99), 101, offset)
+            else page(listOf(notification(100)), 101, offset)
+        }, LocalCache(MemoryStore()))
+        store.load()
+        repeat(5) { store.loadMore() }
+        assertEquals(listOf(0, 100), offsets)
+        assertEquals(100, store.notifications.value.size)
+        assertEquals(100, store.notifications.value.map { it.id }.distinct().size)
     }
 
     private fun page(values: List<UserNotification>, total: Int, offset: Int) =

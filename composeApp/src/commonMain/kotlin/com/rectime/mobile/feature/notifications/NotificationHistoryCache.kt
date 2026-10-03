@@ -5,7 +5,6 @@ import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.time.Instant
 
 internal const val NotificationPageSize = 20
 internal const val NotificationHistoryLimit = 100
@@ -32,13 +31,10 @@ internal class NotificationHistoryCache(private val cache: LocalCache) {
         }
     }
 
-    suspend fun merge(values: List<UserNotification>, limit: Int = NotificationHistoryLimit) {
+    suspend fun saveList(values: List<UserNotification>) {
         val request = CacheRequestGeneration()
         historyMutex.withLock {
-            val old = cache.load<List<UserNotification>>(HistoryCacheKey).orEmpty()
-            if (request.isCurrent) {
-                cache.save(HistoryCacheKey, (values + old).distinctBy { it.id }.take(limit.coerceIn(0, NotificationHistoryLimit)))
-            }
+            if (request.isCurrent) cache.save(HistoryCacheKey, values.distinctBy { it.id }.take(NotificationHistoryLimit))
         }
     }
 
@@ -46,15 +42,9 @@ internal class NotificationHistoryCache(private val cache: LocalCache) {
         val request = CacheRequestGeneration()
         historyMutex.withLock {
             val old = cache.load<List<UserNotification>>(HistoryCacheKey).orEmpty()
-            val values = if (old.any { it.id == notification.id }) {
-                old.map { if (it.id == notification.id) notification else it }
-            } else {
-                (old + notification).sortedWith(
-                    compareByDescending<UserNotification> {
-                        runCatching { Instant.parse(it.scheduledAt) }.getOrDefault(Instant.DISTANT_PAST)
-                    }.thenByDescending { it.id },
-                )
-            }
+            // 最新100件の一覧に含まれる通知だけ更新する。個別取得では順位を確定できない。
+            if (old.none { it.id == notification.id }) return@withLock
+            val values = old.map { if (it.id == notification.id) notification else it }
             if (request.isCurrent) cache.save(HistoryCacheKey, values.distinctBy { it.id }.take(NotificationHistoryLimit))
         }
     }

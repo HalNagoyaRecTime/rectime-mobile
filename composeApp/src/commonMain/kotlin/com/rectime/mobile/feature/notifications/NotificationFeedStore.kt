@@ -38,8 +38,10 @@ class NotificationFeedStore(
     val status: StateFlow<NotificationFeedStatus> = _status.asStateFlow()
     private var nextOffset = 0
     private var total = NotificationHistoryLimit
+    private var visibleCount = NotificationPageSize
     private val mutex = Mutex()
     private var inFlight: Deferred<CachedFetchResult<List<UserNotification>>>? = null
+    private var pageInFlight: Deferred<Unit>? = null
     private var lastResult: CachedFetchResult.Fresh<List<UserNotification>>? = null
     private var session = CacheRequestGeneration()
     private var revision = 0
@@ -47,9 +49,8 @@ class NotificationFeedStore(
 
     suspend fun bindSession(userId: String) {
         mutex.withLock {
-            if (boundUserId != null && boundUserId != userId) {
-                inFlight?.cancel()
-                inFlight = null
+            if (!session.isCurrent || (boundUserId != null && boundUserId != userId)) {
+                cancelRequests()
                 clearMemory()
             }
             boundUserId = userId
@@ -57,10 +58,18 @@ class NotificationFeedStore(
     }
 
     suspend fun load(force: Boolean = false): CachedFetchResult<List<UserNotification>> = coroutineScope {
+        // 先頭更新は追加ページの完了を待つ。セッション変更はこの待機を使わない。
+        val paging = mutex.withLock {
+            if (!session.isCurrent) {
+                cancelRequests()
+                clearMemory()
+            }
+            pageInFlight?.takeIf { it.isActive }
+        }
+        paging?.await()
         val task = mutex.withLock {
             if (!session.isCurrent) {
-                inFlight?.cancel()
-                inFlight = null
+                cancelRequests()
                 clearMemory()
             }
             if (!force && inFlight?.isActive != true) lastResult?.let { return@coroutineScope it }
@@ -76,33 +85,31 @@ class NotificationFeedStore(
                 val result = try {
                     fetchWithCacheFirst(
                         fetchLive = {
-                            val page = gateway.getNotifications(limit = NotificationPageSize, offset = 0)
+                            val page = gateway.getNotifications(limit = NotificationHistoryLimit, offset = 0)
+                            val received = page.notifications.take(NotificationHistoryLimit)
+                            val newest = received.distinctBy { it.id }
                             if (request.isCurrent && requestRevision == revision) {
-                                total = page.total.coerceIn(0, NotificationHistoryLimit)
-                                nextOffset = page.notifications.size.coerceAtMost(NotificationPageSize)
+                                total = page.total.coerceAtLeast(0)
+                                nextOffset = received.size
                             }
-                            val newest = page.notifications.take(NotificationPageSize)
-                            // 更新済みの先頭と表示中の履歴を結合し、追加ページを消さない。
-                            if (newest.isEmpty()) emptyList() else {
-                                (newest + _notifications.value).distinctBy { it.id }
-                                    .take(page.total.coerceIn(0, NotificationHistoryLimit))
-                            }
+                            // 最新100件をまとめて更新し、古い取得位置を引き継がない。
+                            newest
                         },
                         loadCache = {
                             try {
-                                _cachedNotifications.value ?: history.load()?.take(NotificationPageSize)
+                                if (_cachedNotifications.value != null) _notifications.value else history.load()
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (e: Exception) {
-                                _cachedNotifications.value
+                                _notifications.value.takeIf { _cachedNotifications.value != null }
                             }
                         },
-                        saveCache = { history.merge(it, total) },
+                        saveCache = { history.saveList(it) },
                         onCached = {
                             if (request.isCurrent && requestRevision == revision) {
                                 nextOffset = it.size
                                 publish(it)
-                                _status.value = _status.value.copy(hasMore = it.size >= NotificationPageSize && it.size < total)
+                                _status.value = _status.value.copy(hasMore = visibleCount < it.size)
                             }
                         },
                     )
@@ -115,7 +122,7 @@ class NotificationFeedStore(
                         is CachedFetchResult.Fresh -> {
                             publish(valid.value)
                             lastResult = valid
-                            _status.value = NotificationFeedStatus(hasMore = nextOffset < total && valid.value.isNotEmpty())
+                            _status.value = NotificationFeedStatus(hasMore = visibleCount < valid.value.size || (nextOffset < total && valid.value.isNotEmpty()))
                         }
                         is CachedFetchResult.Cached -> {
                             if (valid.error.invalidatesNotificationCache()) {
@@ -123,7 +130,7 @@ class NotificationFeedStore(
                                 _status.value = _status.value.copy(error = valid.error)
                             } else {
                                 publish(valid.value)
-                                _status.value = _status.value.copy(isOffline = true)
+                                _status.value = _status.value.copy(isOffline = true, hasMore = visibleCount < valid.value.size)
                             }
                         }
                         is CachedFetchResult.Failed -> {
@@ -146,66 +153,98 @@ class NotificationFeedStore(
         if (request.isCurrent) load(force = true)
     }
 
-    suspend fun loadMore() {
-        mutex.withLock {
-            if (inFlight?.isActive == true || !_status.value.hasMore || _status.value.isUpdating ||
+    suspend fun loadMore() = coroutineScope {
+        val task = mutex.withLock {
+            if (inFlight?.isActive == true || pageInFlight?.isActive == true ||
+                !_status.value.hasMore || _status.value.isUpdating ||
                 _status.value.isLoadingMore || !session.isCurrent
-            ) return
-            _status.value = _status.value.copy(isLoadingMore = true, pageError = null)
+            ) return@coroutineScope
+            if (visibleCount < _notifications.value.size) {
+                visibleCount += NotificationPageSize
+                publish(_notifications.value)
+                _status.value = _status.value.copy(
+                    hasMore = visibleCount < _notifications.value.size || (!_status.value.isOffline && nextOffset < total),
+                )
+                return@coroutineScope
+            }
+            if (_status.value.isOffline) return@coroutineScope
             val request = CacheRequestGeneration()
             val requestRevision = revision
-            try {
-                val saved = history.load().orEmpty()
-                val page = if (_status.value.isOffline) {
-                    NotificationPage(saved.drop(nextOffset).take(NotificationPageSize), saved.size, NotificationPageSize, nextOffset)
-                } else {
-                    gateway.getNotifications(limit = NotificationPageSize, offset = nextOffset)
-                }
+            _status.value = _status.value.copy(isLoadingMore = true, pageError = null)
+            // 通信中はロックを保持せず、ログアウト・ユーザー切り替えを即時に受け付ける。
+            async {
                 if (!request.isCurrent || requestRevision != revision) {
                     if (requestRevision == revision) clearMemory()
-                    return
+                    return@async
                 }
-                total = page.total.coerceIn(0, NotificationHistoryLimit)
-                val values = page.notifications.take(minOf(NotificationPageSize, NotificationHistoryLimit - nextOffset))
-                val followingOffset = nextOffset + values.size
-                val updates = values.associateBy { it.id }
-                val combined = (_notifications.value.map { updates[it.id] ?: it } + values)
-                    .distinctBy { it.id }.take(NotificationHistoryLimit)
                 try {
-                    history.merge(combined, total)
+                    // オンラインの無限スクロールは保存先の状態に依存させない。
+                    val page = gateway.getNotifications(limit = NotificationPageSize, offset = nextOffset)
+                    if (!request.isCurrent || requestRevision != revision) {
+                        if (requestRevision == revision) clearMemory()
+                        return@async
+                    }
+                    total = page.total.coerceAtLeast(0)
+                    val values = page.notifications.take(NotificationPageSize)
+                    val followingOffset = nextOffset + values.size
+                    val updates = values.associateBy { it.id }
+                    val combined = (_notifications.value.map { updates[it.id] ?: it } + values)
+                        .distinctBy { it.id }
+                    try {
+                        // 最新100件だけ保存し、それより古い取得分は永続化しない。
+                        history.saveList(combined)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // 保存に失敗しても取得した一覧は表示する。
+                    }
+                    if (!request.isCurrent || requestRevision != revision) {
+                        if (requestRevision == revision) clearMemory()
+                        return@async
+                    }
+                    nextOffset = followingOffset
+                    visibleCount += NotificationPageSize
+                    publish(combined)
+                    lastResult = if (_status.value.isOffline) null else CachedFetchResult.Fresh(combined)
+                    _status.value = _status.value.copy(hasMore = values.isNotEmpty() && nextOffset < total)
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
-                    // 保存に失敗しても取得した一覧は表示する。
-                }
-                if (!request.isCurrent || requestRevision != revision) {
-                    if (requestRevision == revision) clearMemory()
-                    return
-                }
-                nextOffset = followingOffset
-                publish(combined)
-                lastResult = if (_status.value.isOffline) null else CachedFetchResult.Fresh(combined)
-                _status.value = _status.value.copy(hasMore = values.isNotEmpty() && nextOffset < total)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (request.isCurrent && requestRevision == revision) {
-                    if (e.invalidatesNotificationCache()) {
-                        clearMemory()
-                        _status.value = _status.value.copy(error = e)
-                    } else {
-                        _status.value = _status.value.copy(pageError = e)
+                } catch (e: Exception) {
+                    if (request.isCurrent && requestRevision == revision) {
+                        if (e.invalidatesNotificationCache()) {
+                            clearMemory()
+                            _status.value = _status.value.copy(error = e)
+                        } else {
+                            _status.value = _status.value.copy(pageError = e)
+                        }
                     }
+                } finally {
+                    if (requestRevision == revision) _status.value = _status.value.copy(isLoadingMore = false)
                 }
-            } finally {
-                if (requestRevision == revision) _status.value = _status.value.copy(isLoadingMore = false)
-            }
+            }.also { pageInFlight = it }
         }
+        task.await()
+    }
+
+    internal fun findNotification(id: Int): UserNotification? =
+        if (session.isCurrent) _notifications.value.firstOrNull { it.id == id } else null
+
+    internal fun updateNotification(notification: UserNotification) {
+        if (!session.isCurrent || _notifications.value.none { it.id == notification.id }) return
+        publish(_notifications.value.map { if (it.id == notification.id) notification else it })
+        lastResult = lastResult?.let { CachedFetchResult.Fresh(_notifications.value) }
     }
 
     private fun publish(notifications: List<UserNotification>) {
         _notifications.value = notifications
-        _cachedNotifications.value = notifications
+        _cachedNotifications.value = notifications.take(visibleCount)
+    }
+
+    private fun cancelRequests() {
+        inFlight?.cancel()
+        pageInFlight?.cancel()
+        inFlight = null
+        pageInFlight = null
     }
 
     private fun clearMemory() {
@@ -216,14 +255,14 @@ class NotificationFeedStore(
         session = CacheRequestGeneration()
         nextOffset = 0
         total = NotificationHistoryLimit
+        visibleCount = NotificationPageSize
         _status.value = NotificationFeedStatus()
     }
 
     internal suspend fun discardStaleSession() {
         mutex.withLock {
             if (!session.isCurrent) {
-                inFlight?.cancel()
-                inFlight = null
+                cancelRequests()
                 clearMemory()
             }
         }
@@ -231,8 +270,8 @@ class NotificationFeedStore(
 
     suspend fun reset() {
         mutex.withLock {
-            inFlight?.cancel()
-            inFlight = null
+            cancelRequests()
+            boundUserId = null
             clearMemory()
         }
     }

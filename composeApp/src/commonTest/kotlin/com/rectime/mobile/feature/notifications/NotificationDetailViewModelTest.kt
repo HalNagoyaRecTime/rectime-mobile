@@ -64,7 +64,7 @@ class NotificationDetailViewModelTest {
         cache.save("notifications_v1", listOf(notification(15).copy(relatedEvent = related)))
         cache.save("notification_my_event_ids_v1", setOf(7))
         var participationRequests = 0
-        val viewModel = NotificationDetailViewModel(15,
+        val viewModel = NotificationDetailViewModel(15, refreshOnOpen = true,
             gateway = FakeGateway { error("offline") }, cache = cache, readStore = readStore(),
             myEventsGateway = FakeMyEventsGateway { participationRequests++; emptySet() })
         testDispatcher.scheduler.advanceUntilIdle()
@@ -96,7 +96,7 @@ class NotificationDetailViewModelTest {
         cache.save("notifications_v1", listOf(notification(15)))
         val gate = CompletableDeferred<Unit>()
         val readStore = readStore()
-        val viewModel = NotificationDetailViewModel(15,
+        val viewModel = NotificationDetailViewModel(15, refreshOnOpen = true,
             gateway = FakeGateway { gate.await(); notification(it).copy(title = "updated") },
             cache = cache, readStore = readStore)
         testDispatcher.scheduler.runCurrent()
@@ -113,7 +113,7 @@ class NotificationDetailViewModelTest {
         val cache = LocalCache(InMemoryKeyValueStore())
         cache.save("notifications_v1", listOf(notification(15)))
         val gate = CompletableDeferred<Unit>()
-        val viewModel = NotificationDetailViewModel(15,
+        val viewModel = NotificationDetailViewModel(15, refreshOnOpen = true,
             gateway = FakeGateway { gate.await(); notification(it) },
             cache = cache, readStore = readStore())
         testDispatcher.scheduler.runCurrent()
@@ -303,6 +303,75 @@ class NotificationDetailViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun listEntryUsesCachedBodyWithoutDetailRequest() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(15)))
+        var calls = 0
+        val reads = readStore()
+        val viewModel = NotificationDetailViewModel(15,
+            gateway = FakeGateway { calls++; error("詳細APIは不要") },
+            cache = cache, readStore = reads)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, calls)
+        assertEquals(15, viewModel.uiState.value.notification?.id)
+        assertFalse(viewModel.uiState.value.isUpdating)
+        assertTrue(15 in reads.readIds.value)
+    }
+
+    @Test
+    fun pushEntryShowsCachedBodyAndLoadingUntilFreshBodyArrives() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(15)))
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = NotificationDetailViewModel(15, refreshOnOpen = true,
+            gateway = FakeGateway { calls++; gate.await(); notification(it).copy(body = "最新本文") },
+            cache = cache, readStore = readStore())
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertEquals("本文15", viewModel.uiState.value.notification?.body)
+        assertTrue(viewModel.uiState.value.isUpdating)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("最新本文", viewModel.uiState.value.notification?.body)
+        assertFalse(viewModel.uiState.value.isUpdating)
+    }
+
+    @Test
+    fun failedPushRefreshKeepsBodyAndReportsFailure() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(15)))
+        val viewModel = NotificationDetailViewModel(15, refreshOnOpen = true,
+            gateway = FakeGateway { error("タイムアウト") }, cache = cache, readStore = readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(15, viewModel.uiState.value.notification?.id)
+        assertEquals(DETAIL_LOAD_FAILED_MESSAGE, viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.isUpdating)
+    }
+
+    @Test
+    fun olderRuntimeEntryIsReusedWithoutWritingItBeyondCacheLimit() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val feedGateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int) =
+                NotificationPage((offset + 1..minOf(120, offset + limit)).map(::notification), 120, limit, offset)
+            override suspend fun getNotification(notificationId: Int): UserNotification = error("unused")
+        }
+        val feed = NotificationFeedStore(feedGateway, cache)
+        feed.load()
+        repeat(5) { feed.loadMore() }
+        var calls = 0
+        val viewModel = NotificationDetailViewModel(115,
+            gateway = FakeGateway { calls++; error("unused") }, cache = cache,
+            readStore = readStore(), feedStore = feed)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, calls)
+        assertEquals(115, viewModel.uiState.value.notification?.id)
+        assertEquals((1..100).toList(), NotificationHistoryCache(cache).load()?.map { it.id })
     }
 
     private fun notification(id: Int) = UserNotification(
