@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -175,6 +176,14 @@ class SettingsScreen(
                                 trailingContent = {
                                     Switch(
                                         checked = hapticEnabled,
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = AppTheme.colors.themeColorSecond,
+                                            checkedBorderColor = AppTheme.colors.themeColorSecond,
+                                            checkedThumbColor = AppTheme.colors.textThemeColorSecond,
+                                            uncheckedTrackColor = AppTheme.colors.borderSubtle,
+                                            uncheckedBorderColor = AppTheme.colors.borderStrong,
+                                            uncheckedThumbColor = AppTheme.colors.textMuted,
+                                        ),
                                         onCheckedChange = { enabled ->
                                             scope.launch {
                                                 hapticPreference.setEnabled(enabled)

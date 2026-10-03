@@ -1,5 +1,6 @@
 package com.rectime.mobile.core.haptics
 
+import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.runtime.Composable
@@ -14,10 +15,18 @@ private class AndroidAppHapticFeedback(
 
         // システムの触覚設定に従い、VIBRATE権限を必要としない。
         runCatching {
-            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+            view.performHapticFeedback(refreshThresholdHapticConstant(Build.VERSION.SDK_INT))
         }
     }
 }
+
+internal fun refreshThresholdHapticConstant(sdkInt: Int): Int =
+    if (sdkInt >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        // Android 14以降は、引っ張り更新が可能になった瞬間に対応する標準振動を使う。
+        HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
+    } else {
+        HapticFeedbackConstants.CLOCK_TICK
+    }
 
 @Composable
 actual fun rememberPlatformHapticFeedback(): AppHapticFeedback {
