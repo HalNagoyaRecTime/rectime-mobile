@@ -2,14 +2,14 @@ package com.rectime.mobile.feature.notifications
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
-import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.network.HttpStatusException
-import io.ktor.http.HttpStatusCode
 import com.rectime.mobile.core.util.nowMinuteStateFlow
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -76,7 +76,7 @@ class NotificationsViewModel(
     }
 
     private fun loadNotifications(source: NotificationRefreshSource? = null) {
-        // First accepted operation owns the animation; later requests are ignored, never queued.
+        // 最初に受け付けた更新だけがアニメーションを担当し、更新中の追加要求は無視する。
         if (_uiState.value.isRefreshing || loadJob?.isActive == true) return
 
         val isRefresh = source != null
@@ -91,7 +91,10 @@ class NotificationsViewModel(
         loadJob = viewModelScope.launch {
             val request = CacheRequestGeneration()
             try {
-                when (val result = request.validate(withMinimumRefreshDuration(isRefresh) { feedStore.load(force = isRefresh) })) {
+                val result = request.validate(
+                    withMinimumRefreshDuration(isRefresh) { feedStore.load(force = isRefresh) },
+                )
+                when (result) {
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = _uiState.value.copy(
                             notifications = result.value,
@@ -150,7 +153,11 @@ class NotificationsViewModel(
                     readIds = _uiState.value.readIds,
                 )
             } finally {
-                _uiState.value = _uiState.value.copy(isLoading = false, isUpdating = false, refreshSource = null)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    isUpdating = false,
+                    refreshSource = null,
+                )
             }
         }
     }
@@ -211,7 +218,10 @@ class NotificationDetailViewModel(
     private fun loadNotification() {
         if (loadJob?.isActive == true) return
 
-        _uiState.value = _uiState.value.copy(isLoading = _uiState.value.notification == null, error = null)
+        _uiState.value = _uiState.value.copy(
+            isLoading = _uiState.value.notification == null,
+            error = null,
+        )
         loadJob = viewModelScope.launch {
             val request = CacheRequestGeneration()
             try {
@@ -223,22 +233,28 @@ class NotificationDetailViewModel(
                         onCached = {
                             val participating = cachedParticipation(it)
                             if (request.isCurrent) {
-                                _uiState.value = _uiState.value.copy(notification = it, isLoading = false,
-                                    isParticipatingInRelatedEvent = participating)
+                                _uiState.value = _uiState.value.copy(
+                                    notification = it,
+                                    isLoading = false,
+                                    isParticipatingInRelatedEvent = participating,
+                                )
                                 readStore.markRead(notificationId)
                             }
                         },
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
-                        // Display the body before waiting for the auxiliary participation request.
+                        // 関連イベントの参加情報を取得する前に、通知本文を表示する。
                         val cachedParticipation = cachedParticipation(result.value)
                         if (!request.isCurrent) {
                             _uiState.value = NotificationDetailUiState(isLoading = false)
                             return@launch
                         }
-                        _uiState.value = _uiState.value.copy(notification = result.value, isLoading = false,
-                            isParticipatingInRelatedEvent = cachedParticipation)
+                        _uiState.value = _uiState.value.copy(
+                            notification = result.value,
+                            isLoading = false,
+                            isParticipatingInRelatedEvent = cachedParticipation,
+                        )
                         readStore.markRead(notificationId)
                         val isParticipating = fetchIsParticipating(result.value)
                         if (!request.isCurrent) {
@@ -261,7 +277,7 @@ class NotificationDetailViewModel(
                                 error = result.error.toNotificationErrorMessage(),
                             )
                         } else {
-                            // Network already failed: do not wait for another timeout.
+                            // 通信失敗後は参加情報の追加通信を行わず、タイムアウトの待ち時間を増やさない。
                             _uiState.value = NotificationDetailUiState(
                                 notification = result.value,
                                 isLoading = false,
@@ -335,7 +351,8 @@ private fun Exception.toNotificationErrorMessage(): String = when {
     else -> "通知の取得に失敗しました"
 }
 
-internal fun Exception.invalidatesNotificationCache(): Boolean = this is HttpStatusException && (
-    status == HttpStatusCode.Unauthorized || status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
-        code in setOf("UNAUTHORIZED", "NOTIFICATION_NOT_FOUND", "NOT_FOUND")
-    )
+internal fun Exception.invalidatesNotificationCache(): Boolean =
+    this is HttpStatusException && (
+        status == HttpStatusCode.Unauthorized || status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
+            code in setOf("UNAUTHORIZED", "NOTIFICATION_NOT_FOUND", "NOT_FOUND")
+        )

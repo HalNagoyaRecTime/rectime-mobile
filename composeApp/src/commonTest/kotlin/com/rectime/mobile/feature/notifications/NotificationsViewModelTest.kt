@@ -352,7 +352,7 @@ class NotificationsViewModelTest {
     @Test
     fun failedRefreshWithDiskUnavailableKeepsValidInMemoryNotifications() = runTest(testDispatcher) {
         // Disk failure does not invalidate the in-memory feed for the current session.
-        // Session changes are checked separately by CacheRequestGeneration.
+        // セッション変更はCacheRequestGenerationで別途確認する。
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
             callCount++
