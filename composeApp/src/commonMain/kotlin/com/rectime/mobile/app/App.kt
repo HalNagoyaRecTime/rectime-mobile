@@ -147,6 +147,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             var hasResumed by remember(session.user.id) { mutableStateOf(false) }
             key(session.user.id) {
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    authViewModel.onForeground()
                     // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
                     if (hasResumed) badgeViewModel.onForeground(session.user.id)
                     else badgeViewModel.onSession(session.user.id)

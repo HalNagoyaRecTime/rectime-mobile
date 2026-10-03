@@ -13,16 +13,23 @@ class AuthApiException(
 internal object AuthSessionInvalidationHandler {
     private var owner: Any? = null
     private var refresh: (suspend (String) -> String?)? = null
+    private var deactivate: (suspend (String) -> Unit)? = null
 
-    fun register(owner: Any, refresh: suspend (String) -> String?) {
+    fun register(owner: Any, refresh: suspend (String) -> String?, deactivate: suspend (String) -> Unit) {
         this.owner = owner
         this.refresh = refresh
+        this.deactivate = deactivate
     }
 
     fun unregister(owner: Any) {
         if (this.owner !== owner) return
         this.owner = null
         refresh = null
+        deactivate = null
+    }
+
+    suspend fun accountDeactivated(accessToken: String) {
+        deactivate?.invoke(accessToken)
     }
 
     suspend fun refreshToken(accessToken: String): String? {
@@ -36,11 +43,14 @@ internal object AuthSessionInvalidationHandler {
 internal const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
 internal const val AUTH_NETWORK_ERROR_MESSAGE =
     "通信に失敗しました。ネットワーク接続を確認して、もう一度お試しください。"
+internal const val USER_DEACTIVATED_CODE = "USER_DEACTIVATED"
+internal const val AUTH_DEACTIVATED_MESSAGE = "このアカウントは無効化されています。管理者にお問い合わせください。"
 internal const val AUTH_EXPIRED_MESSAGE =
     "ログイン情報の有効期限が切れました。もう一度ログインしてください。"
 internal const val AUTH_CANCELED_MESSAGE = "ログインをキャンセルしました。"
 
 internal fun authErrorMessage(error: Throwable, debugDetailsEnabled: Boolean): String = when {
+    error is AuthApiException && error.statusCode == 401 && error.errorCode == USER_DEACTIVATED_CODE -> AUTH_DEACTIVATED_MESSAGE
     error is AuthApiException -> debugAuthMessage(
         detail = "HTTP ${error.statusCode}${error.errorCode?.let { " / $it" }.orEmpty()}",
         debugDetailsEnabled = debugDetailsEnabled,

@@ -27,6 +27,66 @@ class AuthRequestRecoveryTest {
     }
 
     @Test
+    fun deactivationSkipsRefreshAndLeavesResponseReadable() = runTest {
+        var refreshes = 0
+        val rejectedTokens = mutableListOf<String>()
+        SessionTokenHolder.accessToken = "old-token"
+        val body = """{"error":{"code":"USER_DEACTIVATED","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Unauthorized) }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                refreshToken = { refreshes++; "new-token" }
+                accountDeactivated = { rejectedTokens += it }
+            }
+        }
+        try {
+            assertEquals(body, client.get("$BASE/api/v1/events").bodyAsText())
+            assertEquals(0, refreshes)
+            assertEquals(listOf("old-token"), rejectedTokens)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun deactivationDuringRetryIsReportedWithTheRefreshedToken() = runTest {
+        var calls = 0
+        val rejectedTokens = mutableListOf<String>()
+        SessionTokenHolder.accessToken = "old-token"
+        val body = """{"error":{"code":"USER_DEACTIVATED","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine {
+            calls++
+            respond(if (calls == 1) "expired" else body, HttpStatusCode.Unauthorized)
+        }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                refreshToken = { "new-token" }
+                accountDeactivated = { rejectedTokens += it }
+            }
+        }
+        try {
+            assertEquals(body, client.get("$BASE/api/v1/events").bodyAsText())
+            assertEquals(2, calls)
+            assertEquals(listOf("new-token"), rejectedTokens)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun externalDeactivationResponseCannotSignOutTheUser() = runTest {
+        var deactivations = 0
+        SessionTokenHolder.accessToken = "old-token"
+        val body = """{"error":{"code":"USER_DEACTIVATED","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Unauthorized) }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                accountDeactivated = { deactivations++ }
+            }
+        }
+        try {
+            assertEquals(body, client.get("https://external.example.com/page").bodyAsText())
+            assertEquals(0, deactivations)
+        } finally { client.close() }
+    }
+
+    @Test
     fun retriesTheOriginalRequestWithTheRefreshedToken() = runTest {
         val tokens = mutableListOf<String?>()
         var refreshes = 0
