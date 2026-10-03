@@ -538,6 +538,20 @@ class EventDetailViewModelTest {
         assertFalse(state.isOffline)
     }
 
+    @Test
+    fun detailUpdateDuringGatheringFetchIsUsedForFinalVisibleBody() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val client = gatedClient(gate, "/gatherings")
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        val saved = requireNotNull(EventCache(cache).loadDetail(1))
+        EventCache(cache).saveDetail(saved.copy(eventName = "更新後"))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.uiState.value.eventDetail?.eventName)
+    }
+
     // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
     // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
     private class InMemoryKeyValueStore : KeyValueStore {

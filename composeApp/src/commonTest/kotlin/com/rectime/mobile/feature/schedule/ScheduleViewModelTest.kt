@@ -4,6 +4,8 @@ import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.model.EventVenue
+import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.feature.event.EventCache
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -592,6 +594,35 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertNull(viewModel.error)
         assertEquals(2, viewModel.events.value.size)
+    }
+
+    @Test
+    fun delayedListResponseCannotRollBackSavedDetailOrVisibleSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { gate.await(); respondJson(eventsJson) }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        EventCache(cache).saveDetail(EventDetailResponse(3, "更新後", emptyList(), "1030", "1100", null))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.events.value.first { it.eventId == 3 }.title)
+        assertEquals("更新後", EventCache(cache).loadDetail(3)?.eventName)
+    }
+
+    @Test
+    fun detailUpdateDuringMinimumRefreshDurationIsUsedForVisibleSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJson) }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.isRefreshing)
+        EventCache(cache).saveDetail(EventDetailResponse(3, "更新後", emptyList(), "1030", "1100", null))
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.events.value.first { it.eventId == 3 }.title)
+        assertEquals("更新後", EventCache(cache).loadDetail(3)?.eventName)
     }
 
     // ---- fetchEvents 異常系(キャッシュなし) ----
