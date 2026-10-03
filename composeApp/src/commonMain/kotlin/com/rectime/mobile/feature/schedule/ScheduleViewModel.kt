@@ -10,6 +10,8 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.feature.event.EventCache
 import com.rectime.mobile.feature.event.EventCacheRequest
 import com.rectime.mobile.core.config.apiBaseUrl
@@ -46,6 +48,7 @@ class ScheduleViewModel(
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
     private val eventCache = EventCache(cache)
+    private var contentSession = CacheRequestGeneration()
     private var enteredSession: CacheRequestGeneration? = null
     private var displayedResponse: EventsResponse? = null
     private var displayedRequest: EventCacheRequest? = null
@@ -113,6 +116,10 @@ class ScheduleViewModel(
 
     private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false) {
         if (isUpdating) return
+        if (!contentSession.isCurrent) {
+            _events.value = emptyList()
+            contentSession = CacheRequestGeneration()
+        }
         isUpdating = true
         isLoading = !isRefresh && !isBackground
         isRefreshing = isRefresh
@@ -128,7 +135,7 @@ class ScheduleViewModel(
                         // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
                         saveCache = {},
                         onCached = { saved ->
-                            if (!isRefresh && !isBackground) {
+                            if (!isRefresh && !isBackground && _events.value.isEmpty()) {
                                 publishEvents(saved, cacheRequest)
                                 isLoading = false
                             }
@@ -151,17 +158,17 @@ class ScheduleViewModel(
                         // 失効の確定とログイン画面への遷移は共通の認証処理に任せる。
                         // 更新を確認できない401では保存済みの内容を維持する。
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status == HttpStatusCode.Forbidden) {
+                        if (result.error.invalidatesDisplayedContent()) {
                             clearDisplayedEvents()
-                            error = "スケジュールを表示する権限がありません"
+                            error = if (status == HttpStatusCode.Forbidden) "スケジュールを表示する権限がありません" else "通信に失敗しました"
                             isOffline = false
                         } else {
                             // 前面復帰の失敗では、表示中の値を古いディスクキャッシュへ戻さない。
-                            if (!isBackground) {
-                                val latest = eventCache.reconcileEvents(result.value, cacheRequest)
-                                if (!request.isCurrent) return@launch
-                                publishEvents(latest, cacheRequest)
-                            }
+                            val displayed = displayedResponse ?: result.value
+                            val displayRequest = displayedRequest ?: cacheRequest
+                            val latest = eventCache.reconcileEvents(displayed, displayRequest)
+                            if (!request.isCurrent) return@launch
+                            publishEvents(latest, displayRequest)
                             isOffline = true
                             // 通信失敗時のフォールバックは「オフライン」として静かに
                             // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
@@ -172,11 +179,7 @@ class ScheduleViewModel(
 
                     is CachedFetchResult.Failed -> {
                         val status = (result.error as? HttpStatusException)?.status
-                        if (
-                            isBackground && request.isCurrent && status !in setOf(
-                                HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden,
-                            )
-                        ) {
+                        if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(result.error, contentSession)) {
                             // 保存に失敗してキャッシュがなくても、表示中のデータは維持する。
                             isOffline = true
                             result.error.printStackTrace()
@@ -196,8 +199,13 @@ class ScheduleViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (!isBackground) error = "通信に失敗しました"
-                isOffline = isBackground
+                if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(e, contentSession)) {
+                    isOffline = true
+                } else {
+                    clearDisplayedEvents()
+                    error = "通信に失敗しました"
+                    isOffline = false
+                }
                 e.printStackTrace()
             } finally {
                 isLoading = false

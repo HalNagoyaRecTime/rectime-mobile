@@ -8,6 +8,8 @@ import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
 import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
@@ -103,6 +105,7 @@ class AuthViewModel(
                             it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
                         } == true) {
                         photoRepository?.restore(stored.user.id)
+                        if (loggingOut) return@withLock
                         SessionTokenHolder.accessToken = stored.accessToken
                         _uiState.update {
                             it.copy(isLoading = false, isRestoringSession = false, session = stored, pendingAuth = storedPending, message = "")
@@ -131,7 +134,14 @@ class AuthViewModel(
         if (devAuthBypassEnabled || loggingOut || sessionCheckJob?.isActive == true) return
         val stored = _uiState.value.session ?: return
         sessionCheckJob = viewModelScope.launch {
-            checkStoredSession(stored, sessionStore.loadPendingAuth())
+            try {
+                checkStoredSession(stored, sessionStore.loadPendingAuth())
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // 端末内の読み込み失敗も、前面復帰時のログイン解除の理由にしない。
+                error.printStackTrace()
+            }
         }
     }
 
@@ -150,6 +160,7 @@ class AuthViewModel(
                         photoRepository?.restore(user.id)
                     }
                     sessionStore.save(session)
+                    if (loggingOut) return@withLock
                     SessionTokenHolder.accessToken = session.accessToken
                     if (storedPending != null && sessionStore.loadPendingAuth() == storedPending) {
                         sessionStore.clearPendingAuth()
@@ -337,6 +348,9 @@ class AuthViewModel(
                     } else {
                         photoFetchJob?.cancel()
                         check(photoRepository?.clear() != false) { "保存済みのプロフィール写真を削除できませんでした" }
+                        // 前ユーザーの内容を消せた場合だけ、新しいログインを永続化する。
+                        // 保存を先に行うと、削除失敗後の再起動で別ユーザーのキャッシュが見えてしまう。
+                        cache.clearAll()
                         sessionStore.save(session)
                         loggingOut = false
                         previousAccessToken = null
@@ -344,8 +358,6 @@ class AuthViewModel(
                         refreshWindowStartedAt = 0L
                         SessionTokenHolder.accessToken = session.accessToken
                         sessionStore.clearPendingAuth()
-                        // 共有端末では、新規ログイン時に前ユーザーのキャッシュを消去する。
-                        cache.clearAll()
                         pushTokenLifecycle.updateSession(session)
                         _uiState.update {
                             it.copy(
@@ -383,30 +395,39 @@ class AuthViewModel(
 
     fun logout() {
         val targetSession = _uiState.value.session ?: return
+        if (loggingOut) return
         loggingOut = true
         previousAccessToken = null
         SessionTokenHolder.accessToken = null
-        pushTokenLifecycle.beginLogout(targetSession)
+        try {
+            pushTokenLifecycle.beginLogout(targetSession)
+        } catch (error: Exception) {
+            error.printStackTrace()
+        }
+        // 通信や端末内の削除を待たず、現在のログイン済み画面を閉じる。
+        _uiState.value = AuthUiState(isLoading = true)
         viewModelScope.launch {
-            val photoCleared = sessionTransitionMutex.withLock {
-                val stored = sessionStore.load()
-                val storedSessionIsTarget = stored == null || (
-                    stored.refreshTokenId == targetSession.refreshTokenId &&
-                        stored.user.id == targetSession.user.id
-                    )
-                if (!storedSessionIsTarget) {
-                    // logout開始前に新しいSessionへ切り替わっていた場合は、
-                    // 新ユーザーの取得中/保存済み写真を古いlogoutで触らない。
-                    true
-                } else {
-                    photoFetchJob?.cancel()
-                    // サーバーのlogout完了を待たず、対象Sessionの写真は端末から消す。
-                    photoRepository?.clear() ?: true
-                }
-            }
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            val pendingAtLogoutStart = runCatching { sessionStore.loadPendingAuth() }.getOrNull()
+            var preparationSucceeded = true
+            var pendingAtLogoutStart: PendingAuth? = null
             try {
+                try {
+                    pendingAtLogoutStart = sessionStore.loadPendingAuth()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    preparationSucceeded = false
+                    error.printStackTrace()
+                }
+                sessionTransitionMutex.withLock {
+                    val stored = readStoredSessionForCleanup()
+                    if (stored.getOrNull()?.let { !it.belongsTo(targetSession) } != true) {
+                        photoFetchJob?.cancel()
+                        // サーバーの応答待ちの間も写真を表示・復元しない。
+                        preparationSucceeded = cleanupAction {
+                            check(photoRepository?.clear() != false) { "保存済み写真を削除できませんでした" }
+                        } && preparationSucceeded && stored.isSuccess
+                    }
+                }
                 if (!devAuthBypassEnabled) {
                     pushTokenLifecycle.logout(targetSession) { fcmToken ->
                         api.logout(targetSession, fcmToken)
@@ -414,50 +435,36 @@ class AuthViewModel(
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                // Push解除やサーバーログアウトに失敗してもlocal logoutを続ける。
+                // Push解除やサーバーログアウトに失敗しても端末内の削除を続ける。
+                error.printStackTrace()
             } finally {
-                sessionTransitionMutex.withLock {
-                    val stored = sessionStore.load()
-                    val storedSessionIsTarget = stored == null || (
-                        stored.refreshTokenId == targetSession.refreshTokenId &&
-                            stored.user.id == targetSession.user.id
-                        )
-                    if (!storedSessionIsTarget) {
-                        _uiState.update { current ->
-                            val currentSession = current.session
-                            if (currentSession == null || currentSession.refreshTokenId == targetSession.refreshTokenId) {
-                                current.copy(
-                                    isLoading = false,
-                                    session = stored,
-                                    error = null,
-                                    message = "Logged in",
-                                )
-                            } else {
-                                current.copy(isLoading = false)
+                // 呼び出し元が終了しても、端末内のログイン情報の削除は完了させる。
+                withContext(NonCancellable) {
+                    try {
+                        sessionTransitionMutex.withLock {
+                            val stored = readStoredSessionForCleanup()
+                            val newer = stored.getOrNull()?.takeUnless { it.belongsTo(targetSession) }
+                            val current = _uiState.value.session
+                            if (newer != null || current?.let { !it.belongsTo(targetSession) } == true) {
+                                // 古いログアウトの完了で、後からログインしたアカウントを消さない。
+                                val session = current?.takeUnless { it.belongsTo(targetSession) } ?: newer
+                                if (session != null) {
+                                    SessionTokenHolder.accessToken = session.accessToken
+                                    _uiState.update { it.copy(session = session, isLoading = false, error = null, message = "Logged in") }
+                                }
+                                return@withLock
                             }
+                            finishLocalSession(
+                                message = null,
+                                expectedPendingAuth = pendingAtLogoutStart,
+                                clearEmptyPendingAuth = true,
+                                preparationSucceeded = preparationSucceeded && stored.isSuccess,
+                            )
                         }
-                        return@withLock
-                    }
-
-                    // 新しいSessionが保存済みなら、古いlogoutでSessionやcacheを消さない。
-                    SessionTokenHolder.accessToken = null
-                    val sessionCleared = sessionStore.clear()
-                    val currentPending = sessionStore.loadPendingAuth()
-                    val pendingCleared = when {
-                        pendingAtLogoutStart == null && currentPending == null -> sessionStore.clearPendingAuth()
-                        currentPending != pendingAtLogoutStart -> true
-                        else -> sessionStore.clearPendingAuth()
-                    }
-                    cache.clearAll()
-                    val cleared = sessionCleared && pendingCleared && photoCleared
-                    _uiState.value = if (cleared) {
-                        AuthUiState(message = "Logged out")
-                    } else {
-                        AuthUiState(error = LOGOUT_FAILED_MESSAGE)
+                    } finally {
+                        pushTokenLifecycle.completeLogout(targetSession)
                     }
                 }
-                // 古いSessionの復元禁止はSessionStoreとcacheのcleanup完了後に確定する。
-                pushTokenLifecycle.completeLogout(targetSession)
             }
         }
     }
@@ -488,7 +495,14 @@ class AuthViewModel(
                 // 同じセッションの更新を待った通信は、直前のトークンだけを引き継ぐ。
                 return@refresh current.accessToken.takeIf { previousAccessToken == accessToken }
             }
-            val pendingAtRefreshStart = sessionStore.loadPendingAuth()
+            val pendingAtRefreshStart = try {
+                sessionStore.loadPendingAuth()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                error.printStackTrace()
+                return@refresh null
+            }
 
             val now = nowMillis()
             if (refreshWindowStartedAt == 0L || now - refreshWindowStartedAt > REFRESH_WINDOW_MILLIS) {
@@ -510,6 +524,7 @@ class AuthViewModel(
                         stored?.refreshTokenId == current.refreshTokenId
                     ) {
                         sessionStore.save(refreshed)
+                        if (loggingOut) return@withLock null
                         previousAccessToken = accessToken
                         SessionTokenHolder.accessToken = refreshed.accessToken
                         pushTokenLifecycle.updateSession(refreshed)
@@ -563,33 +578,71 @@ class AuthViewModel(
             if (loggingOut) return@withLock
             if (expectedAccessToken != null && current?.accessToken != expectedAccessToken) return@withLock
             if (expectedSession != null && current != null && current.refreshTokenId != expectedSession.refreshTokenId) return@withLock
-            val stored = sessionStore.load()
-            if (expectedSession != null && stored?.refreshTokenId != expectedSession.refreshTokenId) return@withLock
-            previousAccessToken = null
-            SessionTokenHolder.accessToken = null
-            photoFetchJob?.cancel()
-            // 利用停止・失効が確定したら、削除処理の成否にかかわらずログイン画面へ戻す。
-            _uiState.value = AuthUiState(error = message)
-            suspend fun cleanup(action: suspend () -> Unit) {
-                try {
-                    action()
-                } catch (error: CancellationException) {
-                    throw error
-                } catch (error: Exception) {
-                    // 1つの保存領域が壊れていても、残りの削除処理は続ける。
-                    error.printStackTrace()
-                }
-            }
-            cleanup { check(sessionStore.clear()) { "保存済みログインを削除できませんでした" } }
-            cleanup { check(photoRepository?.clear() != false) { "保存済み写真を削除できませんでした" } }
-            cleanup {
-                if (expectedPendingAuth != null && sessionStore.loadPendingAuth() == expectedPendingAuth) {
-                    check(sessionStore.clearPendingAuth()) { "保存済み認証処理を削除できませんでした" }
-                }
-            }
-            cleanup { cache.clearAll() }
+            val stored = readStoredSessionForCleanup()
+            if (expectedSession != null && stored.getOrNull()?.let { !it.belongsTo(expectedSession) } == true) return@withLock
+            finishLocalSession(
+                message = message,
+                expectedPendingAuth = expectedPendingAuth,
+                preparationSucceeded = stored.isSuccess,
+            )
         }
     }
+
+    /** 呼び出し元がsessionTransitionMutexを保持し、対象のログインを確認した後に使う。 */
+    private suspend fun finishLocalSession(
+        message: String?,
+        expectedPendingAuth: PendingAuth?,
+        clearEmptyPendingAuth: Boolean = false,
+        preparationSucceeded: Boolean = true,
+    ) {
+        previousAccessToken = null
+        SessionTokenHolder.accessToken = null
+        photoFetchJob?.cancel()
+        _uiState.value = AuthUiState(isLoading = message == null, error = message)
+        // 失効・無効化・ログアウトで同じ削除処理を使い、一箇所の失敗で残りを止めない。
+        val sessionCleared = cleanupAction {
+            check(sessionStore.clear()) { "保存済みログインを削除できませんでした" }
+        }
+        val photoCleared = cleanupAction {
+            check(photoRepository?.clear() != false) { "保存済み写真を削除できませんでした" }
+        }
+        val pendingCleared = cleanupAction {
+            val pending = sessionStore.loadPendingAuth()
+            if ((expectedPendingAuth != null && pending == expectedPendingAuth) ||
+                (clearEmptyPendingAuth && expectedPendingAuth == null && pending == null)) {
+                check(sessionStore.clearPendingAuth()) { "保存済み認証処理を削除できませんでした" }
+            }
+        }
+        val cacheCleared = cleanupAction { cache.clearAll() }
+        if (message == null) {
+            val cleared = preparationSucceeded && sessionCleared && photoCleared && pendingCleared && cacheCleared
+            _uiState.update {
+                it.copy(isLoading = false, error = if (cleared) null else LOGOUT_FAILED_MESSAGE, message = if (cleared) "Logged out" else "")
+            }
+        }
+    }
+
+    private suspend fun cleanupAction(action: suspend () -> Unit): Boolean = try {
+        action()
+        true
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        error.printStackTrace()
+        false
+    }
+
+    private suspend fun readStoredSessionForCleanup(): Result<AuthSession?> = try {
+        Result.success(sessionStore.load())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        error.printStackTrace()
+        Result.failure(error)
+    }
+
+    private fun AuthSession.belongsTo(other: AuthSession): Boolean =
+        refreshTokenId == other.refreshTokenId && user.id == other.user.id
 
     /** ログイン時、または起動時に24時間経過している場合だけ写真を取得する。 */
     private fun fetchPhotoIfDue(session: AuthSession, force: Boolean = false) {

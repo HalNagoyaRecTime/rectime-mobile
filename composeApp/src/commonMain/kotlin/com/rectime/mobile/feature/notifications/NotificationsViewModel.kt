@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.network.HttpStatusException
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
@@ -280,20 +283,28 @@ class NotificationDetailViewModel(
                     }
 
                     is CachedFetchResult.Failed -> {
-                        _uiState.value = NotificationDetailUiState(
-                            isLoading = false,
-                            error = result.error.toNotificationErrorMessage(),
-                        )
+                        if (_uiState.value.notification != null && request.canRetainDisplayedContent(result.error, detailSession)) {
+                            _uiState.update { it.copy(isLoading = false, isUpdating = false, isOffline = true, error = null) }
+                        } else {
+                            _uiState.value = NotificationDetailUiState(
+                                isLoading = false,
+                                error = result.error.toNotificationErrorMessage(),
+                            )
+                        }
                         result.error.printStackTrace()
                     }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = NotificationDetailUiState(
-                    isLoading = false,
-                    error = e.toNotificationErrorMessage(),
-                )
+                if (_uiState.value.notification != null && request.canRetainDisplayedContent(e, detailSession)) {
+                    _uiState.update { it.copy(isLoading = false, isUpdating = false, isOffline = true, error = null) }
+                } else {
+                    _uiState.value = NotificationDetailUiState(
+                        isLoading = false,
+                        error = e.toNotificationErrorMessage(),
+                    )
+                }
             }
         }
     }
@@ -338,7 +349,4 @@ private fun Exception.toNotificationErrorMessage(): String = when {
 }
 
 internal fun Exception.invalidatesNotificationCache(): Boolean =
-    this is HttpStatusException && (
-        status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
-            code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND")
-        )
+    invalidatesDisplayedContent()
