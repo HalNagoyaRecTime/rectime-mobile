@@ -47,7 +47,10 @@ fun AuthGate(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val session = state.session
 
-    if (session == null) {
+    if (state.isRestoringSession) {
+        // 端末内の復元が終わるまでログイン画面を出さない。通信の完了は待たない。
+        Box(Modifier.fillMaxSize().background(AppTheme.colors.commonBackground))
+    } else if (session == null) {
         AuthLoginScreen(
             state = state,
             onLogin = viewModel::startLogin,

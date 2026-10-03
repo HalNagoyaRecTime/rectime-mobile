@@ -1,5 +1,7 @@
 package com.rectime.mobile.core.cache
 
+import com.rectime.mobile.core.network.HttpStatusException
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 
 sealed class CachedFetchResult<out T> {
@@ -25,6 +27,19 @@ internal class CacheRequestGeneration {
     fun <T> validate(result: CachedFetchResult<T>): CachedFetchResult<T> =
         if (isCurrent) result else CachedFetchResult.Failed(StaleCacheGenerationException())
 }
+
+/** 同じログイン中の通信失敗では表示を維持する。失効の判断は共通の認証管理に任せる。 */
+internal fun CacheRequestGeneration.canRetainDisplayedContent(
+    error: Exception,
+    contentSession: CacheRequestGeneration,
+): Boolean = isCurrent && contentSession.isCurrent && !error.invalidatesDisplayedContent()
+
+/** 閲覧拒否・削除が確認できた内容は、通信失敗時の代替表示に使わない。 */
+internal fun Exception.invalidatesDisplayedContent(): Boolean =
+    this is HttpStatusException && (
+        status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
+            code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND")
+        )
 
 // 保存済みの内容を先に表示し、既存の通信失敗・セッション変更のガードを使って更新する。
 suspend fun <T> fetchWithCacheFirst(

@@ -3,10 +3,13 @@ package com.rectime.mobile.core.network
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.auth.AuthSessionInvalidationHandler
+import com.rectime.mobile.feature.auth.USER_DEACTIVATED_CODE
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
 import io.ktor.serialization.kotlinx.json.json
@@ -24,6 +27,8 @@ expect fun createHttpClient(): HttpClient
 // を、グローバル状態を書き換えずに実現できるようにするため。
 internal class MobileAuthHeadersConfig {
     var baseUrl: String = apiBaseUrl
+    var refreshToken: suspend (String) -> String? = AuthSessionInvalidationHandler::refreshToken
+    var accountDeactivated: suspend (String) -> Unit = AuthSessionInvalidationHandler::accountDeactivated
 }
 
 internal val MobileAuthHeadersPlugin = createClientPlugin(
@@ -31,6 +36,8 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
     ::MobileAuthHeadersConfig,
 ) {
     val baseUrl = pluginConfig.baseUrl
+    val refreshToken = pluginConfig.refreshToken
+    val accountDeactivated = pluginConfig.accountDeactivated
     onRequest { request, _ ->
         if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
         val token = SessionTokenHolder.accessToken?.takeIf(String::isNotBlank) ?: return@onRequest
@@ -38,17 +45,43 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
             request.headers.append(name, value)
         }
     }
-    onResponse { response ->
-        val url = response.call.request.url.toString()
-        val requestToken = response.call.request.headers[HttpHeaders.Authorization]
+    on(Send) { request ->
+        val targetsApi = isApiUrl(request.url.toString(), baseUrl)
+        val originalCall = proceed(request)
+        val url = originalCall.request.url.toString()
+        val requestToken = originalCall.request.headers[HttpHeaders.Authorization]
             ?.takeIf { it.startsWith("Bearer ") }
             ?.removePrefix("Bearer ")
             ?.takeIf(String::isNotBlank)
-        // 認証APIの401はAuthViewModel自身で分類する。リソースAPIの401だけを
-        // refresh要求として通知し、通知時点のTokenも競合判定用に渡す。
-        if (response.status.value == 401 && requestToken != null && !isAuthApiPath(url, baseUrl)) {
-            AuthSessionInvalidationHandler.notifyUnauthorized(requestToken)
+        // 別ホストや認証APIには更新・再試行を適用しない。
+        if (originalCall.response.status.value != 401 || requestToken == null ||
+            !targetsApi || !isApiUrl(url, baseUrl)
+        ) return@on originalCall
+
+        val authPath = isAuthApiPath(url, baseUrl)
+        val path = Url(url).encodedPath
+        // ログイン前の認証APIの拒否を、現在のログインへの拒否と取り違えない。
+        if (authPath && path !in setOf("/api/v1/auth/me", "/api/v1/auth/me/photo")) return@on originalCall
+        // アカウント無効化は更新で復旧できないため、通常の期限切れと区別する。
+        if (apiErrorException(originalCall.response.status, originalCall.response.bodyAsText()).code == USER_DEACTIVATED_CODE) {
+            accountDeactivated(requestToken)
+            return@on originalCall
         }
+        // 認証確認の通常の401は、AuthViewModel自身で更新を判断する。
+        if (authPath) return@on originalCall
+        val refreshed = refreshToken(requestToken)
+            ?.takeIf { it.isNotBlank() && it != requestToken }
+            ?: return@on originalCall
+        request.headers.remove(HttpHeaders.Authorization)
+        request.headers.append(HttpHeaders.Authorization, "Bearer $refreshed")
+        // 再試行した結果が401でも、元のリクエストにつき一度だけ。
+        val retriedCall = proceed(request)
+        if (retriedCall.response.status.value == 401 && isApiUrl(retriedCall.request.url.toString(), baseUrl) &&
+            apiErrorException(retriedCall.response.status, retriedCall.response.bodyAsText()).code == USER_DEACTIVATED_CODE
+        ) {
+            accountDeactivated(refreshed)
+        }
+        retriedCall
     }
 }
 

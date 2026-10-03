@@ -459,7 +459,7 @@ class EventDetailViewModelTest {
     }
 
     @Test
-    fun fetchEventDetailIgnoresCacheAndShowsSessionExpiredOnUnauthorized() = runTest(testDispatcher) {
+    fun fetchEventDetailKeepsCacheWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         seedCache(eventId = 1, cache)
         val client = buildClient(
@@ -472,10 +472,10 @@ class EventDetailViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
-        assertEquals("ログイン情報の有効期限が切れました", state.error)
-        assertNull(state.eventDetail)
-        assertTrue(state.gatherings.isEmpty())
-        assertFalse(state.isOffline)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertFalse(state.gatherings.isEmpty())
+        assertTrue(state.isOffline)
     }
 
     @Test
@@ -517,9 +517,8 @@ class EventDetailViewModelTest {
     }
 
     @Test
-    fun fetchEventDetailIgnoresCachedGatheringWhenGatheringFetchReturnsUnauthorized() = runTest(testDispatcher) {
-        // eventDetailはFreshで取得成功、gatheringだけ401(セッション切れ)になるケース。
-        // 古いgatheringキャッシュを単なる「オフライン」として出し続けてはならない。
+    fun fetchEventDetailKeepsCachedGatheringWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
+        // eventDetailは取得成功、gatheringの401だけではセッション失効と断定しない。
         val cache = LocalCache(InMemoryKeyValueStore())
         seedCache(eventId = 1, cache)
         val client = buildClient(
@@ -534,8 +533,8 @@ class EventDetailViewModelTest {
         assertEquals(false, state.isLoading)
         assertNull(state.error)
         assertEquals("100m走", state.eventDetail?.eventName)
-        assertTrue(state.gatherings.isEmpty())
-        assertFalse(state.isOffline)
+        assertFalse(state.gatherings.isEmpty())
+        assertTrue(state.isOffline)
     }
 
     @Test

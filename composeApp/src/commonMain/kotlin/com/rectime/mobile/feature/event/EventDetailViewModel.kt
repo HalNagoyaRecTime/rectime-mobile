@@ -7,6 +7,8 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.network.EventDetailResponse
@@ -38,6 +40,7 @@ class EventDetailViewModel(
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
 
+    private val contentSession = CacheRequestGeneration()
     private val eventCache = EventCache(cache)
     private val gatheringCacheKey = "event_gathering_v1_$eventId"
     private val attendingGatheringCacheKey = "event_attending_gathering_v1_$eventId"
@@ -112,7 +115,7 @@ class EventDetailViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // 削除済み(404)・セッション切れ(401)の古いキャッシュを誤表示しないよう、
+                        // 削除済み(404)・閲覧拒否(403)の古いキャッシュを誤表示しないよう、
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
                         when (status) {
@@ -122,10 +125,6 @@ class EventDetailViewModel(
                             )
                             HttpStatusCode.Forbidden -> _uiState.value = EventDetailUiState(
                                 error = "イベントを表示する権限がありません",
-                            )
-                            HttpStatusCode.Unauthorized -> _uiState.value = EventDetailUiState(
-                                isLoading = false,
-                                error = "ログイン情報の有効期限が切れました",
                             )
                             else -> {
                                 // イベント自体が既にオフライン(キャッシュ)なので、gatheringも
@@ -143,7 +142,7 @@ class EventDetailViewModel(
                                     attendingGatheringId = attending,
                                     isOffline = true,
                                 )
-                                // 401/404以外の理由でのフォールバックは「オフライン」として
+                                // 通信失敗時のフォールバックは「オフライン」として
                                 // 静かに隠れてしまうため、原因を追えるようログには残す。
                                 result.error.printStackTrace()
                             }
@@ -152,11 +151,14 @@ class EventDetailViewModel(
 
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
+                        if (_uiState.value.eventDetail != null && request.canRetainDisplayedContent(result.error, contentSession)) {
+                            _uiState.value = _uiState.value.copy(isLoading = false, error = null, isOffline = true)
+                            return@launch
+                        }
                         _uiState.value = EventDetailUiState(
                             isLoading = false,
                             error = when ((result.error as? HttpStatusException)?.status) {
                                 HttpStatusCode.NotFound -> "イベントが見つかりません"
-                                HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
                                 HttpStatusCode.Forbidden -> "イベントを表示する権限がありません"
                                 else -> "イベント情報の取得に失敗しました"
                             },
@@ -167,10 +169,14 @@ class EventDetailViewModel(
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.value = EventDetailUiState(
-                    isLoading = false,
-                    error = "イベント情報の取得に失敗しました",
-                )
+                if (_uiState.value.eventDetail != null && request.canRetainDisplayedContent(e, contentSession)) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = null, isOffline = true)
+                } else {
+                    _uiState.value = EventDetailUiState(
+                        isLoading = false,
+                        error = "イベント情報の取得に失敗しました",
+                    )
+                }
             }
         }
     }
@@ -190,10 +196,9 @@ class EventDetailViewModel(
         return when (result) {
             is CachedFetchResult.Fresh -> result.value.toSortedModels() to false
             is CachedFetchResult.Cached -> {
-                // 削除済み(404)・セッション切れ(401)の古いキャッシュを、単なる
+                // 削除済み(404)・閲覧拒否(403)の古いキャッシュを、単なる
                 // オフライン表示として出し続けないようにする。
-                val status = (result.error as? HttpStatusException)?.status
-                if (status in setOf(HttpStatusCode.NotFound, HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
+                if (result.error.invalidatesDisplayedContent()) {
                     emptyList<Gathering>() to false
                 } else {
                     result.error.printStackTrace()
