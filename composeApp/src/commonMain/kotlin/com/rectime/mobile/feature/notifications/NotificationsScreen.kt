@@ -1,17 +1,19 @@
 package com.rectime.mobile.feature.notifications
 
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -20,10 +22,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,6 +45,7 @@ import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
@@ -78,56 +82,84 @@ object NotificationsScreen : Screen {
             }
         }
 
-        RootScreenScaffold(
-            title = "通知一覧",
-            isRefreshing = uiState.isPullRefreshing,
-            refreshEnabled = !uiState.isUpdating && !uiState.isRefreshing,
-            onRefresh = viewModel::refreshFromPull,
-            modifier = Modifier.background(AppTheme.colors.notificationBackground),
-            onTrailingClick = if (uiState.isUpdating || uiState.isRefreshing) null else viewModel::refresh,
-            trailing = {
-                NotificationRefreshIcon(isRefreshing = uiState.isHeaderRefreshing)
-            },
-        ) {
-            when {
-                uiState.isLoading -> item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        AppLoadingIndicator()
-                    }
-                }
+        val listState = rememberLazyListState()
+        LaunchedEffect(listState, viewModel) {
+            snapshotFlow {
+                uiState.hasMore && !uiState.isUpdating && !uiState.isLoadingMore &&
+                    !uiState.isRefreshing && uiState.pageError == null &&
+                    (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) >= uiState.notifications.size - 3
+            }.distinctUntilChanged().collect { nearEnd ->
+                if (nearEnd) viewModel.loadMore()
+            }
+        }
 
-                uiState.error != null && uiState.notifications.isEmpty() -> item {
-                    NotificationMessage(
-                        message = requireNotNull(uiState.error),
-                        actionLabel = "再読み込み",
-                        onAction = viewModel::refresh,
-                    )
-                }
+        Box(Modifier.fillMaxSize()) {
+            RootScreenScaffold(
+                title = "通知一覧",
+                lazyListState = listState,
+                isRefreshing = uiState.isPullRefreshing,
+                refreshEnabled = !uiState.isUpdating && !uiState.isRefreshing && !uiState.isLoadingMore,
+                onRefresh = viewModel::refreshFromPull,
+                modifier = Modifier.background(AppTheme.colors.notificationBackground),
+                onTrailingClick = if (uiState.isUpdating || uiState.isRefreshing || uiState.isLoadingMore) null else viewModel::refresh,
+                trailing = {
+                    NotificationRefreshIcon(isRefreshing = uiState.isHeaderRefreshing)
+                },
+            ) {
+                when {
+                    uiState.isLoading -> Unit
 
-                uiState.notifications.isEmpty() -> item {
-                    NotificationMessage(message = "通知はありません")
-                }
-
-                else -> {
-                    items(
-                        count = uiState.notifications.size,
-                        key = { index -> uiState.notifications[index].id },
-                    ) { index ->
-                        val notification = uiState.notifications[index]
-                        NotificationCard(
-                            notification = notification,
-                            now = now,
-                            isRead = notification.id in uiState.readIds,
-                            onClick = {
-                                navigationController.push(
-                                    NotificationDetailScreen(id = notification.id),
-                                )
-                            },
+                    uiState.error != null && uiState.notifications.isEmpty() -> item {
+                        NotificationMessage(
+                            message = requireNotNull(uiState.error),
+                            actionLabel = "再読み込み",
+                            onAction = viewModel::refresh,
                         )
                     }
+
+                    uiState.notifications.isEmpty() && !uiState.isUpdating -> item {
+                        NotificationMessage(message = "通知はありません")
+                    }
+
+                    else -> {
+                        items(
+                            count = uiState.notifications.size,
+                            key = { index -> uiState.notifications[index].id },
+                        ) { index ->
+                            val notification = uiState.notifications[index]
+                            NotificationCard(
+                                notification = notification,
+                                now = now,
+                                isRead = notification.id in uiState.readIds,
+                                onClick = {
+                                    navigationController.push(
+                                        NotificationDetailScreen(id = notification.id),
+                                    )
+                                },
+                            )
+                        }
+                        if (uiState.isLoadingMore) {
+                            item {
+                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    AppLoadingIndicator()
+                                }
+                            }
+                        }
+                        if (uiState.pageError != null) {
+                            item {
+                                NotificationMessage(
+                                    message = uiState.pageError.orEmpty(),
+                                    actionLabel = "再読み込み",
+                                    onAction = viewModel::loadMore,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if ((uiState.isLoading || uiState.isUpdating) && !uiState.isRefreshing) {
+                Box(Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                    AppLoadingIndicator()
                 }
             }
         }

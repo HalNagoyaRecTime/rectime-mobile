@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
@@ -27,6 +28,9 @@ data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
     val isLoading: Boolean = false,
     val isUpdating: Boolean = false,
+    val hasMore: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val pageError: String? = null,
     val refreshSource: NotificationRefreshSource? = null,
     val error: String? = null,
     // trueのとき、notificationsは通信失敗時にローカルキャッシュから復元した前回取得分。
@@ -49,14 +53,28 @@ class NotificationsViewModel(
 
     init {
         viewModelScope.launch {
-            feedStore.cachedNotifications.collect { cached ->
-                if (!_uiState.value.isRefreshing) {
-                    _uiState.value = _uiState.value.copy(
-                        notifications = cached.orEmpty(),
-                        isLoading = if (cached != null) false else _uiState.value.isLoading,
-                    )
+            combine(feedStore.cachedNotifications, feedStore.status) { cached, status -> cached to status }
+                .collect { (cached, status) ->
+                    if (!_uiState.value.isRefreshing) {
+                        _uiState.value = _uiState.value.copy(
+                            notifications = cached.orEmpty(),
+                            isLoading = cached == null && status.error == null &&
+                                (status.isUpdating || _uiState.value.isLoading),
+                            isUpdating = status.isUpdating,
+                            hasMore = status.hasMore,
+                            isLoadingMore = status.isLoadingMore,
+                            pageError = status.pageError?.toNotificationErrorMessage(),
+                            isOffline = status.isOffline,
+                            error = status.error?.toNotificationErrorMessage(),
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            hasMore = status.hasMore,
+                            isLoadingMore = status.isLoadingMore,
+                            pageError = status.pageError?.toNotificationErrorMessage(),
+                        )
+                    }
                 }
-            }
         }
         loadNotifications()
         viewModelScope.launch {
@@ -73,6 +91,11 @@ class NotificationsViewModel(
 
     fun refreshFromPull() {
         loadNotifications(NotificationRefreshSource.Pull)
+    }
+
+    fun loadMore() {
+        if (_uiState.value.isUpdating || _uiState.value.isRefreshing) return
+        viewModelScope.launch { feedStore.loadMore() }
     }
 
     private fun loadNotifications(source: NotificationRefreshSource? = null) {
@@ -163,24 +186,6 @@ class NotificationsViewModel(
     }
 }
 
-internal suspend fun fetchAllNotifications(
-    gateway: NotificationGateway,
-    pageSize: Int = 100,
-): List<UserNotification> {
-    require(pageSize > 0) { "Page size must be positive" }
-
-    val notifications = mutableListOf<UserNotification>()
-    var offset = 0
-
-    do {
-        val page = gateway.getNotifications(limit = pageSize, offset = offset)
-        notifications += page.notifications
-        offset += page.notifications.size
-    } while (page.notifications.isNotEmpty() && offset < page.total)
-
-    return notifications
-}
-
 data class NotificationDetailUiState(
     val notification: UserNotification? = null,
     val isLoading: Boolean = true,
@@ -203,7 +208,7 @@ class NotificationDetailViewModel(
     private val _uiState = MutableStateFlow(NotificationDetailUiState())
     val uiState: StateFlow<NotificationDetailUiState> = _uiState.asStateFlow()
 
-    private val cacheKey = "notification_detail_v1_$notificationId"
+    private val history = NotificationHistoryCache(cache)
 
     private var loadJob: Job? = null
 
@@ -228,8 +233,8 @@ class NotificationDetailViewModel(
                 when (
                     val result = fetchWithCacheFirst(
                         fetchLive = { gateway.getNotification(notificationId) },
-                        loadCache = { cache.load<UserNotification>(cacheKey) },
-                        saveCache = { cache.save(cacheKey, it) },
+                        loadCache = { history.load()?.firstOrNull { it.id == notificationId } },
+                        saveCache = { history.saveDetail(it) },
                         onCached = {
                             val participating = cachedParticipation(it)
                             if (request.isCurrent) {
