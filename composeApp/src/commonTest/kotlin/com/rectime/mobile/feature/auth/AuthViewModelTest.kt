@@ -1397,6 +1397,7 @@ class AuthViewModelTest {
 
     @Test
     fun staleLogoutKeepsNewerSessionAndCache() = runTest(testDispatcher) {
+        var meRequests = 0
         val remoteLogoutStarted = CompletableDeferred<Unit>()
         val finishRemoteLogout = CompletableDeferred<Unit>()
         val store = FakeAuthSessionStorage(session = storedSession)
@@ -1410,6 +1411,7 @@ class AuthViewModelTest {
                         finishRemoteLogout.await()
                         respond(content = "", status = HttpStatusCode.NoContent)
                     } else {
+                        meRequests++
                         respond(
                             content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
                             status = HttpStatusCode.OK,
@@ -1440,6 +1442,10 @@ class AuthViewModelTest {
         assertEquals(userB, store.session)
         assertEquals(userB, viewModel.uiState.value.session)
         assertEquals("user-b-data", cache.load<String>("account_cache"))
+        val previousChecks = meRequests
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(previousChecks + 1, meRequests)
     }
 
     @Test

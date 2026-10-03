@@ -449,6 +449,7 @@ class AuthViewModel(
                                 // 古いログアウトの完了で、後からログインしたアカウントを消さない。
                                 val session = current?.takeUnless { it.belongsTo(targetSession) } ?: newer
                                 if (session != null) {
+                                    loggingOut = false
                                     SessionTokenHolder.accessToken = session.accessToken
                                     _uiState.update { it.copy(session = session, isLoading = false, error = null, message = "Logged in") }
                                 }
