@@ -8,7 +8,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
-import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.cache.fetchWithCacheFirst
+import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.feature.event.EventCache
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.network.HttpStatusException
@@ -19,17 +21,20 @@ import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-private const val EVENTS_CACHE_KEY = "schedule_events_v1"
+private const val EVENTS_PAGE_SIZE = 100
 
 @OptIn(ExperimentalTime::class)
 class ScheduleViewModel(
@@ -39,6 +44,10 @@ class ScheduleViewModel(
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
+    private val eventCache = EventCache(cache)
+    private var enteredSession: CacheRequestGeneration? = null
+    private var hasEnteredForeground = false
+    private var loadJob: Job? = null
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _events = mutableStateOf(listOf<TimelineEvent>())
@@ -50,6 +59,9 @@ class ScheduleViewModel(
     var isRefreshing by mutableStateOf(false)
         private set
 
+    var isUpdating by mutableStateOf(false)
+        private set
+
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -57,33 +69,66 @@ class ScheduleViewModel(
     var isOffline by mutableStateOf(false)
         private set
 
+    /** タブへ戻るだけでは再取得せず、ログインが切り替わった場合は初回取得する。 */
+    suspend fun onEnter() {
+        if (enteredSession?.isCurrent == true) return
+        loadJob?.cancelAndJoin()
+        // 起動前にキャンセルされたジョブではfinallyが実行されないため、ここでも解除する。
+        isUpdating = false
+        isLoading = false
+        isRefreshing = false
+        _events.value = emptyList()
+        isOffline = false
+        enteredSession = CacheRequestGeneration()
+        hasEnteredForeground = false
+        fetchEvents()
+    }
+
+    /** アプリの起動・前面復帰で取得する。タブ切り替えからは呼び出さない。 */
+    suspend fun onForeground() {
+        if (enteredSession?.isCurrent != true) {
+            onEnter()
+        } else if (hasEnteredForeground) {
+            loadEvents(isRefresh = false, isBackground = true)
+        }
+        // 起動時のonEnterと最初のON_RESUMEが重なっても、取得は一度だけにする。
+        hasEnteredForeground = true
+    }
+
     fun fetchEvents() = loadEvents(isRefresh = false)
 
     fun refresh() = loadEvents(isRefresh = true)
 
-    private fun loadEvents(isRefresh: Boolean) {
-        if (isLoading || isRefreshing) return
-        isLoading = !isRefresh
+    private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false) {
+        if (isUpdating) return
+        isUpdating = true
+        isLoading = !isRefresh && !isBackground
         isRefreshing = isRefresh
         error = null
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
+            val request = CacheRequestGeneration()
             try {
-                val result = withMinimumRefreshDuration(isRefresh) {
-                    fetchWithCacheFallback(
-                        fetchLive = {
-                            val response = client.get("$baseUrl/api/v1/events")
-                            if (!response.status.isSuccess()) {
-                                throw apiErrorException(response.status, response.bodyAsText())
+                val cacheRequest = eventCache.beginRequest()
+                val result = request.validate(withMinimumRefreshDuration(isRefresh) {
+                    fetchWithCacheFirst(
+                        fetchLive = { eventCache.saveEvents(fetchAllEvents(), cacheRequest) },
+                        loadCache = { eventCache.loadEvents() },
+                        // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
+                        saveCache = {},
+                        onCached = { saved ->
+                            if (!isRefresh && !isBackground) {
+                                _events.value = toTimelineEvents(saved).events
+                                isLoading = false
                             }
-                            response.body<EventsResponse>()
                         },
-                        loadCache = { cache.load<EventsResponse>(EVENTS_CACHE_KEY) },
-                        saveCache = { cache.save(EVENTS_CACHE_KEY, it) },
                     )
-                }
+                })
                 when (result) {
                     is CachedFetchResult.Fresh -> {
-                        val timelineResult = toTimelineEvents(result.value)
+                        // 最低更新時間の待機中に詳細が更新された場合も、古い表示へ戻さない。
+                        val latest = eventCache.reconcileEvents(result.value, cacheRequest)
+                        if (!request.isCurrent) return@launch
+                        val timelineResult = toTimelineEvents(latest)
                         _events.value = timelineResult.events
                         if (timelineResult.skippedCount > 0) {
                             error = skippedEventsMessage(timelineResult.skippedCount)
@@ -95,13 +140,20 @@ class ScheduleViewModel(
                         // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
                         // errorはスナックバーで一瞬しか表示されないため、消えた後も未検証の
                         // 古いイベントが表示され続けないよう_eventsもクリアする。
-                        if ((result.error as? HttpStatusException)?.status == HttpStatusCode.Unauthorized) {
+                        val status = (result.error as? HttpStatusException)?.status
+                        if (status in setOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
                             _events.value = emptyList()
-                            error = "ログイン情報の有効期限が切れました"
+                            error = when (status) {
+                                HttpStatusCode.Forbidden -> "スケジュールを表示する権限がありません"
+                                else -> "ログイン情報の有効期限が切れました"
+                            }
                             isOffline = false
                         } else {
-                            val timelineResult = toTimelineEvents(result.value)
-                            _events.value = timelineResult.events
+                            // 前面復帰の失敗では、表示中の値を古いディスクキャッシュへ戻さない。
+                            if (!isBackground) {
+                                val timelineResult = toTimelineEvents(result.value)
+                                _events.value = timelineResult.events
+                            }
                             isOffline = true
                             // 401以外の理由での フォールバックは「オフライン」として静かに
                             // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
@@ -112,8 +164,19 @@ class ScheduleViewModel(
 
                     is CachedFetchResult.Failed -> {
                         val status = (result.error as? HttpStatusException)?.status
+                        if (
+                            isBackground && request.isCurrent && status !in setOf(
+                                HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden,
+                            )
+                        ) {
+                            // 保存に失敗してキャッシュがなくても、表示中のデータは維持する。
+                            isOffline = true
+                            result.error.printStackTrace()
+                            return@launch
+                        }
                         error = when (status) {
                             HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
+                            HttpStatusCode.Forbidden -> "スケジュールを表示する権限がありません"
                             else -> "通信に失敗しました"
                         }
                         // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
@@ -128,14 +191,37 @@ class ScheduleViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                error = "通信に失敗しました"
-                isOffline = false
+                if (!isBackground) error = "通信に失敗しました"
+                isOffline = isBackground
                 e.printStackTrace()
             } finally {
                 isLoading = false
                 isRefreshing = false
+                isUpdating = false
             }
         }
+    }
+
+    private suspend fun fetchAllEvents(): EventsResponse {
+        val events = mutableListOf<EventResponse>()
+        var offset = 0
+        do {
+            val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events") {
+                parameter("limit", EVENTS_PAGE_SIZE)
+                parameter("offset", offset)
+            }
+            if (!response.status.isSuccess()) {
+                throw apiErrorException(response.status, response.bodyAsText())
+            }
+            val page = response.body<EventsResponse>()
+            // 全件に達する前の空ページを完全な一覧として保存しない。
+            check(page.events.isNotEmpty() || offset >= page.total) {
+                "イベント一覧の取得が全件に達する前に終了しました"
+            }
+            events += page.events
+            offset += page.events.size
+        } while (page.events.isNotEmpty() && offset < page.total)
+        return EventsResponse(events, events.size, EVENTS_PAGE_SIZE, 0)
     }
 
     private fun toTimelineEvents(body: EventsResponse): TimelineResult {

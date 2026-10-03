@@ -9,6 +9,27 @@ class PullRefreshGestureStateTest {
     private fun state() = PullRefreshGestureState(80f).apply { viewportHeight = 800f }
 
     @Test
+    fun returningDuringRefreshStartsAtHoldPosition() {
+        val state = PullRefreshGestureState(80f, initiallyRefreshing = true)
+        assertEquals(80f, state.offset)
+        assertEquals(state.offset, state.restingOffset(true))
+        assertFalse(state.refreshRequested)
+        state.updateRefreshing(false)
+        assertEquals(0f, state.restingOffset(false))
+        state.offset = 0f
+        state.beginDrag(false)
+        state.dragBy(300f)
+        assertTrue(state.release(false, true).requestRefresh)
+    }
+
+    @Test
+    fun enteringWithoutPullRefreshKeepsIndicatorHidden() {
+        val state = PullRefreshGestureState(80f)
+        assertEquals(0f, state.offset)
+        assertEquals(0f, state.restingOffset(false))
+    }
+
+    @Test
     fun strongPullCanRefreshAgainAfterCompletion() {
         val state = state()
         state.beginDrag(false)
@@ -46,7 +67,7 @@ class PullRefreshGestureStateTest {
         val offset = state.offset
         state.updateRefreshing(false)
         assertEquals(offset, state.offset)
-        // This gesture began during a refresh and must not start another one.
+        // 更新中に始めた操作では、別の更新を開始しない。
         val release = state.release(false, true)
         assertFalse(release.requestRefresh)
         assertEquals(0f, release.targetOffset)

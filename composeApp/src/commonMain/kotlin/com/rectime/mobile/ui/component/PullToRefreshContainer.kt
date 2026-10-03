@@ -42,7 +42,7 @@ private class ReturnAnimation {
     var job: Job? = null
 }
 
-/** Owns both edge bounce and refresh, so two overscroll systems never move the list. */
+/** バウンスと引っ張り更新をまとめて管理し、一覧が二重に移動するのを防ぐ。 */
 @Composable
 internal fun PullToRefreshContainer(
     isRefreshing: Boolean,
@@ -54,7 +54,7 @@ internal fun PullToRefreshContainer(
 ) {
     val holdDistance = with(LocalDensity.current) { PullRefreshHoldDistance.toPx() }
     val indicatorHeight = with(LocalDensity.current) { RefreshIndicatorHeight.toPx() }
-    val state = remember(holdDistance) { PullRefreshGestureState(holdDistance) }
+    val state = remember(holdDistance) { PullRefreshGestureState(holdDistance, initiallyRefreshing = isRefreshing) }
     val scope = rememberCoroutineScope()
     val refreshing by rememberUpdatedState(isRefreshing)
     val enabled by rememberUpdatedState(refreshEnabled)
@@ -99,8 +99,8 @@ internal fun PullToRefreshContainer(
                 val consumeVelocity = state.distance * available.y > 0f
                 val releaseVelocity = if (consumeVelocity) state.resistedVelocity(available.y) else 0f
                 val release = state.release(refreshing, enabled)
-                // Start the request before the return animation; never suspend the list's
-                // release while waiting for either the animation or the network.
+                // 復帰アニメーションより先に更新を開始する。
+                // 通信やアニメーションの完了を待って、指を離した処理を止めない。
                 if (release.requestRefresh) refresh()
                 settle(release.targetOffset, releaseVelocity)
                 return Velocity(0f, if (consumeVelocity) available.y else 0f)
@@ -108,7 +108,7 @@ internal fun PullToRefreshContainer(
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 if (!state.isDragging && available.y != 0f) {
-                    // Momentum reaching either edge bounces too, without requesting a refresh.
+                    // 慣性スクロールで端に到達した場合もバウンスするが、更新は開始しない。
                     val limit = state.viewportHeight * 8f
                     settle(state.restingOffset(refreshing), (available.y * 0.55f).coerceIn(-limit, limit))
                     return Velocity(0f, available.y)
@@ -135,7 +135,7 @@ internal fun PullToRefreshContainer(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth().height(RefreshIndicatorHeight)
                     .graphicsLayer {
                         translationY = state.offset.coerceAtLeast(0f) - indicatorHeight
-                        // A refresh started elsewhere must not show a second indicator.
+                        // 別の操作で更新が始まった場合、引っ張り更新の表示を重ねない。
                         alpha = if (refreshEnabled || isRefreshing || state.refreshRequested) 1f else 0f
                     },
                 contentAlignment = Alignment.Center,
@@ -146,7 +146,7 @@ internal fun PullToRefreshContainer(
     }
 }
 
-/** Arrow and two-tone ring matching the previous app's refresh indicator. */
+/** 昨年のアプリに合わせた矢印と2色のリングで更新状態を表示する。 */
 @Composable
 private fun RefreshIndicator(isRefreshing: Boolean, isReady: Boolean) {
     val color = AppTheme.colors.themeColorFirst
