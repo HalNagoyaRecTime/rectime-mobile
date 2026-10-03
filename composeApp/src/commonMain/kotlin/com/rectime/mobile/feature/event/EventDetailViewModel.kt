@@ -7,6 +7,8 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.network.EventDetailResponse
@@ -38,6 +40,7 @@ class EventDetailViewModel(
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
 
+    private val contentSession = CacheRequestGeneration()
     private val eventCache = EventCache(cache)
     private val gatheringCacheKey = "event_gathering_v1_$eventId"
     private val attendingGatheringCacheKey = "event_attending_gathering_v1_$eventId"
@@ -148,6 +151,10 @@ class EventDetailViewModel(
 
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
+                        if (_uiState.value.eventDetail != null && request.canRetainDisplayedContent(result.error, contentSession)) {
+                            _uiState.value = _uiState.value.copy(isLoading = false, error = null, isOffline = true)
+                            return@launch
+                        }
                         _uiState.value = EventDetailUiState(
                             isLoading = false,
                             error = when ((result.error as? HttpStatusException)?.status) {
@@ -162,10 +169,14 @@ class EventDetailViewModel(
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.value = EventDetailUiState(
-                    isLoading = false,
-                    error = "イベント情報の取得に失敗しました",
-                )
+                if (_uiState.value.eventDetail != null && request.canRetainDisplayedContent(e, contentSession)) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = null, isOffline = true)
+                } else {
+                    _uiState.value = EventDetailUiState(
+                        isLoading = false,
+                        error = "イベント情報の取得に失敗しました",
+                    )
+                }
             }
         }
     }
@@ -187,8 +198,7 @@ class EventDetailViewModel(
             is CachedFetchResult.Cached -> {
                 // 削除済み(404)・閲覧拒否(403)の古いキャッシュを、単なる
                 // オフライン表示として出し続けないようにする。
-                val status = (result.error as? HttpStatusException)?.status
-                if (status in setOf(HttpStatusCode.NotFound, HttpStatusCode.Forbidden)) {
+                if (result.error.invalidatesDisplayedContent()) {
                     emptyList<Gathering>() to false
                 } else {
                     result.error.printStackTrace()

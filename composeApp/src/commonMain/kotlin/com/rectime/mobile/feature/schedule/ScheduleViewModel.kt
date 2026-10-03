@@ -10,6 +10,8 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.feature.event.EventCache
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.config.isDebugBuild
@@ -45,6 +47,7 @@ class ScheduleViewModel(
     private val cache: LocalCache = LocalCache(),
 ) : ViewModel() {
     private val eventCache = EventCache(cache)
+    private var contentSession = CacheRequestGeneration()
     private var enteredSession: CacheRequestGeneration? = null
     private var hasEnteredForeground = false
     private var loadJob: Job? = null
@@ -101,6 +104,10 @@ class ScheduleViewModel(
 
     private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false) {
         if (isUpdating) return
+        if (!contentSession.isCurrent) {
+            _events.value = emptyList()
+            contentSession = CacheRequestGeneration()
+        }
         isUpdating = true
         isLoading = !isRefresh && !isBackground
         isRefreshing = isRefresh
@@ -116,7 +123,7 @@ class ScheduleViewModel(
                         // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
                         saveCache = {},
                         onCached = { saved ->
-                            if (!isRefresh && !isBackground) {
+                            if (!isRefresh && !isBackground && _events.value.isEmpty()) {
                                 _events.value = toTimelineEvents(saved).events
                                 isLoading = false
                             }
@@ -140,13 +147,13 @@ class ScheduleViewModel(
                         // 失効の確定とログイン画面への遷移は共通の認証処理に任せる。
                         // 更新を確認できない401では保存済みの内容を維持する。
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status == HttpStatusCode.Forbidden) {
+                        if (result.error.invalidatesDisplayedContent()) {
                             _events.value = emptyList()
-                            error = "スケジュールを表示する権限がありません"
+                            error = if (status == HttpStatusCode.Forbidden) "スケジュールを表示する権限がありません" else "通信に失敗しました"
                             isOffline = false
                         } else {
                             // 前面復帰の失敗では、表示中の値を古いディスクキャッシュへ戻さない。
-                            if (!isBackground) {
+                            if (_events.value.isEmpty()) {
                                 val timelineResult = toTimelineEvents(result.value)
                                 _events.value = timelineResult.events
                             }
@@ -160,11 +167,7 @@ class ScheduleViewModel(
 
                     is CachedFetchResult.Failed -> {
                         val status = (result.error as? HttpStatusException)?.status
-                        if (
-                            isBackground && request.isCurrent && status !in setOf(
-                                HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden,
-                            )
-                        ) {
+                        if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(result.error, contentSession)) {
                             // 保存に失敗してキャッシュがなくても、表示中のデータは維持する。
                             isOffline = true
                             result.error.printStackTrace()
@@ -184,8 +187,13 @@ class ScheduleViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (!isBackground) error = "通信に失敗しました"
-                isOffline = isBackground
+                if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(e, contentSession)) {
+                    isOffline = true
+                } else {
+                    _events.value = emptyList()
+                    error = "通信に失敗しました"
+                    isOffline = false
+                }
                 e.printStackTrace()
             } finally {
                 isLoading = false

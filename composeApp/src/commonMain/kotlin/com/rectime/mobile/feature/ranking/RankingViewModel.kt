@@ -3,6 +3,9 @@ package com.rectime.mobile.feature.ranking
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
@@ -48,6 +51,7 @@ class RankingViewModel(
     // updateMyTeamIdで差し替え可能にしている。
     private var myTeamId: Int? = initialMyTeamId
 
+    private var contentSession = CacheRequestGeneration()
     private var fetchJob: Job? = null
 
     init {
@@ -74,6 +78,11 @@ class RankingViewModel(
         // 古い結果が上書きしてしまうため、前回分をキャンセルしてから開始する。
         fetchJob?.cancel()
         fetchJob = viewModelScope.launch {
+            val request = CacheRequestGeneration()
+            if (!contentSession.isCurrent) {
+                _uiState.value = RankingUiState()
+                contentSession = request
+            }
             // 手動更新時に一覧が一瞬空にならないよう、既存のrankingItemsは
             // 保持したままローディング状態にする。isOfflineは今回の結果が
             // 出るまで意味を持たないため、古い表示を引きずらないようリセットする。
@@ -99,7 +108,7 @@ class RankingViewModel(
                         // 削除済み(404)・閲覧拒否(403)の古いキャッシュを誤表示しないよう、
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status.clearsStaleRankingData()) {
+                        if (result.error.invalidatesDisplayedContent()) {
                             _uiState.value = RankingUiState(
                                 isLoading = false,
                                 error = rankingErrorMessage(status),
@@ -107,7 +116,8 @@ class RankingViewModel(
                         } else {
                             _uiState.value = RankingUiState(
                                 isLoading = false,
-                                rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
+                                rankingItems = _uiState.value.rankingItems.takeIf { it.isNotEmpty() }
+                                    ?: result.value.items.toModelList().toRankingItems(myTeamId),
                                 isOffline = true,
                             )
                             // 通信失敗時のフォールバックは「オフライン」として
@@ -119,6 +129,10 @@ class RankingViewModel(
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
                         val status = (result.error as? HttpStatusException)?.status
+                        if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(result.error, contentSession)) {
+                            _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                            return@launch
+                        }
                         // キャッシュ世代の変更（ログアウト等）もFailedになるため、
                         // 有効なキャッシュがなければ前セッションの一覧を残さない。
                         _uiState.value = RankingUiState(
@@ -131,7 +145,11 @@ class RankingViewModel(
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.value = RankingUiState(error = rankingErrorMessage(null))
+                if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(e, contentSession)) {
+                    _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                } else {
+                    _uiState.value = RankingUiState(error = rankingErrorMessage(null))
+                }
             }
         }
     }
@@ -172,5 +190,3 @@ private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status)
 
 // 削除済み(404)・閲覧拒否(403)は、キャッシュや直前の表示内容が
 // あっても誤表示しないよう一覧を消してエラーを優先する対象。
-private fun HttpStatusCode?.clearsStaleRankingData(): Boolean =
-    this == HttpStatusCode.NotFound || this == HttpStatusCode.Forbidden

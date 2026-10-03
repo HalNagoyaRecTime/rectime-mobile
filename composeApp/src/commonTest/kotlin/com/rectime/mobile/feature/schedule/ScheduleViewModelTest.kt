@@ -64,6 +64,60 @@ class ScheduleViewModelTest {
     }
 
     @Test
+    fun failedManualUpdateDoesNotReplaceMemoryEventsWithOlderDiskCache() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson) else respondJson("{}", HttpStatusCode.Unauthorized)
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+    }
+
+    @Test
+    fun foregroundUnauthorizedKeepsMemoryEventsWithoutDiskCache() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson)
+            else respondJson("{}", HttpStatusCode.Unauthorized)
+        }, cache = LocalCache(NeverPersistingKeyValueStore()))
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isLoading)
+    }
+
+    @Test
+    fun newSessionFailedRequestCannotKeepPreviousMemoryEvents() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson) else error("通信失敗")
+        }, cache = LocalCache(NeverPersistingKeyValueStore()))
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
+        CacheGeneration.bump()
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
+    }
+
+    @Test
     fun firstForegroundAfterScreenEntryDoesNotFetchTwiceEvenAfterInitialLoadCompletes() = runTest(testDispatcher) {
         var calls = 0
         val viewModel = buildViewModel(mockClient { calls++; respondJson(eventsJson) })
@@ -1050,9 +1104,8 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun fetchEventsClearsEventsWhenUnauthorizedAndNoCacheIsAvailable() = runTest(testDispatcher) {
-        // CachedFetchResult.Cachedと違い、Failed(キャッシュが無い/読めない)経路でも
-        // 保存できなかったデータはキャッシュの復元対象にならない。
+    fun fetchEventsKeepsMemoryEventsWhenUnauthorizedAndNoCacheIsAvailable() = runTest(testDispatcher) {
+        // ディスクへ保存できなくても、同じログイン中の表示内容は401で消さない。
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -1073,16 +1126,14 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertTrue(viewModel.events.value.isEmpty())
-        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
-        assertFalse(viewModel.isOffline)
+        assertEquals(2, viewModel.events.value.size)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
     }
 
     @Test
-    fun fetchEventsClearsEventsWhenFailedForANonUnauthorizedReasonAndNoCacheIsAvailable() = runTest(testDispatcher) {
-        // 401以外(ログアウト・新規ログイン中のStaleCacheGenerationException等を含む)
-        // でも、有効なキャッシュが無いFailedでは前回のeventsを残してはならない
-        // (前ユーザー/前セッションのデータである可能性があるため)。
+    fun fetchEventsKeepsMemoryEventsWhenServerFailsAndNoCacheIsAvailable() = runTest(testDispatcher) {
+        // 通信失敗とセッション切替を分け、同じログイン中の表示内容は維持する。
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -1106,9 +1157,9 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertTrue(viewModel.events.value.isEmpty())
-        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
-        assertFalse(viewModel.isOffline)
+        assertEquals(2, viewModel.events.value.size)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
     }
 
     // ---- nowMinute ----
