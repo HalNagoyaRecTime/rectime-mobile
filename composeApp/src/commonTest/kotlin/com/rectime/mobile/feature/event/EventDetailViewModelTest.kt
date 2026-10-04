@@ -138,6 +138,27 @@ class EventDetailViewModelTest {
     }
 
     @Test
+    fun failedDetailRequestUsesNewerDetailSavedWhileItWasWaiting() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(1, cache)
+        val gate = CompletableDeferred<Unit>()
+        val client = HttpClient(MockEngine) {
+            engine {
+                dispatcher = testDispatcher
+                addHandler { gate.await(); throw RuntimeException("offline") }
+            }
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val viewModel = EventDetailViewModel(1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        EventCache(cache).saveDetail(EventDetailResponse(1, "別の取得で更新", emptyList(), "0900", "0930", null))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("別の取得で更新", viewModel.uiState.value.eventDetail?.eventName)
+        assertTrue(viewModel.uiState.value.isOffline)
+    }
+
+    @Test
     fun savedDetailAndGatheringsAreVisibleBeforeEventRequestCompletes() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         seedCache(1, cache)

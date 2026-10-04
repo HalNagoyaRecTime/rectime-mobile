@@ -132,13 +132,14 @@ class EventDetailViewModel(
                                 // 通信を試みず直接キャッシュから読む(通信タイムアウトの二重待ちを避ける)。
                                 val gatherings = fetchGatheringsFromCacheOnly()
                                 val attending = loadAttendingGatheringIdFromCache()
+                                val latest = eventCache.reconcileDetail(result.value, cacheRequest)
                                 if (!request.isCurrent) {
                                     _uiState.value = EventDetailUiState()
                                     return@launch
                                 }
                                 _uiState.value = EventDetailUiState(
                                     isLoading = false,
-                                    eventDetail = result.value.toModel(),
+                                    eventDetail = latest.toModel(),
                                     gatherings = gatherings,
                                     attendingGatheringId = attending,
                                     isOffline = true,

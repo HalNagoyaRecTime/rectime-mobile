@@ -11,6 +11,7 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.feature.event.EventCache
+import com.rectime.mobile.feature.event.EventCacheRequest
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.network.HttpStatusException
@@ -46,6 +47,8 @@ class ScheduleViewModel(
 ) : ViewModel() {
     private val eventCache = EventCache(cache)
     private var enteredSession: CacheRequestGeneration? = null
+    private var displayedResponse: EventsResponse? = null
+    private var displayedRequest: EventCacheRequest? = null
     private var hasEnteredForeground = false
     private var loadJob: Job? = null
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
@@ -71,13 +74,24 @@ class ScheduleViewModel(
 
     /** タブへ戻るだけでは再取得せず、ログインが切り替わった場合は初回取得する。 */
     suspend fun onEnter() {
-        if (enteredSession?.isCurrent == true) return
+        if (enteredSession?.isCurrent == true) {
+            // 詳細で更新された保存内容を反映する。タブ復帰だけでは通信しない。
+            val response = displayedResponse
+            val request = displayedRequest
+            if (response != null && request != null) {
+                val latest = eventCache.reconcileEvents(response, request)
+                if (request.generation.isCurrent) publishEvents(latest, request)
+            }
+            return
+        }
         loadJob?.cancelAndJoin()
         // 起動前にキャンセルされたジョブではfinallyが実行されないため、ここでも解除する。
         isUpdating = false
         isLoading = false
         isRefreshing = false
         _events.value = emptyList()
+        displayedResponse = null
+        displayedRequest = null
         isOffline = false
         enteredSession = CacheRequestGeneration()
         hasEnteredForeground = false
@@ -117,7 +131,7 @@ class ScheduleViewModel(
                         saveCache = {},
                         onCached = { saved ->
                             if (!isRefresh && !isBackground) {
-                                _events.value = toTimelineEvents(saved).events
+                                publishEvents(saved, cacheRequest)
                                 isLoading = false
                             }
                         },
@@ -128,8 +142,7 @@ class ScheduleViewModel(
                         // 最低更新時間の待機中に詳細が更新された場合も、古い表示へ戻さない。
                         val latest = eventCache.reconcileEvents(result.value, cacheRequest)
                         if (!request.isCurrent) return@launch
-                        val timelineResult = toTimelineEvents(latest)
-                        _events.value = timelineResult.events
+                        val timelineResult = publishEvents(latest, cacheRequest)
                         if (timelineResult.skippedCount > 0) {
                             error = skippedEventsMessage(timelineResult.skippedCount)
                         }
@@ -151,8 +164,9 @@ class ScheduleViewModel(
                         } else {
                             // 前面復帰の失敗では、表示中の値を古いディスクキャッシュへ戻さない。
                             if (!isBackground) {
-                                val timelineResult = toTimelineEvents(result.value)
-                                _events.value = timelineResult.events
+                                val latest = eventCache.reconcileEvents(result.value, cacheRequest)
+                                if (!request.isCurrent) return@launch
+                                publishEvents(latest, cacheRequest)
                             }
                             isOffline = true
                             // 401以外の理由での フォールバックは「オフライン」として静かに
@@ -200,6 +214,12 @@ class ScheduleViewModel(
                 isUpdating = false
             }
         }
+    }
+
+    private fun publishEvents(response: EventsResponse, request: EventCacheRequest): TimelineResult {
+        displayedResponse = response
+        displayedRequest = request
+        return toTimelineEvents(response).also { _events.value = it.events }
     }
 
     private suspend fun fetchAllEvents(): EventsResponse {

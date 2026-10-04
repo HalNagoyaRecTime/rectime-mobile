@@ -777,6 +777,34 @@ class ScheduleViewModelTest {
         assertEquals("更新後", EventCache(cache).loadDetail(3)?.eventName)
     }
 
+    @Test
+    fun returningToScheduleReflectsDetailUpdateWithoutAnotherRequest() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var requests = 0
+        val viewModel = buildViewModel(mockClient { requests++; respondJson(eventsJson) }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        EventCache(cache).saveDetail(EventDetailResponse(3, "詳細で更新", emptyList(), "1030", "1100", null))
+        viewModel.onEnter()
+        assertEquals(1, requests)
+        assertEquals("詳細で更新", viewModel.events.value.first { it.eventId == 3 }.title)
+    }
+
+    @Test
+    fun failedListRequestUsesDetailSavedWhileItWasWaiting() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson))
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { gate.await(); throw RuntimeException("offline") }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        EventCache(cache).saveDetail(EventDetailResponse(3, "取得中に更新", emptyList(), "1030", "1100", null))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("取得中に更新", viewModel.events.value.first { it.eventId == 3 }.title)
+        assertTrue(viewModel.isOffline)
+    }
+
     // ---- fetchEvents 異常系(キャッシュなし) ----
 
     @Test
