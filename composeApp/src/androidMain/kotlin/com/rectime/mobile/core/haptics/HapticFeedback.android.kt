@@ -1,5 +1,6 @@
 package com.rectime.mobile.core.haptics
 
+import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.runtime.Composable
@@ -14,14 +15,16 @@ private class AndroidAppHapticFeedback(
 
         // システムの触覚設定に従い、VIBRATE権限を必要としない。
         runCatching {
-            view.performHapticFeedback(mediumImpactHapticConstant())
+            view.performHapticFeedback(refreshThresholdHapticConstant(Build.VERSION.SDK_INT))
         }
     }
 }
 
-// 全対応OSで単発のクリックを使い、iOSのMediumに近い体感を目指す。
-// Android標準実装ではEFFECT_CLICKに対応する。実際の強度は端末・システム設定に依存する。
-internal fun mediumImpactHapticConstant(): Int = HapticFeedbackConstants.VIRTUAL_KEY
+// Android 14以降は引っ張り更新の閾値専用の触覚を使う。
+// 旧OSでは単発クリックへフォールバックする。物理的な強度は端末・システム設定に依存する。
+internal fun refreshThresholdHapticConstant(sdkInt: Int): Int =
+    if (sdkInt >= 34) HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
+    else HapticFeedbackConstants.VIRTUAL_KEY
 
 @Composable
 actual fun rememberPlatformHapticFeedback(): AppHapticFeedback {
