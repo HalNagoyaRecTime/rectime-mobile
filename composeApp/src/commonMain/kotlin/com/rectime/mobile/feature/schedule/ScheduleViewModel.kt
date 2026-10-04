@@ -89,9 +89,7 @@ class ScheduleViewModel(
         isUpdating = false
         isLoading = false
         isRefreshing = false
-        _events.value = emptyList()
-        displayedResponse = null
-        displayedRequest = null
+        clearDisplayedEvents()
         isOffline = false
         enteredSession = CacheRequestGeneration()
         hasEnteredForeground = false
@@ -155,7 +153,7 @@ class ScheduleViewModel(
                         // 古いイベントが表示され続けないよう_eventsもクリアする。
                         val status = (result.error as? HttpStatusException)?.status
                         if (status in setOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
-                            _events.value = emptyList()
+                            clearDisplayedEvents()
                             error = when (status) {
                                 HttpStatusCode.Forbidden -> "スケジュールを表示する権限がありません"
                                 else -> "ログイン情報の有効期限が切れました"
@@ -197,7 +195,7 @@ class ScheduleViewModel(
                         // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
                         // 401以外(ログアウト・新規ログインによるStaleCacheGenerationException
                         // 等を含む)でも、有効なキャッシュが無いFailedでは理由を問わずクリアする。
-                        _events.value = emptyList()
+                        clearDisplayedEvents()
                         isOffline = false
                         result.error.printStackTrace()
                     }
@@ -214,6 +212,12 @@ class ScheduleViewModel(
                 isUpdating = false
             }
         }
+    }
+
+    private fun clearDisplayedEvents() {
+        _events.value = emptyList()
+        displayedResponse = null
+        displayedRequest = null
     }
 
     private fun publishEvents(response: EventsResponse, request: EventCacheRequest): TimelineResult {

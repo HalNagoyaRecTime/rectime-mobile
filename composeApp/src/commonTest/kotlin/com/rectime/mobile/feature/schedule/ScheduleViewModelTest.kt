@@ -445,10 +445,12 @@ class ScheduleViewModelTest {
         val viewModel = buildViewModel(mockClient {
             respondJson("""{"error":{"code":"FORBIDDEN"}}""", HttpStatusCode.Forbidden)
         }, cache = cache)
-        viewModel.fetchEvents()
+        viewModel.onEnter()
         testDispatcher.scheduler.advanceUntilIdle()
         assertTrue(viewModel.events.value.isEmpty())
         assertEquals("スケジュールを表示する権限がありません", viewModel.error)
+        viewModel.onEnter()
+        assertTrue(viewModel.events.value.isEmpty())
     }
 
     // ---- 引っ張って更新 ----

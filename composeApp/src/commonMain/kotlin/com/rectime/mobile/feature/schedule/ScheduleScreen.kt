@@ -95,8 +95,10 @@ object ScheduleScreen : Screen {
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
         val events by viewModel.events
 
-        LaunchedEffect(viewModel) {
-            viewModel.onEnter()
+        val isRootVisible = navigationController.state.pushStack.isEmpty()
+        LaunchedEffect(viewModel, isRootVisible) {
+            // 詳細画面の背面でも一覧は描画され続けるため、戻った時にも保存内容を照合する。
+            if (isRootVisible) viewModel.onEnter()
         }
 
         ScheduleScreenUI(
