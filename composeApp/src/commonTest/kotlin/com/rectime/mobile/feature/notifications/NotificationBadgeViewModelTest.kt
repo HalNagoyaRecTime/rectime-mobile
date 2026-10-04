@@ -143,6 +143,74 @@ class NotificationBadgeViewModelTest {
     }
 
     @Test
+    fun foregroundReturnsDuringFetchAreCoalescedIntoOneNewRequest() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            val id = ++requests
+            if (id == 1) gate.await()
+            page(listOf(notification(id)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationBadgeViewModel(feed, readStore())
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.runCurrent()
+        repeat(5) { viewModel.onForeground("user-1") }
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, requests)
+        assertEquals(listOf(2), feed.notifications.value.map { it.id })
+    }
+
+    @Test
+    fun foregroundDuringManualFetchWaitsAndThenRequestsNewData() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            val id = ++requests
+            if (id == 2) gate.await()
+            page(listOf(notification(id)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationBadgeViewModel(feed, readStore())
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        val manual = launch { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onForeground("user-1")
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, requests)
+        gate.complete(Unit)
+        manual.join()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(3, requests)
+        assertEquals(listOf(3), feed.notifications.value.map { it.id })
+    }
+
+    @Test
+    fun cancellingManualFetchDoesNotLoseQueuedForegroundRefresh() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            val id = ++requests
+            if (id == 2) gate.await()
+            page(listOf(notification(id)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        val viewModel = NotificationBadgeViewModel(feed, readStore())
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        val manual = launch { feed.load(force = true) }
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onForeground("user-1")
+        testDispatcher.scheduler.runCurrent()
+        manual.cancel()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(3, requests)
+        assertEquals(listOf(3), feed.notifications.value.map { it.id })
+    }
+
+    @Test
     fun pushesDuringFetchAreCoalescedIntoOneFollowUp() = runTest(testDispatcher) {
         val gate = CompletableDeferred<Unit>()
         var requests = 0

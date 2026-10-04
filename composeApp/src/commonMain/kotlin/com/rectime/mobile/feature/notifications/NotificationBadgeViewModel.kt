@@ -20,44 +20,48 @@ class NotificationBadgeViewModel(
 
     private var loadedUserId: String? = null
     private var refreshJob: Job? = null
-    private var pendingPushRefresh = false
+    private var pendingRefresh = false
 
     fun onSession(userId: String) {
         if (loadedUserId == userId) return
         refreshJob?.cancel()
         loadedUserId = userId
-        pendingPushRefresh = false
+        pendingRefresh = false
         startRefresh(userId)
     }
 
     fun onForeground(userId: String) {
-        if (loadedUserId != userId) onSession(userId) else startRefresh(userId)
+        requestLatest(userId)
     }
 
-    fun onPush(userId: String) {
-        if (refreshJob?.isActive == true) {
-            // 取得中に届いた新着は、現在の応答に含まれない可能性がある。
-            pendingPushRefresh = true
+    fun onPush(userId: String) = requestLatest(userId)
+
+    private fun requestLatest(userId: String) {
+        if (loadedUserId != userId) {
+            onSession(userId)
+        } else if (refreshJob?.isActive == true) {
+            // 復帰・プッシュ後の新着は、すでに進行中の応答に含まれない可能性がある。
+            pendingRefresh = true
         } else {
-            if (loadedUserId != userId) onSession(userId) else startRefresh(userId, afterPush = true)
+            startRefresh(userId, afterCurrentRequest = true)
         }
     }
 
-    private fun startRefresh(userId: String, afterPush: Boolean = false) {
+    private fun startRefresh(userId: String, afterCurrentRequest: Boolean = false) {
         if (refreshJob?.isActive == true) return
         refreshJob = viewModelScope.launch {
             feedStore.bindSession(userId)
             readStore.restore()
-            var waitForPreviousRequest = afterPush
+            var waitForPreviousRequest = afterCurrentRequest
             do {
-                pendingPushRefresh = false
+                pendingRefresh = false
                 if (waitForPreviousRequest) {
-                    feedStore.refreshAfterPush()
+                    feedStore.refreshAfterCurrentRequest()
                 } else {
                     feedStore.load(force = true)
                 }
-                waitForPreviousRequest = false
-            } while (pendingPushRefresh && loadedUserId == userId)
+                waitForPreviousRequest = true
+            } while (pendingRefresh && loadedUserId == userId)
         }
     }
 }

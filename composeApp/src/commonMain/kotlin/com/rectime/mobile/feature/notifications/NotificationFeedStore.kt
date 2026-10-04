@@ -7,6 +7,8 @@ import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -156,11 +158,17 @@ class NotificationFeedStore(
         task.await()
     }
 
-    // プッシュ受信前から進行していた応答では、新着を取り逃す可能性がある。
-    suspend fun refreshAfterPush() {
+    // 復帰・プッシュ前から進行していた応答では、新着を取り逃す可能性がある。
+    suspend fun refreshAfterCurrentRequest() {
         val request = CacheRequestGeneration()
         val active = mutex.withLock { inFlight?.takeIf { it.isActive } }
-        active?.await()
+        try {
+            active?.await()
+        } catch (e: CancellationException) {
+            // 待っていた手動取得だけが取り消されても、復帰時の更新は実行する。
+            // ログアウトなどで自分も取り消された場合は、ここで停止する。
+            currentCoroutineContext().ensureActive()
+        }
         if (request.isCurrent) load(force = true)
     }
 

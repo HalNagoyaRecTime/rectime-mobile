@@ -141,8 +141,12 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             LaunchedEffect(session.user.id) {
                 badgeViewModel.onSession(session.user.id)
             }
+            var hasResumed by remember(session.user.id) { mutableStateOf(false) }
             LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-                badgeViewModel.onForeground(session.user.id)
+                // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
+                if (hasResumed) badgeViewModel.onForeground(session.user.id)
+                else badgeViewModel.onSession(session.user.id)
+                hasResumed = true
             }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             LaunchedEffect(badgeViewModel, session.user.id, lifecycle) {
