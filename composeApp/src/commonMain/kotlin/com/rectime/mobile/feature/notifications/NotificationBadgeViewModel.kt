@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheRequestGeneration
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -19,13 +20,15 @@ class NotificationBadgeViewModel(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var loadedUserId: String? = null
+    private var loadedSession: CacheRequestGeneration? = null
     private var refreshJob: Job? = null
     private var pendingRefresh = false
 
     fun onSession(userId: String) {
-        if (loadedUserId == userId) return
+        if (loadedUserId == userId && loadedSession?.isCurrent == true) return
         refreshJob?.cancel()
         loadedUserId = userId
+        loadedSession = CacheRequestGeneration()
         pendingRefresh = false
         startRefresh(userId)
     }
@@ -37,7 +40,7 @@ class NotificationBadgeViewModel(
     fun onPush(userId: String) = requestLatest(userId)
 
     private fun requestLatest(userId: String) {
-        if (loadedUserId != userId) {
+        if (loadedUserId != userId || loadedSession?.isCurrent != true) {
             onSession(userId)
         } else if (refreshJob?.isActive == true) {
             // 復帰・プッシュ後の新着は、すでに進行中の応答に含まれない可能性がある。

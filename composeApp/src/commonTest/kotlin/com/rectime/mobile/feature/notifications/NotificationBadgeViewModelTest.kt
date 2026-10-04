@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.Dispatchers
@@ -25,11 +26,30 @@ class NotificationBadgeViewModelTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        CacheGeneration.resetForTest()
     }
 
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun sameUserLoggingInAgainStartsANewSessionRequest() = runTest(testDispatcher) {
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            page(listOf(notification(requests)), total = 1, limit, offset)
+        }
+        val store = feedStore(gateway)
+        val viewModel = NotificationBadgeViewModel(store, readStore())
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        CacheGeneration.bump()
+        viewModel.onSession("user-1")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, requests)
+        assertEquals(2, store.notifications.value.single().id)
     }
 
     @Test
