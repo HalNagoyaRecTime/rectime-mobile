@@ -117,7 +117,7 @@ class ScheduleViewModel(
     private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false) {
         if (isUpdating) return
         if (!contentSession.isCurrent) {
-            _events.value = emptyList()
+            clearDisplayedEvents()
             contentSession = CacheRequestGeneration()
         }
         isUpdating = true

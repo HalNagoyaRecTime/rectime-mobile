@@ -862,6 +862,24 @@ class ScheduleViewModelTest {
         assertTrue(viewModel.isOffline)
     }
 
+    @Test
+    fun sessionSwitchCannotReconcileThePreviousUsersDisplayedResponse() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            if (++calls == 1) respondJson(eventsJson) else throw RuntimeException("offline")
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        CacheGeneration.bump()
+        cache.clearAll()
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "別ユーザーの予定")))
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.any { it.title == "別ユーザーの予定" })
+        assertFalse(viewModel.events.value.any { it.title == "綱引き" })
+    }
+
     // ---- fetchEvents 異常系(キャッシュなし) ----
 
     @Test
