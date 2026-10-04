@@ -13,16 +13,17 @@ private enum SplashTiming {
 
 struct RecreationSplashView: View {
     var onFinished: () -> Void
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var startedAt = ProcessInfo.processInfo.systemUptime
     @State private var finished = false
     @State private var playbackStarted = false
-    @State private var pausedAt: TimeInterval?
+    @State private var playback = SplashScenePlayback()
     @State private var letterAppearances: [Double] = []
 
     var body: some View {
         GeometryReader { geometry in
-            TimelineView(.animation(paused: pausedAt != nil)) { _ in
+            TimelineView(.animation(paused: !playback.isActive)) { _ in
                 let elapsed = playbackElapsed()
                 let turn = reduceMotion ? 0 : splashEase((elapsed - SplashTiming.turnStart) / 0.75)
                 ZStack {
@@ -37,25 +38,23 @@ struct RecreationSplashView: View {
         }
         .accessibilityHidden(true)
         .task { await playSequence() }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            // 権限ダイアログ中も、描画と文字の振動を同じ位置で止める。
-            if pausedAt == nil { pausedAt = ProcessInfo.processInfo.systemUptime }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            if let pausedAt {
-                startedAt += ProcessInfo.processInfo.systemUptime - pausedAt
-                self.pausedAt = nil
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-            // 復帰時に起動演出・文字の振動をやり直さない。
+        .onAppear { updateScene(scenePhase) }
+        .onChange(of: scenePhase) { _, phase in updateScene(phase) }
+    }
+
+    private func updateScene(_ phase: ScenePhase) {
+        if phase == .background {
+            // このウィンドウの復帰時に、演出・振動をやり直さない。
             finish()
+        } else {
+            // 権限ダイアログ中も、描画と文字の振動を同じ位置で止める。
+            playback.setActive(phase == .active, at: ProcessInfo.processInfo.systemUptime)
         }
     }
 
     private func playbackElapsed(at time: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Double {
         guard playbackStarted else { return 0 }
-        return max(0, (pausedAt ?? time) - startedAt)
+        return playback.elapsed(since: startedAt, at: time)
     }
 
     @MainActor
@@ -64,8 +63,8 @@ struct RecreationSplashView: View {
             try Task.checkCancellation()
             if finished { throw CancellationError() }
             let remaining = target - playbackElapsed()
-            // 起動時に取り込んだEnvironmentではなく、UIKitの現在の状態を確認する。
-            let active = UIApplication.shared.applicationState == .active
+            // onChangeが更新するStateを読み、別ウィンドウの状態に影響されないようにする。
+            let active = playback.isActive
             if active && remaining <= 0 { return }
             // 非アクティブ中は時間を進めず、復帰後に続きから再生する。
             try await Task.sleep(for: .seconds(active ? max(0.001, remaining) : 0.05))
@@ -80,7 +79,8 @@ struct RecreationSplashView: View {
         do {
             try await waitUntil(0)
             startedAt = ProcessInfo.processInfo.systemUptime
-            pausedAt = nil
+            playback = SplashScenePlayback()
+            playback.setActive(true, at: startedAt)
             playbackStarted = true
             for index in SplashTiming.letters.indices {
                 let generator = SplashTiming.letters[index] == ":" ? accent : feedback
@@ -104,6 +104,7 @@ struct RecreationSplashView: View {
     private func finish() {
         guard !finished else { return }
         finished = true
+        playback.finish()
         onFinished()
     }
 

@@ -59,6 +59,11 @@ jobs:
       - name: Setup iOS Config
         run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
 
+      - name: Test splash scene playback
+        run: |
+          swiftc iosApp/iosApp/SplashScenePlayback.swift iosApp/tests/main.swift -o /tmp/splash-scene-tests
+          /tmp/splash-scene-tests
+
       - name: Run commonTest on iOS simulator target
         run: ./gradlew :composeApp:iosSimulatorArm64Test
 
