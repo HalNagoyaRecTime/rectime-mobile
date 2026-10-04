@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import ComposeApp
 
-// iOSで動きを調整するための起動演出。通信の完了には依存させない。
+// 確定したスポーツ集合の起動演出。通信の完了には依存させない。
 private enum SplashTiming {
     static let letters = Array("RE:CREATION")
     static let letterStart = 0.7
@@ -11,26 +11,19 @@ private enum SplashTiming {
     static let duration = 2.75
 }
 
-enum SplashOpening {
-    case burst
-    case sportsGathering
-}
-
 struct RecreationSplashView: View {
-    var opening: SplashOpening = .burst
     var onFinished: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var startedAt = Date()
+    @State private var startedAt = ProcessInfo.processInfo.systemUptime
     @State private var finished = false
     @State private var playbackStarted = false
-    @State private var pausedAt: Date?
+    @State private var pausedAt: TimeInterval?
     @State private var letterAppearances: [Double] = []
-    private let particles = SplashParticle.makeBurst()
 
     var body: some View {
         GeometryReader { geometry in
-            TimelineView(.animation(paused: pausedAt != nil)) { timeline in
-                let elapsed = playbackElapsed(at: timeline.date)
+            TimelineView(.animation(paused: pausedAt != nil)) { _ in
+                let elapsed = playbackElapsed()
                 let turn = reduceMotion ? 0 : splashEase((elapsed - SplashTiming.turnStart) / 0.75)
                 ZStack {
                     splashFront(elapsed: elapsed, size: geometry.size)
@@ -46,11 +39,11 @@ struct RecreationSplashView: View {
         .task { await playSequence() }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             // 権限ダイアログ中も、描画と文字の振動を同じ位置で止める。
-            if pausedAt == nil { pausedAt = Date() }
+            if pausedAt == nil { pausedAt = ProcessInfo.processInfo.systemUptime }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             if let pausedAt {
-                startedAt = startedAt.addingTimeInterval(Date().timeIntervalSince(pausedAt))
+                startedAt += ProcessInfo.processInfo.systemUptime - pausedAt
                 self.pausedAt = nil
             }
         }
@@ -60,9 +53,9 @@ struct RecreationSplashView: View {
         }
     }
 
-    private func playbackElapsed(at date: Date = Date()) -> Double {
+    private func playbackElapsed(at time: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Double {
         guard playbackStarted else { return 0 }
-        return max(0, (pausedAt ?? date).timeIntervalSince(startedAt))
+        return max(0, (pausedAt ?? time) - startedAt)
     }
 
     @MainActor
@@ -86,13 +79,17 @@ struct RecreationSplashView: View {
         let vibrationEnabled = IosSplashPreferences().isVibrationEnabled()
         do {
             try await waitUntil(0)
-            startedAt = Date()
+            startedAt = ProcessInfo.processInfo.systemUptime
             pausedAt = nil
             playbackStarted = true
             for index in SplashTiming.letters.indices {
                 let generator = SplashTiming.letters[index] == ":" ? accent : feedback
                 if vibrationEnabled { generator.prepare() }
-                try await waitUntil(SplashTiming.letterStart + Double(index) * SplashTiming.letterInterval)
+                let scheduled = SplashTiming.letterStart + Double(index) * SplashTiming.letterInterval
+                let nextAppearance = max(scheduled, (letterAppearances.last ?? (scheduled - SplashTiming.letterInterval)) + SplashTiming.letterInterval)
+                try await waitUntil(nextAppearance)
+                // 長いフレーム停止で終了時刻を過ぎた場合は、見えない文字の振動を再生しない。
+                if playbackElapsed() >= SplashTiming.duration { finish(); return }
                 // 同じ処理で表示開始と振動を確定し、描画側だけ先行させない。
                 letterAppearances.append(playbackElapsed())
                 if vibrationEnabled { generator.impactOccurred() }
@@ -117,14 +114,9 @@ struct RecreationSplashView: View {
                 let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2 - 35)
                 let iconSize = min(220, canvasSize.width * 0.57)
                 if !reduceMotion {
-                    switch opening {
-                    case .burst:
-                        drawBurst(context: &context, center: center, size: iconSize, elapsed: elapsed)
-                    case .sportsGathering:
-                        drawSportsGathering(context: &context, center: center, size: canvasSize, iconSize: iconSize, elapsed: elapsed)
-                    }
+                    drawSportsGathering(context: &context, center: center, size: canvasSize, iconSize: iconSize, elapsed: elapsed)
                 }
-                let logoAge = elapsed - (opening == .sportsGathering ? 0.28 : 0)
+                let logoAge = elapsed - 0.28
                 let appearance = reduceMotion ? 1 : splashSpring(logoAge / 0.7)
                 var logoContext = context
                 logoContext.opacity = splashClamp(logoAge / 0.12)
@@ -209,28 +201,6 @@ struct RecreationSplashView: View {
         }
     }
 
-    private func drawBurst(context: inout GraphicsContext, center: CGPoint, size: Double, elapsed: Double) {
-        let progress = splashClamp(elapsed / 0.8)
-        guard progress < 1 else { return }
-        for particle in particles {
-            let distance = (1 - pow(1 - progress, 3)) * size * particle.distance
-            let point = CGPoint(x: center.x + cos(particle.angle) * distance,
-                                y: center.y + sin(particle.angle) * distance + progress * progress * 24)
-            var copy = context
-            copy.opacity = pow(1 - progress, 1.5)
-            copy.translateBy(x: point.x, y: point.y)
-            copy.rotate(by: .radians(particle.angle + progress * particle.spin))
-            let side = particle.size * (1 - progress * 0.4)
-            let shape = Path(roundedRect: CGRect(x: -side / 2, y: -side / 2, width: side, height: side * 0.6), cornerRadius: 1.2)
-            copy.fill(shape, with: .color(particle.color))
-        }
-        // 爆発の中心から薄い輪が広がる。
-        var ring = context
-        ring.opacity = (1 - progress) * 0.18
-        let radius = progress * size * 0.7
-        ring.stroke(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)), with: .color(SplashLogo.teal), lineWidth: 1.5)
-    }
-
 }
 
 private struct SplashAthlete {
@@ -249,26 +219,6 @@ private struct SplashAthlete {
         .init(symbol: "figure.baseball", angle: 20, color: SplashLogo.orange),
         .init(symbol: "figure.run", angle: 160, color: SplashLogo.teal),
     ]
-}
-
-private struct SplashParticle {
-    let angle: Double
-    let distance: Double
-    let spin: Double
-    let size: Double
-    let color: Color
-
-    static func makeBurst() -> [SplashParticle] {
-        // 固定シード相当の配列を一度作り、描画中に乱数生成・再配置しない。
-        (0..<96).map { index in
-            let value = Double(index)
-            return SplashParticle(angle: value * 2.399963,
-                                  distance: 0.45 + Double((index * 37) % 100) / 100 * 0.8,
-                                  spin: Double((index * 13) % 9) - 4,
-                                  size: 3 + Double((index * 7) % 6),
-                                  color: [SplashLogo.orange, SplashLogo.yellow, SplashLogo.teal][index % 3])
-        }
-    }
 }
 
 private enum SplashLogo {

@@ -24,7 +24,7 @@ struct ContentView: View {
                 .allowsHitTesting(!showSplash)
                 .accessibilityHidden(showSplash)
             if showSplash {
-                RecreationSplashView(opening: .sportsGathering) { showSplash = false }
+                RecreationSplashView() { showSplash = false }
                     .zIndex(1)
             }
         }
