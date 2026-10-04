@@ -15,6 +15,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.swipe
+import androidx.compose.ui.geometry.Offset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -26,7 +28,31 @@ class ImageViewerUiTest {
         setContent { ImageViewerContent(ColorPainter(Color.Blue), "画像", { closed++ }) }
         onNodeWithContentDescription("画像").assertIsDisplayed()
         onNodeWithContentDescription("閉じる").performClick()
+        waitUntil { closed == 1 }
         assertEquals(1, closed)
+    }
+
+    @Test
+    fun downwardSwipeDismissesAfterTheImageLeavesTheViewport() = runComposeUiTest {
+        var closed = 0
+        setContent { ImageViewerContent(ColorPainter(Color.Blue), "画像", { closed++ }) }
+        onNodeWithTag("image-viewer").performTouchInput {
+            swipe(center, Offset(center.x, height.toFloat() - 1f), 300)
+        }
+        waitUntil { closed == 1 }
+        assertEquals(1, closed)
+    }
+
+    @Test
+    fun shortSlowSwipeReturnsWithoutDismissing() = runComposeUiTest {
+        var closed = 0
+        setContent { ImageViewerContent(ColorPainter(Color.Blue), "画像", { closed++ }) }
+        onNodeWithTag("image-viewer").performTouchInput {
+            swipe(center, center + Offset(0f, 40f), 1_000)
+        }
+        waitForIdle()
+        onNodeWithContentDescription("画像").assertIsDisplayed()
+        assertEquals(0, closed)
     }
 
     @Test

@@ -15,8 +15,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import platform.CoreGraphics.CGRectMake
 import platform.Foundation.NSData
-import platform.Foundation.NSItemProvider
-import platform.Foundation.NSItemProviderWritingProtocol
 import platform.Foundation.NSURL
 import platform.darwin.NSObject
 import platform.Foundation.create
@@ -33,7 +31,6 @@ import platform.UIKit.UIWindow
 import platform.UIKit.UIWindowScene
 import org.jetbrains.skia.EncodedImageFormat
 import platform.LinkPresentation.LPLinkMetadata
-import com.rectime.mobile.core.platform.platformAppIconImage
 
 internal actual fun imageViewerDialogProperties() = DialogProperties(
     usePlatformDefaultWidth = false,
@@ -92,12 +89,7 @@ internal actual fun rememberImageActions(): suspend (Image, String?) -> Boolean 
 private class ImageShareItem(private val image: UIImage, title: String?) : NSObject(), UIActivityItemSourceProtocol {
     private val metadata = LPLinkMetadata().apply {
         this.title = title
-        platformAppIconImage()?.let { appIcon ->
-            // OSがどちらをプレビューに採用しても、共有画像へ切り替わらないようにする。
-            val provider = NSItemProvider(`object` = appIcon as NSItemProviderWritingProtocol)
-            iconProvider = provider
-            imageProvider = provider
-        }
+        // プレビューの画像・アイコンは指定せず、OSの既定表示を使う。
         // 補足欄の専用APIはない。プレビューだけにアプリ名をファイル名情報として渡す。
         // 実際の共有項目はUIImageのままで、この表示用URLは共有・通信しない。
         originalURL = NSURL.fileURLWithPath("RE:CREATION")

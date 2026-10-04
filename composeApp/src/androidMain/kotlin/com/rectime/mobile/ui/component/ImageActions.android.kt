@@ -7,16 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogProperties
@@ -27,7 +20,6 @@ import coil3.toBitmap
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal actual fun imageViewerDialogProperties() = DialogProperties(
@@ -48,21 +40,7 @@ internal actual fun ImageViewerWindowController() {
 @Composable
 internal actual fun rememberImageActions(): suspend (Image, String?) -> Boolean {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var pendingPath by rememberSaveable { mutableStateOf<String?>(null) }
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
-        val file = pendingPath?.let(::File)
-        pendingPath = null
-        if (uri != null && file != null) scope.launch {
-            val saved = withContext(Dispatchers.IO) {
-                runCatching {
-                    val output = requireNotNull(context.contentResolver.openOutputStream(uri))
-                    output.use { file.inputStream().use { input -> input.copyTo(it) } }
-                }.isSuccess
-            }
-            if (!saved) Toast.makeText(context, "画像を保存できませんでした", Toast.LENGTH_SHORT).show()
-        }
-    }
+    val save = LocalImageSaveLauncher.current
     return remember(context, save) {
         { image: Image, imageTitle: String? ->
             val title = imageTitle ?: "画像"
@@ -95,9 +73,7 @@ internal actual fun rememberImageActions(): suspend (Image, String?) -> Boolean 
                                     .onFailure { Toast.makeText(context, "共有先を開けませんでした", Toast.LENGTH_SHORT).show() }
                             }
                             1 -> {
-                                pendingPath = file.absolutePath
-                                runCatching { save.launch("image.png") }.onFailure {
-                                    pendingPath = null
+                                runCatching { save(file) }.onFailure {
                                     Toast.makeText(context, "保存先を開けませんでした", Toast.LENGTH_SHORT).show()
                                 }
                             }
