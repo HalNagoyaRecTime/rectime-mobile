@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.schedule
 
+import com.rectime.mobile.core.network.MyEventsGateway
+import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
@@ -1292,18 +1294,118 @@ class ScheduleViewModelTest {
         collectJob.cancel()
     }
 
+    @Test
+    fun participationApiMarksOnlyMyEventsAndPersistsIds() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(
+            Triple(1, "0900", "1000"), Triple(2, "1000", "1100"),
+        )) }, cache = cache, myEventsGateway = participationGateway { setOf(2) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value.first { it.eventId == 1 }.isParticipating)
+        assertTrue(viewModel.events.value.first { it.eventId == 2 }.isParticipating)
+        assertEquals(setOf(2), cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+    }
+
+    @Test
+    fun cachedParticipationIsVisibleBeforeEitherRequestCompletes() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJsonOf(Triple(1, "0900", "1000"))))
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { gate.await(); error("offline") }, cache = cache,
+            myEventsGateway = participationGateway { gate.await(); error("offline") })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.events.value.single().isParticipating)
+        assertFalse(viewModel.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+    }
+
+    @Test
+    fun slowParticipationDoesNotBlockScheduleAndUpdatesOverflowEvents() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(
+            *Array(6) { Triple(it + 1, "0900", "1000") },
+        )) }, myEventsGateway = participationGateway { gate.await(); setOf(6) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.events.value.isNotEmpty())
+        assertFalse(viewModel.isLoading)
+        assertTrue(viewModel.isUpdating)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.flatMap { it.overflowEvents }.first { it.eventId == 6 }.isParticipating)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun failedParticipationRefreshRetainsMemoryAndEmptySuccessClearsIt() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(Triple(1, "0900", "1000"))) },
+            cache = LocalCache(NeverPersistingKeyValueStore()), myEventsGateway = participationGateway {
+                when (++calls) { 1 -> setOf(1); 2 -> error("offline"); else -> emptySet() }
+            })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value.single().isParticipating)
+    }
+
+    @Test
+    fun logoutDuringParticipationFetchDoesNotRestoreIdsOrColors() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(Triple(1, "0900", "1000"))) },
+            cache = cache, myEventsGateway = participationGateway { gate.await(); setOf(1) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value.any { it.isParticipating })
+        assertNull(cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+    }
+
+    @Test
+    fun cachedScheduleStillGetsFreshParticipationWhenEventsRequestFails() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJsonOf(Triple(1, "0900", "1000"))))
+        val viewModel = buildViewModel(mockClient { error("offline") }, cache = cache,
+            myEventsGateway = participationGateway { setOf(1) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+        assertTrue(viewModel.isOffline)
+    }
+
     private fun buildViewModel(
         client: HttpClient,
         clock: Clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z")),
         timeZone: TimeZone = TimeZone.UTC,
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
+        myEventsGateway: MyEventsGateway = participationGateway { emptySet() },
     ) = ScheduleViewModel(
         client = client,
         baseUrl = "https://api.example.com",
         clock = clock,
         timeZone = timeZone,
         cache = cache,
+        myEventsGateway = myEventsGateway,
     )
+
+    private fun participationGateway(fetch: suspend () -> Set<Int>) = object : MyEventsGateway {
+        override suspend fun getMyEventIds(): Set<Int> = fetch()
+    }
 
     private fun mockClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,

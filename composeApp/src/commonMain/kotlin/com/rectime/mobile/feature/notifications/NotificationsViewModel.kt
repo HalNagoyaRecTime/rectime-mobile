@@ -1,5 +1,8 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.network.MyEventsApi
+import com.rectime.mobile.core.network.MyEventsGateway
+import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CacheRequestGeneration
@@ -30,7 +33,6 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlin.time.Clock
 
-private const val MY_EVENTS_CACHE_KEY = "notification_my_event_ids_v1"
 
 enum class NotificationRefreshSource { Header, Pull }
 
