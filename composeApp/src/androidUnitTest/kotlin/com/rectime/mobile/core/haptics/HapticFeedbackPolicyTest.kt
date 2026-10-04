@@ -6,14 +6,8 @@ import kotlin.test.assertEquals
 
 class HapticFeedbackPolicyTest {
     @Test
-    fun android14AndLaterUseGestureThresholdFeedback() {
-        assertEquals(HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE, refreshThresholdHapticConstant(34))
-        assertEquals(HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE, refreshThresholdHapticConstant(35))
-    }
-
-    @Test
-    fun olderAndroidUsesCompatibleClockTickFeedback() {
-        assertEquals(HapticFeedbackConstants.CLOCK_TICK, refreshThresholdHapticConstant(33))
-        assertEquals(HapticFeedbackConstants.CLOCK_TICK, refreshThresholdHapticConstant(24))
+    fun mediumImpactUsesTheSameSingleClickOnAllSupportedAndroidVersions() {
+        // OSバージョンを入力に持たず、軽いTICKへの分岐を作らない。
+        assertEquals(HapticFeedbackConstants.VIRTUAL_KEY, mediumImpactHapticConstant())
     }
 }
