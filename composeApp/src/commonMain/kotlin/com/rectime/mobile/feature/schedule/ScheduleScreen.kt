@@ -141,7 +141,12 @@ private fun ScheduleScreenUI(
 
     val lazyListState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedOverflowEvents by remember { mutableStateOf<List<TimelineEvent>?>(null) }
+    var selectedOverflowEventIds by remember { mutableStateOf<List<Int>?>(null) }
+    val selectedOverflowEvents = resolveOverflowSelection(events, selectedOverflowEventIds)
+    LaunchedEffect(selectedOverflowEventIds, selectedOverflowEvents.isEmpty()) {
+        // 更新で対象がなくなった場合、古い選択を残して再表示しない。
+        if (selectedOverflowEventIds != null && selectedOverflowEvents.isEmpty()) selectedOverflowEventIds = null
+    }
 
     val windowInfo = LocalWindowInfo.current
     val density = LocalDensity.current
@@ -426,7 +431,7 @@ private fun ScheduleScreenUI(
                                         .padding(dim.borderExtend) // 外側に dim.borderExtend 分の余白
                                         .clip(RoundedCornerShape(dim.cornerRadius))
                                         .background(AppTheme.colors.eventOverflowBackground)
-                                        .clickable { selectedOverflowEvents = event.overflowEvents }
+                                        .clickable { selectedOverflowEventIds = event.overflowEvents.map { it.eventId } }
                                 ) {
                                     BoxWithConstraints(
                                         modifier = Modifier
@@ -478,8 +483,8 @@ private fun ScheduleScreenUI(
             }
         }
 
-        selectedOverflowEvents?.let { hiddenEvents ->
-            AppModal(onDismiss = { selectedOverflowEvents = null }) {
+        selectedOverflowEvents.takeIf { it.isNotEmpty() }?.let { hiddenEvents ->
+            AppModal(onDismiss = { selectedOverflowEventIds = null }) {
                 Text(
                     text = "その他のイベント (${hiddenEvents.size}件)",
                     color = AppTheme.colors.textDetailsScreenTitle,
@@ -499,7 +504,7 @@ private fun ScheduleScreenUI(
                         isLive = isLive,
                         isParticipating = event.isParticipating,
                         onClick = {
-                            selectedOverflowEvents = null
+                            selectedOverflowEventIds = null
                             onOpenEventDetail(event.eventId)
                         },
                         modifier = Modifier
