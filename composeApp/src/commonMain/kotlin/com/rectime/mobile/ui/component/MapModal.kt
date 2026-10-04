@@ -11,6 +11,7 @@ fun MapModal(onDismiss: () -> Unit) {
     ImageViewerDialog(
         imageUrl = venueMapImageUrl(),
         contentDescription = "会場マップ",
+        title = "会場マップ",
         onDismiss = onDismiss,
     )
 }

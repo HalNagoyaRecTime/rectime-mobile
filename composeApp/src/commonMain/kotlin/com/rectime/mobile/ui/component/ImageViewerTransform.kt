@@ -1,5 +1,7 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,7 +36,29 @@ internal class ImageViewerTransform {
     }
 
     fun doubleTap(position: Offset) {
-        if (scale > 1f) reset() else transform(2.5f, Offset.Zero, position)
+        if (!position.x.isFinite() || !position.y.isFinite()) return
+        val (nextScale, nextOffset) = doubleTapTarget(position)
+        scale = nextScale
+        offset = nextOffset
+    }
+
+    /** ダブルタップだけを補間する。途中で指が触れた場合も、その時点の位置から操作を続けられる。 */
+    suspend fun animateDoubleTap(position: Offset) {
+        if (!position.x.isFinite() || !position.y.isFinite()) return
+        val startScale = scale
+        val startOffset = offset
+        val (nextScale, nextOffset) = doubleTapTarget(position)
+        animate(0f, 1f, animationSpec = tween(250)) { progress, _ ->
+            scale = startScale + (nextScale - startScale) * progress
+            offset = clamp(startOffset + (nextOffset - startOffset) * progress, scale)
+        }
+    }
+
+    private fun doubleTapTarget(position: Offset): Pair<Float, Offset> {
+        if (scale > 1f) return 1f to Offset.Zero
+        val nextScale = 2.5f
+        val anchor = position - Offset(viewport.width / 2, viewport.height / 2)
+        return nextScale to clamp((offset - anchor) * nextScale + anchor, nextScale)
     }
 
     fun reset() { scale = 1f; offset = Offset.Zero }

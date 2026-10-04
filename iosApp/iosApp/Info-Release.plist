@@ -9,6 +9,12 @@
   共通キー: CADisableMinimumFrameDurationOnPhone, UILaunchScreen, CFBundleURLTypes
 -->
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ja</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ja</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UILaunchScreen</key>
@@ -20,6 +26,8 @@
 	</dict>
 	<key>API_BASE_URL</key>
 	<string>$(API_BASE_URL)</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>会場マップなどの画像を写真ライブラリに保存します。</string>
 	<key>FirebaseAppDelegateProxyEnabled</key>
 	<false/>
 	<key>CFBundleURLTypes</key>
