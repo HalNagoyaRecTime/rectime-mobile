@@ -11,7 +11,13 @@ private enum SplashTiming {
     static let duration = 2.75
 }
 
+enum SplashOpening {
+    case burst
+    case sportsGathering
+}
+
 struct RecreationSplashView: View {
+    var opening: SplashOpening = .burst
     var onFinished: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var startedAt = Date()
@@ -111,11 +117,17 @@ struct RecreationSplashView: View {
                 let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2 - 35)
                 let iconSize = min(220, canvasSize.width * 0.57)
                 if !reduceMotion {
-                    drawBurst(context: &context, center: center, size: iconSize, elapsed: elapsed)
+                    switch opening {
+                    case .burst:
+                        drawBurst(context: &context, center: center, size: iconSize, elapsed: elapsed)
+                    case .sportsGathering:
+                        drawSportsGathering(context: &context, center: center, size: canvasSize, iconSize: iconSize, elapsed: elapsed)
+                    }
                 }
-                let appearance = reduceMotion ? 1 : splashSpring(elapsed / 0.7)
+                let logoAge = elapsed - (opening == .sportsGathering ? 0.28 : 0)
+                let appearance = reduceMotion ? 1 : splashSpring(logoAge / 0.7)
                 var logoContext = context
-                logoContext.opacity = splashClamp(elapsed / 0.12)
+                logoContext.opacity = splashClamp(logoAge / 0.12)
                 logoContext.translateBy(x: center.x, y: center.y)
                 logoContext.scaleBy(x: iconSize / 1024 * appearance, y: iconSize / 1024 * appearance)
                 logoContext.translateBy(x: -512, y: -512)
@@ -162,6 +174,36 @@ struct RecreationSplashView: View {
         }
     }
 
+    private func drawSportsGathering(context: inout GraphicsContext, center: CGPoint, size: CGSize, iconSize: Double, elapsed: Double) {
+        let radiusX = min(size.width / 2 - 30, iconSize * 0.76)
+        let radiusY = iconSize * 0.87
+        let symbolHeight = min(42, size.width * 0.105)
+        for (index, athlete) in SplashAthlete.all.enumerated() {
+            let age = elapsed - 0.06 - Double(index) * 0.055
+            guard age > 0 else { continue }
+            let angle = athlete.angle * .pi / 180
+            let arrival = splashEase((age - 0.16) / 0.68)
+            // 最初に少しためて、体を起こしてから輪の中に入る。
+            let effort = sin(splashClamp(age / 0.3) * .pi)
+            let pop = splashSpring(age / 0.38)
+            let extraDistance = (1 - arrival) * (64 + effort * 12)
+            let x = center.x + cos(angle) * (radiusX + extraDistance)
+            let y = center.y + sin(angle) * (radiusY + extraDistance) + (1 - pop) * 28
+            var person = context
+            person.opacity = splashClamp(age / 0.12)
+            person.translateBy(x: x, y: y)
+            let lean = (index.isMultiple(of: 2) ? -1.0 : 1.0) * (1 - arrival) * 0.25
+            person.rotate(by: .radians(lean + effort * 0.08))
+            let scale = 0.62 + 0.38 * pop
+            person.scaleBy(x: scale, y: scale)
+            var image = person.resolve(Image(systemName: athlete.symbol).renderingMode(.template))
+            guard image.size.height > 0 else { continue }
+            image.shading = .color(athlete.color)
+            let width = symbolHeight * image.size.width / image.size.height
+            person.draw(image, in: CGRect(x: -width / 2, y: -symbolHeight / 2, width: width, height: symbolHeight))
+        }
+    }
+
     private func drawBurst(context: inout GraphicsContext, center: CGPoint, size: Double, elapsed: Double) {
         let progress = splashClamp(elapsed / 0.8)
         guard progress < 1 else { return }
@@ -197,6 +239,24 @@ struct RecreationSplashView: View {
         copy.opacity = pulse * 0.65
         copy.fill(Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2)), with: .color(strong ? SplashLogo.orange : SplashLogo.teal))
     }
+}
+
+private struct SplashAthlete {
+    let symbol: String
+    let angle: Double
+    let color: Color
+
+    // 人型のスポーツ記号をロゴの上と左右に集め、下の文字列には重ねない。
+    static let all: [SplashAthlete] = [
+        .init(symbol: "figure.basketball", angle: -160, color: SplashLogo.orange),
+        .init(symbol: "figure.volleyball", angle: -130, color: SplashLogo.teal),
+        .init(symbol: "figure.soccer", angle: -100, color: Color(white: 0.25)),
+        .init(symbol: "figure.badminton", angle: -70, color: SplashLogo.orange),
+        .init(symbol: "figure.table.tennis", angle: -40, color: SplashLogo.teal),
+        .init(symbol: "figure.tennis", angle: -10, color: Color(white: 0.25)),
+        .init(symbol: "figure.baseball", angle: 20, color: SplashLogo.orange),
+        .init(symbol: "figure.run", angle: 160, color: SplashLogo.teal),
+    ]
 }
 
 private struct SplashParticle {
