@@ -3,13 +3,14 @@ package com.rectime.mobile
 import android.Manifest
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.viewModels
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -29,10 +30,9 @@ import com.rectime.mobile.feature.auth.AuthDeepLinkHandler
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
 import com.rectime.mobile.feature.notifications.RectimeNotificationChannel
 import com.rectime.mobile.feature.notifications.createAndroidNotificationPermissionStartup
+import com.rectime.mobile.feature.splash.RecreationSplashView
 import com.rectime.mobile.ui.component.ImageSaveViewModel
 import com.rectime.mobile.ui.component.LocalImageSaveLauncher
-import android.widget.Toast
-import com.rectime.mobile.feature.splash.RecreationSplashView
 
 class MainActivity : ComponentActivity() {
     private val imageSaveViewModel: ImageSaveViewModel by viewModels()
@@ -109,7 +109,7 @@ class MainActivity : ComponentActivity() {
                         )
                         BackHandler { splashView?.finish() }
                     }
-            }
+                }
             }
         }
     }

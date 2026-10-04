@@ -15,7 +15,6 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import com.rectime.mobile.core.haptics.HapticEnabledKey
 import com.rectime.mobile.core.haptics.HapticPreference
-import com.rectime.mobile.core.haptics.mediumImpactHapticConstant
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.exp
@@ -291,6 +290,6 @@ private fun polygon(points: List<SplashPoint>) = Path().apply {
     if (points.isNotEmpty()) { moveTo(points.first().x, points.first().y); points.drop(1).forEach { lineTo(it.x, it.y) }; close() }
 }
 
-// 通常文字は共通のMedium相当、コロンだけ強めの単発振動にする。
+// 通常文字は単発クリック、コロンは長押しの触覚を使う。強度は端末に依存する。
 internal fun splashHapticConstant(letter: Char): Int =
-    if (letter == ':') HapticFeedbackConstants.LONG_PRESS else mediumImpactHapticConstant()
+    if (letter == ':') HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.VIRTUAL_KEY
