@@ -187,6 +187,42 @@ class EventCacheTest {
         assertEquals("old", saved.eventName)
     }
 
+    @Test
+    fun failedDetailWriteUsesSuccessfullyUpdatedListEvenWhenTimestampsCannotDecide() = runTest {
+        for (timestamp in listOf(null, "2026-01-01T10:00:00Z")) {
+            val storage = MemoryStore()
+            val local = LocalCache(storage)
+            val cache = EventCache(local)
+            cache.saveEvents(events("A"))
+            cache.saveDetail(detail("A").copy(updatedAt = timestamp))
+            val delayedList = cache.beginRequest()
+            storage.failWriteKey = "event_detail_v1_1"
+
+            assertEquals("B", cache.saveDetail(detail("B").copy(updatedAt = timestamp)).eventName)
+            assertEquals("A", local.load<EventDetailResponse>("event_detail_v1_1")?.eventName)
+            assertEquals("B", cache.loadEvents()?.events?.single()?.eventName)
+            assertEquals("B", cache.loadDetail(1)?.eventName)
+            // 先に開始していた古い一覧応答が後から届いても、保存できた新しい内容を保持する。
+            cache.saveEvents(events("A"), delayedList)
+            assertEquals("B", cache.loadDetail(1)?.eventName)
+        }
+    }
+
+    @Test
+    fun failedListWriteUsesSuccessfullyUpdatedDetailEvenWhenTimestampsCannotDecide() = runTest {
+        for (timestamp in listOf(null, "2026-01-01T10:00:00Z")) {
+            val storage = MemoryStore()
+            val cache = EventCache(LocalCache(storage))
+            cache.saveEvents(events("A"))
+            cache.saveDetail(detail("A").copy(updatedAt = timestamp))
+            storage.failWriteKey = "schedule_events_v1"
+
+            cache.saveDetail(detail("B").copy(updatedAt = timestamp))
+            assertEquals("A", cache.loadEvents()?.events?.single()?.eventName)
+            assertEquals("B", cache.loadDetail(1)?.eventName)
+        }
+    }
+
     private fun detail(name: String) = EventDetailResponse(1, name, emptyList(), "0900", "0930", null)
     private fun events(name: String) = EventsResponse(listOf(EventResponse(
         1, name, null, emptyList(), "0900", "0930", "2026-01-01", "2026-01-01",
@@ -196,6 +232,7 @@ class EventCacheTest {
         private val values = mutableMapOf<String, String>()
         var clearOnListRead = false
         var pauseNextListRead: CompletableDeferred<Unit>? = null
+        var failWriteKey: String? = null
         override suspend fun getString(key: String): String? {
             if (key == "schedule_events_v1") {
                 pauseNextListRead?.let { gate -> pauseNextListRead = null; gate.await() }
@@ -208,7 +245,10 @@ class EventCacheTest {
             }
             return value
         }
-        override suspend fun putString(key: String, value: String) { values[key] = value }
+        override suspend fun putString(key: String, value: String) {
+            if (key == failWriteKey) error("storage failed for $key")
+            values[key] = value
+        }
         override suspend fun clear() { values.clear() }
     }
 }

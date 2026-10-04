@@ -94,14 +94,18 @@ internal class EventCache(private val cache: LocalCache) {
             val events = loadOrNull<EventsResponse>("schedule_events_v1")
             val saved = savedDetail(detail.eventId, events)
             val merged = if (saved != null && keepSaved(saved.updatedAt, detail.updatedAt, detail.eventId, request)) saved else detail
-            if (persist && saveOrIgnore("event_detail_v1_${detail.eventId}", merged, request)) {
+            val detailSaved = persist && saveOrIgnore("event_detail_v1_${detail.eventId}", merged, request)
+            if (detailSaved) {
                 recordWrite(detail.eventId, detail = true, request)
             }
             // 詳細1件から不完全な一覧は作らない。既存の他イベントも保持する。
             if (persist && events != null && events.events.any { it.eventId == detail.eventId }) {
                 if (saveOrIgnore("schedule_events_v1", events.copy(events = events.events.map {
                     if (it.eventId == detail.eventId) it.withDetail(merged) else it
-                }), request)) recordWrite(detail.eventId, detail = true, request)
+                }), request)) {
+                    // 詳細の保存だけ失敗した場合は、更新できた一覧を優先する。
+                    recordWrite(detail.eventId, detail = detailSaved, request)
+                }
             }
             merged
         }
