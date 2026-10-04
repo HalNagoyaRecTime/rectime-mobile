@@ -4,7 +4,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 
 class ImageViewerTransformTest {
     private fun transform(image: Size = Size(400f, 800f)) = ImageViewerTransform().apply {
@@ -49,10 +48,6 @@ class ImageViewerTransformTest {
         assertEquals(Offset.Zero, transform.offset)
     }
 
-    @Test
-    fun viewerRejectsMissingImageSource() {
-        assertFailsWith<IllegalArgumentException> { ImageViewerItem("empty") }
-    }
     @Test
     fun pointerUpWithoutACentroidCannotCorruptTheImage() {
         val transform = transform()

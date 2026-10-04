@@ -8,7 +8,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import kotlin.math.min
 
-/** Bounds use the fitted image, so letterboxed space cannot be panned into view. */
+/** 画像の縦横比に合わせて移動範囲を制限する。 */
 internal class ImageViewerTransform {
     var scale by mutableFloatStateOf(1f)
         private set
@@ -24,7 +24,7 @@ internal class ImageViewerTransform {
     }
 
     fun transform(zoom: Float, pan: Offset, centroid: Offset) {
-        // Pointer-up events can have no active centroid. Never put NaN into a graphics layer.
+        // 指を離した際の未定義座標を描画へ渡さない。
         if (!zoom.isFinite() || zoom <= 0f || !pan.x.isFinite() || !pan.y.isFinite() ||
             !centroid.x.isFinite() || !centroid.y.isFinite()) return
         val next = (scale * zoom).coerceIn(1f, 5f)
