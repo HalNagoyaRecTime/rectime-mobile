@@ -134,7 +134,7 @@ struct RecreationSplashView: View {
                 SplashLogo.draw(in: &logoContext)
 
                 // 全文字の実際の幅を先に確保し、出現中も文字間隔と中央位置を保つ。
-                let fontSize = min(24, canvasSize.width / 16)
+                let fontSize = min(28, canvasSize.width / 14)
                 let font = Font.system(size: fontSize, weight: .heavy)
                 let glyphs = SplashTiming.letters.map { context.resolve(Text(String($0)).font(font)) }
                 let widths = glyphs.map { $0.measure(in: CGSize(width: CGFloat.infinity, height: CGFloat.infinity)).width }
@@ -157,38 +157,43 @@ struct RecreationSplashView: View {
                     letterContext.translateBy(x: letterX, y: center.y + iconSize / 2 + 46 + rise)
                     letterContext.scaleBy(x: scale, y: scale)
                     if letter == ":" {
-                        // ブランドのコロンはオレンジと水色の2点。
-                        for (offset, color) in [(-5.0, Color(red: 239.0 / 255, green: 96.0 / 255, blue: 48.0 / 255)), (5.0, Color(red: 75.0 / 255, green: 191.0 / 255, blue: 192.0 / 255))] {
-                            let rect = CGRect(x: -3, y: offset - 3, width: 6, height: 6)
+                        // 上の水色・下の黄色と、隣のオレンジのCで3色の顔にする。
+                        let dotScale = fontSize / 24
+                        for (offset, color) in [(-5.0, SplashLogo.teal), (5.0, SplashLogo.yellow)] {
+                            let rect = CGRect(x: -3 * dotScale, y: (offset - 3) * dotScale, width: 6 * dotScale, height: 6 * dotScale)
                             letterContext.fill(Path(ellipseIn: rect), with: .color(color))
                         }
                     } else {
-                        let color = index == 3 ? Color(red: 239.0 / 255, green: 96.0 / 255, blue: 48.0 / 255) : Color(red: 34.0 / 255, green: 34.0 / 255, blue: 34.0 / 255)
+                        let color = index == 3 ? SplashLogo.orange : Color(red: 34.0 / 255, green: 34.0 / 255, blue: 34.0 / 255)
                         letterContext.draw(Text(String(letter)).font(.system(size: fontSize, weight: .heavy)).foregroundColor(color), at: .zero)
                     }
-                }
-                if !reduceMotion {
-                    drawPulseIndicator(context: &context, center: center, iconSize: iconSize, elapsed: elapsed)
                 }
             }
         }
     }
 
     private func drawSportsGathering(context: inout GraphicsContext, center: CGPoint, size: CGSize, iconSize: Double, elapsed: Double) {
-        let radiusX = min(size.width / 2 - 30, iconSize * 0.76)
+        let symbolHeight = min(60, size.width * 0.15)
+        let radiusX = min(size.width / 2 - symbolHeight * 0.7, iconSize * 0.76)
         let radiusY = iconSize * 0.87
-        let symbolHeight = min(42, size.width * 0.105)
         for (index, athlete) in SplashAthlete.all.enumerated() {
             let age = elapsed - 0.06 - Double(index) * 0.055
             guard age > 0 else { continue }
             let angle = athlete.angle * .pi / 180
-            let arrival = splashEase((age - 0.16) / 0.68)
-            // 最初に少しためて、体を起こしてから輪の中に入る。
+            let arrival = splashEase((age - 0.08) / 0.85)
+            // 画面サイズに合わせて、記号全体が画面外になる位置から入ってくる。
+            let directionX = cos(angle)
+            let directionY = sin(angle)
+            let edgeX = (directionX > 0 ? size.width - center.x : center.x) / max(abs(directionX), 0.001)
+            let edgeY = (directionY > 0 ? size.height - center.y : center.y) / max(abs(directionY), 0.001)
+            let outsideDistance = min(edgeX, edgeY) + symbolHeight * 2
+            let start = CGPoint(x: center.x + directionX * outsideDistance, y: center.y + directionY * outsideDistance)
+            let destination = CGPoint(x: center.x + directionX * radiusX, y: center.y + directionY * radiusY)
+            // 少しためて体を起こし、中央のロゴを囲む位置でふわっと止まる。
             let effort = sin(splashClamp(age / 0.3) * .pi)
             let pop = splashSpring(age / 0.38)
-            let extraDistance = (1 - arrival) * (64 + effort * 12)
-            let x = center.x + cos(angle) * (radiusX + extraDistance)
-            let y = center.y + sin(angle) * (radiusY + extraDistance) + (1 - pop) * 28
+            let x = start.x + (destination.x - start.x) * arrival
+            let y = start.y + (destination.y - start.y) * arrival + (1 - pop) * 28
             var person = context
             person.opacity = splashClamp(age / 0.12)
             person.translateBy(x: x, y: y)
@@ -226,19 +231,6 @@ struct RecreationSplashView: View {
         ring.stroke(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)), with: .color(SplashLogo.teal), lineWidth: 1.5)
     }
 
-    private func drawPulseIndicator(context: inout GraphicsContext, center: CGPoint, iconSize: Double, elapsed: Double) {
-        guard let appearedAt = letterAppearances.last else { return }
-        let index = letterAppearances.count - 1
-        let age = elapsed - appearedAt
-        let pulse = 1 - splashClamp(age / 0.16)
-        let strong = SplashTiming.letters[index] == ":"
-        // 文字ごとの振動を、小さな点の拡大でも視覚的に示す。
-        let radius = (strong ? 4.5 : 2.5) * pulse
-        let point = CGPoint(x: center.x, y: center.y + iconSize / 2 + 78)
-        var copy = context
-        copy.opacity = pulse * 0.65
-        copy.fill(Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius, width: radius * 2, height: radius * 2)), with: .color(strong ? SplashLogo.orange : SplashLogo.teal))
-    }
 }
 
 private struct SplashAthlete {
