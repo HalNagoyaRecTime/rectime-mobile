@@ -170,7 +170,7 @@ android {
         buildConfig = true
     }
     defaultConfig {
-        applicationId = "com.rectime.mobile"
+        applicationId = "io.github.halnagoyarectime"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = resolveBuildProperty("VERSION_CODE")?.toIntOrNull() ?: 1
