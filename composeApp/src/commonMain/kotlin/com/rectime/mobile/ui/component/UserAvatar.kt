@@ -34,10 +34,16 @@ internal fun avatarBackground(userId: String): Color {
 
 /** 写真のない時や画像の描画失敗時も、スポーツのピクトグラムを表示する。追加通信は行わない。 */
 @Composable
-internal fun UserAvatar(userId: String, photoBytes: ByteArray?, modifier: Modifier = Modifier) {
+internal fun UserAvatar(
+    userId: String,
+    photoBytes: ByteArray?,
+    modifier: Modifier = Modifier,
+    sportOverride: SportAvatarPictogram? = null,
+    usePhoto: Boolean = true,
+) {
     val platformContext = LocalPlatformContext.current
     val background = remember(userId) { avatarBackground(userId) }
-    val sport = remember(userId) { avatarSport(userId) }
+    val sport = sportOverride ?: remember(userId) { avatarSport(userId) }
     val request = remember(platformContext, userId, photoBytes) {
         photoBytes?.let { bytes ->
             ImageRequest.Builder(platformContext)
@@ -65,7 +71,7 @@ internal fun UserAvatar(userId: String, photoBytes: ByteArray?, modifier: Modifi
                 // 手足・用具を含む矩形全体が丸の内側に収まる大きさにする。
                 modifier = Modifier.fillMaxSize(0.64f),
             )
-            if (request != null) {
+            if (usePhoto && request != null) {
                 AsyncImage(
                     model = request,
                     contentDescription = null,

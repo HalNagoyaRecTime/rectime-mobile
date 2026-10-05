@@ -1,5 +1,9 @@
 package com.rectime.mobile.feature.settings
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -302,7 +306,7 @@ class SettingsScreen(
 
 /**
  * 画面上端から続くユーザー情報ヘッダー。
- * 写真を取得できない場合は名前の頭文字を表示する。
+ * 写真またはユーザーが選んだ競技を表示する。
  */
 @Composable
 private fun UserInfoHeader(
@@ -313,6 +317,28 @@ private fun UserInfoHeader(
     classCode: String?,
     modifier: Modifier = Modifier,
 ) {
+    val preference = remember(userId) { AvatarPreference(userId) }
+    var selection by remember(userId) { mutableStateOf(AvatarSelection()) }
+    var selectionLoaded by remember(userId) { mutableStateOf(false) }
+    var showAvatarSelection by remember(userId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val photoBytes = LocalProfilePhotoRepository.current?.photoBytes?.collectAsState()?.value
+    LaunchedEffect(preference) {
+        selection = preference.load()
+        selectionLoaded = true
+    }
+    if (showAvatarSelection) {
+        AvatarSelectionSheet(
+            userId = userId,
+            photoBytes = photoBytes,
+            selection = if (selection.photo && photoBytes == null) AvatarSelection() else selection,
+            onSelect = { choice ->
+                selection = choice
+                scope.launch { preference.save(choice) }
+            },
+            onDismiss = { showAvatarSelection = false },
+        )
+    }
     val avatarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
         AppTheme.layout.headerSpacing + AppTheme.layout.headerAction +
         AppTheme.layout.headerSpacing + AppTheme.spacing.lg
@@ -388,11 +414,22 @@ private fun UserInfoHeader(
                 }
             }
         }
-        UserAvatar(
-            userId = userId,
-            photoBytes = LocalProfilePhotoRepository.current?.photoBytes?.collectAsState()?.value,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = avatarTop).size(ProfileAvatarSize),
-        )
+        // タップの意味は外側のボタンが持ち、装飾画像のセマンティクスと分離する。
+        Box(
+            Modifier.align(Alignment.TopCenter).offset(y = avatarTop).size(ProfileAvatarSize)
+                .clip(androidx.compose.foundation.shape.CircleShape)
+                .semantics { contentDescription = "プロフィールアイコン" }
+                .clickable(enabled = selectionLoaded, role = Role.Button,
+                    onClickLabel = "プロフィールアイコンを選ぶ", onClick = { showAvatarSelection = true }),
+        ) {
+            UserAvatar(
+                userId = userId,
+                photoBytes = photoBytes,
+                modifier = Modifier.fillMaxSize(),
+                sportOverride = selection.sport,
+                usePhoto = selection.sport == null,
+            )
+        }
     }
 }
 
