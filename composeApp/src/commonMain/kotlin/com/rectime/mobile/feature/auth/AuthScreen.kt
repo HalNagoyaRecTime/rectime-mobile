@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.component.AppLogoMark
@@ -115,7 +116,7 @@ private fun AppLogoSection(modifier: Modifier = Modifier) {
         AppLogoMark()
 
         Text(
-            text = "RE:CREATION",
+            text = appDisplayName,
             modifier = Modifier.offset(y=(-20).dp),
             fontSize = 34.sp,
             fontWeight = FontWeight.Black,

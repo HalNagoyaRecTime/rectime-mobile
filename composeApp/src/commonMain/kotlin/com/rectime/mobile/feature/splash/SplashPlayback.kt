@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.splash
 
+import com.rectime.mobile.core.config.appDisplayName
+
 /** 起動演出の時刻と文字の出現を管理する。通信の完了には依存しない。 */
 internal class SplashPlayback {
     var elapsedMillis = 0L
@@ -44,7 +46,7 @@ internal class SplashPlayback {
     }
 
     companion object {
-        const val Title = "RE:CREATION"
+        val Title: String get() = appDisplayName
         const val LetterStartMillis = 700L
         const val LetterIntervalMillis = 75L
         const val TurnStartMillis = 2000L
