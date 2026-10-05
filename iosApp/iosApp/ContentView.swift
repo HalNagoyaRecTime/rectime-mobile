@@ -16,6 +16,7 @@ struct ComposeView: UIViewControllerRepresentable {
 
 struct ContentView: View {
     @State private var showSplash = true
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -29,6 +30,12 @@ struct ContentView: View {
             }
         }
             .ignoresSafeArea()
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("RecreationLiveSchedule"))) { notification in
+                LiveActivityCoordinator.shared.receive(notification.userInfo?["payload"] as? String)
+            }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                LiveActivityCoordinator.shared.setActive(phase == .active)
+            }
             .onOpenURL { url in
                 AuthDeepLinkHandler.shared.handle(url: url.absoluteString)
             }

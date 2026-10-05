@@ -8,9 +8,40 @@
 
 /* Begin PBXBuildFile section */
 		7A1FC0100000000000000001 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1FC0100000000000000003 /* FirebaseMessaging */; };
+		A10000000000000000000001 /* LiveActivityShared/RecreationActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* LiveActivityShared/RecreationActivityAttributes.swift */; };
+		A10000000000000000000002 /* LiveActivityShared/RecreationActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* LiveActivityShared/RecreationActivityAttributes.swift */; };
+		A10000000000000000000004 /* RecreationLiveActivity/RecreationLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* RecreationLiveActivity/RecreationLiveActivity.swift */; };
+		A10000000000000000000006 /* RecreationLiveActivity.appex in Embed Live Activity */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* RecreationLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000008 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7F3123AC547E828EB814ABB1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A10000000000000000000009;
+			remoteInfo = RecreationLiveActivity;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A10000000000000000000010 /* Embed Live Activity */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A10000000000000000000006 /* RecreationLiveActivity.appex in Embed Live Activity */,
+			);
+			name = "Embed Live Activity";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		A10000000000000000000003 /* LiveActivityShared/RecreationActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityShared/RecreationActivityAttributes.swift; sourceTree = "<group>"; };
+		A10000000000000000000005 /* RecreationLiveActivity/RecreationLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecreationLiveActivity/RecreationLiveActivity.swift; sourceTree = "<group>"; };
+		A10000000000000000000007 /* RecreationLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = RecreationLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E7C46A350BC0382DA91661D2 /* Rectimemobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rectimemobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -42,6 +73,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A10000000000000000000014 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D1B24F4DC74BBBEC30899C33 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -57,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				E7C46A350BC0382DA91661D2 /* Rectimemobile.app */,
+				A10000000000000000000007 /* RecreationLiveActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -67,6 +106,8 @@
 				FB600424FBF06F75F5131489 /* Configuration */,
 				723779318815FE98FF924549 /* iosApp */,
 				B575E86706B6F6ADE5C16A16 /* Products */,
+				A10000000000000000000003 /* LiveActivityShared/RecreationActivityAttributes.swift */,
+				A10000000000000000000005 /* RecreationLiveActivity/RecreationLiveActivity.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -81,10 +122,12 @@
 				2F0AE4496ED667AFBB9C727B /* Sources */,
 				D1B24F4DC74BBBEC30899C33 /* Frameworks */,
 				A34B12F9D778718FCB2AF7D5 /* Resources */,
+				A10000000000000000000010 /* Embed Live Activity */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A10000000000000000000011 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				723779318815FE98FF924549 /* iosApp */,
@@ -96,6 +139,23 @@
 			productName = iosApp;
 			productReference = E7C46A350BC0382DA91661D2 /* Rectimemobile.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000009 /* RecreationLiveActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000012 /* Build configuration list for PBXNativeTarget "RecreationLiveActivity" */;
+			buildPhases = (
+				A10000000000000000000013 /* Sources */,
+				A10000000000000000000014 /* Frameworks */,
+				A10000000000000000000015 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RecreationLiveActivity;
+			productName = RecreationLiveActivity;
+			productReference = A10000000000000000000007 /* RecreationLiveActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -130,11 +190,19 @@
 			projectRoot = "";
 			targets = (
 				39E1B94B440EEBE6C9B613CE /* iosApp */,
+				A10000000000000000000009 /* RecreationLiveActivity */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A10000000000000000000015 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A34B12F9D778718FCB2AF7D5 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -171,10 +239,28 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000001 /* LiveActivityShared/RecreationActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000013 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000002 /* LiveActivityShared/RecreationActivityAttributes.swift in Sources */,
+				A10000000000000000000004 /* RecreationLiveActivity/RecreationLiveActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000011 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A10000000000000000000009 /* RecreationLiveActivity */;
+			targetProxy = A10000000000000000000008 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		9CEAFC73B96EC8C82C0EFA5D /* Debug */ = {
@@ -190,6 +276,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "iosApp/Info-Debug.plist";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -262,6 +349,50 @@
 			};
 			name = Release;
 		};
+		A10000000000000000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RecreationLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).LiveActivity";
+				PRODUCT_NAME = RecreationLiveActivity;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10000000000000000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "$(TEAM_ID)";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RecreationLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).LiveActivity";
+				PRODUCT_NAME = RecreationLiveActivity;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		C43E0A72587AFD51E48F85C7 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -275,6 +406,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "iosApp/Info-Release.plist";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -371,6 +503,15 @@
 			buildConfigurations = (
 				9CEAFC73B96EC8C82C0EFA5D /* Debug */,
 				C43E0A72587AFD51E48F85C7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000000000000000000012 /* Build configuration list for PBXNativeTarget "RecreationLiveActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000016 /* Debug */,
+				A10000000000000000000017 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
