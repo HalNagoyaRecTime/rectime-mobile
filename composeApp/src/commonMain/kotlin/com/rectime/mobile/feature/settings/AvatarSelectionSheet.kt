@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.widthIn
@@ -54,23 +55,19 @@ internal fun AvatarSelectionSheet(
         ) {
             Text("プロフィールアイコン", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.textPrimary)
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = if (photoBytes != null) "写真か、好きな競技を選べます。" else "好きな競技を選べます。",
-                fontSize = 13.sp, color = AppTheme.colors.textSecondary,
-            )
             Spacer(Modifier.height(16.dp))
-            Column(
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
                     .border(2.dp, if (selection.isAutomatic) AppTheme.colors.themeColorSecond else AppTheme.colors.borderSubtle,
                         RoundedCornerShape(16.dp))
                     .selectable(selected = selection.isAutomatic, role = Role.RadioButton,
                         onClick = { onSelect(AvatarSelection()) }).padding(14.dp),
             ) {
+                UserAvatar(userId, photoBytes, Modifier.size(48.dp))
                 Text(if (selection.isAutomatic) "✓ 自動" else "自動", color = AppTheme.colors.textPrimary,
                     fontWeight = FontWeight.Medium)
-                Text("写真があれば写真、なければ固定の競技を表示", fontSize = 12.sp,
-                    color = AppTheme.colors.textSecondary)
             }
             Spacer(Modifier.height(16.dp))
             val choices = buildList {
