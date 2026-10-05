@@ -87,13 +87,13 @@ class NavigationController(
     }
 
     fun requestDismissSheet() {
-        if (state.sheet == null) return
+        if (state.sheet == null || state.isTransitioning) return
         state = state.copy(sheetDismissRequestId = state.sheetDismissRequestId + 1)
     }
 
     fun clearSheet(key: String) {
         if (state.sheet?.key == key) {
-            state = state.copy(sheet = null)
+            state = state.copy(sheet = null, isTransitioning = false, activeGesture = ActiveGesture.None)
         }
     }
 
@@ -104,7 +104,9 @@ class NavigationController(
         else -> ActiveGesture.None
     }
 
-    fun setTransitioning(value: Boolean) {
+    fun setSheetTransitioning(key: String, value: Boolean) {
+        // ログアウトなどで画面が変わった後の古いシート処理は、新しい遷移に触らない。
+        if (state.sheet?.key != key || state.pushTransition.mode != PushTransitionMode.Idle) return
         state = state.copy(isTransitioning = value)
     }
 

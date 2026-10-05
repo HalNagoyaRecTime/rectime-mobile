@@ -45,7 +45,7 @@ fun SheetLayer(
 
     LaunchedEffect(sheetEntry.key, containerHeightPx) {
         try {
-            navigationController.setTransitioning(true)
+            navigationController.setSheetTransitioning(sheetEntry.key, true)
             val animator = Animatable(offsetPx)
             animator.animateTo(
                 targetValue = 0f,
@@ -57,7 +57,7 @@ fun SheetLayer(
                 offsetPx = value
             }
         } finally {
-            navigationController.setTransitioning(false)
+            navigationController.setSheetTransitioning(sheetEntry.key, false)
         }
     }
 
@@ -66,7 +66,7 @@ fun SheetLayer(
         handledDismissRequestId = state.sheetDismissRequestId
 
         try {
-            navigationController.setTransitioning(true)
+            navigationController.setSheetTransitioning(sheetEntry.key, true)
             val animator = Animatable(offsetPx)
             animator.animateTo(
                 targetValue = containerHeightPx,
@@ -77,7 +77,7 @@ fun SheetLayer(
             navigationController.clearSheet(sheetEntry.key)
             offsetPx = 0f
         } finally {
-            navigationController.setTransitioning(false)
+            navigationController.setSheetTransitioning(sheetEntry.key, false)
         }
     }
 
