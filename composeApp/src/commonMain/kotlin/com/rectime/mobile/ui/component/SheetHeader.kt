@@ -1,5 +1,6 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -15,9 +16,11 @@ fun SheetHeader(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    HeaderTitleBar(
+    Column(modifier = modifier) {
+        SheetDragHandle()
+        HeaderTitleBar(
         title = title,
-        modifier = modifier,
+        modifier = Modifier,
         onTrailingClick = onClose,
         trailing = {
             Icon(
@@ -28,4 +31,5 @@ fun SheetHeader(
             )
         },
     )
+    }
 }

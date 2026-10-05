@@ -25,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import com.rectime.mobile.ui.component.SheetDragHandle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.clip
@@ -60,6 +61,7 @@ internal fun AvatarSelectionSheet(
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        dragHandle = { SheetDragHandle() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = AppTheme.colors.commonBackground,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),

@@ -228,7 +228,7 @@ fun SheetScaffold(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
-                .padding(top = spacing + AppTheme.layout.headerAction + spacing, bottom = 24.dp)
+                .padding(top = 29.dp + spacing + AppTheme.layout.headerAction + spacing, bottom = 24.dp)
                 .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
             content = content,
         )
