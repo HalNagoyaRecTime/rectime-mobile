@@ -1,6 +1,9 @@
 package com.rectime.mobile.feature.notifications
 
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 
 sealed interface NotificationNavigationTarget {
@@ -48,7 +51,18 @@ object NotificationNavigationHandler {
     private val _targets = Channel<NotificationNavigationTarget>(capacity = Channel.BUFFERED)
     val targets = _targets.receiveAsFlow()
 
+    private val _updates = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val updates = _updates.asSharedFlow()
+
+    fun onNotificationReceived() {
+        _updates.tryEmit(Unit)
+    }
+
     fun handle(data: Map<String, String>) {
+        onNotificationReceived()
         val payload = NotificationNavigationPayload.extract(data)
         _targets.trySend(NotificationNavigationPayload.parse(payload))
     }

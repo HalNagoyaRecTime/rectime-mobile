@@ -17,6 +17,36 @@ sealed class CachedFetchResult<out T> {
 // てしまうため、この関数自体の結果としてFailed扱いにする。
 private class StaleCacheGenerationException : Exception("キャッシュ世代が変化したため、この結果は破棄します")
 
+// 通信後にアニメーションや関連情報の取得を待つ場合も、画面への反映直前にセッションを確認する。
+internal class CacheRequestGeneration {
+    private val generation = CacheGeneration.value
+    val isCurrent: Boolean get() = generation == CacheGeneration.value
+
+    fun <T> validate(result: CachedFetchResult<T>): CachedFetchResult<T> =
+        if (isCurrent) result else CachedFetchResult.Failed(StaleCacheGenerationException())
+}
+
+// 保存済みの内容を先に表示し、既存の通信失敗・セッション変更のガードを使って更新する。
+suspend fun <T> fetchWithCacheFirst(
+    fetchLive: suspend () -> T,
+    loadCache: suspend () -> T?,
+    saveCache: suspend (T) -> Unit,
+    onCached: suspend (T) -> Unit,
+): CachedFetchResult<T> {
+    val request = CacheRequestGeneration()
+    val cached = try {
+        loadCache()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+    if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
+    if (cached != null) onCached(cached)
+    if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
+    return request.validate(fetchWithCacheFallback(fetchLive, { cached }, saveCache))
+}
+
 suspend fun <T> fetchWithCacheFallback(
     fetchLive: suspend () -> T,
     loadCache: suspend () -> T?,
