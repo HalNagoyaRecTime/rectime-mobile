@@ -158,9 +158,7 @@ internal fun AvatarSelectionSheet(
                                                 )
                                             },
                                         contentAlignment = Alignment.Center,
-                                    ) {
-                                        if (colorsEnabled && currentColor == index) Text("✓", color = Color(0xFF354657))
-                                    }
+                                    )
                                 }
                             }
                         }
