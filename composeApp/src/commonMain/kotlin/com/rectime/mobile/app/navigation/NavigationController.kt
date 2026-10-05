@@ -111,6 +111,13 @@ class NavigationController(
     }
 
     fun setBackDragOffset(px: Float) {
+        if (state.activeGesture != ActiveGesture.Back) return
+        state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
+    }
+
+    fun setBackTransitionOffset(key: String, mode: PushTransitionMode, px: Float) {
+        if (state.pushStack.lastOrNull()?.key != key || state.pushTransition.routeKey != key ||
+            state.pushTransition.mode != mode) return
         state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
     }
 

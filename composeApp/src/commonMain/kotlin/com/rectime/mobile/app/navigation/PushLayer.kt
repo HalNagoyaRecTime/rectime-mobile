@@ -57,7 +57,7 @@ fun PushLayer(
                     if (dismiss) containerWidthPx else 0f,
                     tween(GestureTokens.pushDismissDurationMs),
                 ) {
-                    navigationController.setBackDragOffset(value)
+                    navigationController.setBackTransitionOffset(entry.key, transition.mode, value)
                 }
                 if (dismiss) navigationController.completePop(entry.key)
                 else navigationController.finishBackReturn(entry.key)
