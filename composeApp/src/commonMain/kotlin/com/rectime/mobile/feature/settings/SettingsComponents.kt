@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rectime.mobile.ui.component.AppTeamCredit
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
@@ -206,7 +207,7 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "Developed by RE:CREATION App Team",
+                text = AppTeamCredit,
                 fontSize = 13.sp,
                 color = AppTheme.colors.textMuted,
                 textAlign = TextAlign.Center,
