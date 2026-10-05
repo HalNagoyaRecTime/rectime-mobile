@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,6 +23,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
@@ -57,7 +57,7 @@ object RankingScreen : Screen {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        CircularProgressIndicator(color = AppTheme.colors.textPrimary)
+                        AppLoadingIndicator()
                         Text("ランキングを読み込み中", color = AppTheme.colors.textPrimary)
                     }
                 }
