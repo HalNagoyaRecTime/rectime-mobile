@@ -10,18 +10,20 @@ import coil3.compose.rememberAsyncImagePainter
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 
-/** 通常の再検証に失敗した場合だけ保存済み画像へ戻す。別の画像キャッシュは作らない。 */
+/** 保存済み画像を表示しながら通常の取得を行い、失敗しても画像を消さない。 */
 @Composable
 internal fun rememberCachedImagePainter(url: String): AsyncImagePainter {
     val context = LocalPlatformContext.current
     val networkPainter = rememberAsyncImagePainter(url)
     val state by networkPainter.state.collectAsState()
-    if (state !is AsyncImagePainter.State.Error) return networkPainter
+    if (state is AsyncImagePainter.State.Success) return networkPainter
     val cachedRequest = remember(context, url) {
         ImageRequest.Builder(context).data(url)
             .networkCachePolicy(CachePolicy.DISABLED)
             .diskCachePolicy(CachePolicy.READ_ONLY)
             .build()
     }
-    return rememberAsyncImagePainter(cachedRequest)
+    val cachedPainter = rememberAsyncImagePainter(cachedRequest)
+    val cachedState by cachedPainter.state.collectAsState()
+    return if (cachedState is AsyncImagePainter.State.Success) cachedPainter else networkPainter
 }
