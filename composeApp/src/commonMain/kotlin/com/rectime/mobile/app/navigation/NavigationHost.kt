@@ -1,7 +1,5 @@
 package com.rectime.mobile.app.navigation
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -12,9 +10,10 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
@@ -24,10 +23,6 @@ import com.rectime.mobile.feature.auth.toUserProfile
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
-import kotlinx.coroutines.launch
-import androidx.navigationevent.NavigationEventInfo
-import androidx.navigationevent.compose.NavigationBackHandler
-import androidx.navigationevent.compose.rememberNavigationEventState
 
 @Composable
 fun NavigationHost(
@@ -38,7 +33,6 @@ fun NavigationHost(
     notificationPermissionStartup: NotificationPermissionStartup?,
 ) {
     val state = navigationController.state
-    val coroutineScope = rememberCoroutineScope()
     val userProfile = session.user.toUserProfile()
 
     // BoxWithConstraints 内で計算したサイズをジェスチャーハンドラーと共有する
@@ -46,25 +40,28 @@ fun NavigationHost(
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
 
     CompositionLocalProvider(LocalUserProfile provides userProfile) {
-        // Androidの戻るボタン／戻るジェスチャー
-        val backEventState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
-        NavigationBackHandler(
-            state = backEventState,
-            isBackEnabled = navigationController.canHandleSystemBack,
-            onBackCompleted = { navigationController.handleSystemBack() },
-        )
-
         BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.colors.surfacePrimary)
-            // 親（BoxWithConstraints）にジェスチャーを付けることで、
-            // 子（各Layer）のボタンタップをブロックしない。
-            // Composeのイベント伝播はMainパスで子が先・親が後のため。
+            .pointerInput(navigationController) {
+                awaitPointerEventScope {
+                    var primaryPointer: PointerId? = null
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (primaryPointer == null) primaryPointer = event.changes.firstOrNull { it.pressed }?.id
+                        // 戻る操作中の二本目の指で、表示中のボタンを操作させない。
+                        if (navigationController.state.activeGesture == ActiveGesture.Back) {
+                            event.changes.filter { it.id != primaryPointer }.forEach { it.consume() }
+                        }
+                        if (event.changes.none { it.pressed }) primaryPointer = null
+                    }
+                }
+            }
+            // ジェスチャー中に遷移状態が変わってもハンドラーを破棄しない。
             .pointerInput(
-                state.pushStack.size,
-                state.sheet,
-                state.pushTransition.mode,
+                state.pushStack.lastOrNull()?.key,
+                state.sheet?.key,
             ) {
                 var velocityTracker = VelocityTracker()
                 detectHorizontalDragGestures(
@@ -81,7 +78,7 @@ fun NavigationHost(
                         change.consume()
                         velocityTracker.addPosition(change.uptimeMillis, change.position)
                         val next = navigationController.state.backDragOffsetPx + dragAmount
-                        navigationController.setBackDragOffset(next)
+                        navigationController.setBackDragOffset(next.coerceIn(0f, containerWidthPx.coerceAtLeast(0f)))
                     },
                     onDragEnd = {
                         if (navigationController.state.activeGesture == ActiveGesture.Back) {
@@ -93,23 +90,13 @@ fun NavigationHost(
                             if (velocity > GestureTokens.backDismissVelocityX || progress > GestureTokens.backDismissProgress) {
                                 navigationController.requestPop()
                             } else {
-                                coroutineScope.launch {
-                                    val animator = Animatable(navigationController.state.backDragOffsetPx)
-                                    animator.animateTo(
-                                        targetValue = 0f,
-                                        animationSpec = spring(
-                                            dampingRatio = 0.9f,
-                                            stiffness = GestureTokens.layerSettleStiffness,
-                                        ),
-                                    ) {
-                                        navigationController.setBackDragOffset(value)
-                                    }
-                                }
+                                navigationController.returnFromBackGesture()
                             }
                         }
                         navigationController.endGesture()
                     },
                     onDragCancel = {
+                        navigationController.returnFromBackGesture()
                         navigationController.endGesture()
                     },
                 )

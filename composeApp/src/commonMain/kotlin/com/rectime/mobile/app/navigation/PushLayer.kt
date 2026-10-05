@@ -11,10 +11,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -39,51 +36,33 @@ fun PushLayer(
     val topEntry = state.pushStack.lastOrNull()
     val topKey = topEntry?.key
 
-    var handledDismissRequestId by remember { mutableLongStateOf(state.pushDismissRequestId) }
-
-    LaunchedEffect(state.pushDismissRequestId, topKey, containerWidthPx) {
-        if (state.pushDismissRequestId == handledDismissRequestId) return@LaunchedEffect
-        handledDismissRequestId = state.pushDismissRequestId
-        val topEntryNonNull = topEntry ?: return@LaunchedEffect
-
-        // Only handle dismiss if the top screen matches the filter of this layer
-        if (!filter(topEntryNonNull)) return@LaunchedEffect
-
-        try {
-            navigationController.setTransitioning(true)
-            val animator = Animatable(state.backDragOffsetPx)
-            animator.animateTo(
-                targetValue = containerWidthPx,
-                animationSpec = tween(durationMillis = GestureTokens.pushDismissDurationMs),
-            ) {
-                navigationController.setBackDragOffset(value)
+    // 入場・退場・スワイプの取り消しを一つのアニメーション所有者で処理する。
+    LaunchedEffect(state.pushTransition.mode, state.pushTransition.routeKey, containerWidthPx) {
+        val transition = state.pushTransition
+        val transitionKey = transition.routeKey ?: return@LaunchedEffect
+        val entry = entries.find { it.key == transitionKey } ?: return@LaunchedEffect
+        if (containerWidthPx <= 0f) return@LaunchedEffect
+        when (transition.mode) {
+            PushTransitionMode.Enter -> {
+                val animator = Animatable(navigationController.state.pushTransition.progress)
+                animator.animateTo(1f, tween(260)) {
+                    navigationController.setPushEnterProgress(entry.key, value)
+                }
+                navigationController.finishPushEnter(entry.key)
             }
-            navigationController.completePop(topEntryNonNull.key)
-        } finally {
-            navigationController.setTransitioning(false)
-        }
-    }
-
-    LaunchedEffect(state.pushTransition.mode, state.pushTransition.routeKey) {
-        if (state.pushTransition.mode != PushTransitionMode.Enter) return@LaunchedEffect
-        val transitionKey = state.pushTransition.routeKey ?: return@LaunchedEffect
-
-        // Check if the entering screen belongs to this layer
-        val entry = state.pushStack.find { it.key == transitionKey } ?: return@LaunchedEffect
-        if (!filter(entry)) return@LaunchedEffect
-
-        try {
-            navigationController.setTransitioning(true)
-            val animator = Animatable(0f)
-            animator.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 260),
-            ) {
-                navigationController.setPushEnterProgress(value)
+            PushTransitionMode.Exit, PushTransitionMode.Return -> {
+                val animator = Animatable(navigationController.state.backDragOffsetPx)
+                val dismiss = transition.mode == PushTransitionMode.Exit
+                animator.animateTo(
+                    if (dismiss) containerWidthPx else 0f,
+                    tween(GestureTokens.pushDismissDurationMs),
+                ) {
+                    navigationController.setBackDragOffset(value)
+                }
+                if (dismiss) navigationController.completePop(entry.key)
+                else navigationController.finishBackReturn(entry.key)
             }
-            navigationController.finishPushEnter(transitionKey)
-        } finally {
-            navigationController.setTransitioning(false)
+            PushTransitionMode.Idle -> Unit
         }
     }
 
@@ -127,6 +106,7 @@ fun PushLayer(
                         }
                     }
                 }
+                if (!isTop || state.isTransitioning || state.sheet != null) NavigationInputBlocker()
             }
         }
     }

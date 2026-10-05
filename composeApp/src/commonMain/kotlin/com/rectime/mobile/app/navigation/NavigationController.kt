@@ -12,6 +12,7 @@ class NavigationController(
         private set
 
     fun setRoot(screen: Screen) {
+        if (interactionLocked || state.pushStack.isNotEmpty() || state.sheet != null) return
         state = state.copy(rootScreen = screen)
     }
 
@@ -19,14 +20,19 @@ class NavigationController(
         state = NavigationState(rootScreen = screen)
     }
 
+    private val interactionLocked: Boolean
+        get() = state.isTransitioning || state.activeGesture != ActiveGesture.None ||
+            state.pushTransition.mode != PushTransitionMode.Idle
+
     fun push(screen: Screen) {
-        if (state.pushTransition.mode == PushTransitionMode.Enter) return
+        if (interactionLocked || state.sheet != null || state.pushStack.lastOrNull()?.screen?.key == screen.key) return
         val entry = PushEntry(
             key = "${screen.key}_${Clock.nextId()}",
             screen = screen
         )
         state = state.copy(
             pushStack = state.pushStack + entry,
+            isTransitioning = true,
             pushTransition = PushTransitionState(
                 mode = PushTransitionMode.Enter,
                 routeKey = entry.key
@@ -35,24 +41,49 @@ class NavigationController(
     }
 
     fun requestPop() {
-        if (state.pushStack.isEmpty()) return
-        state = state.copy(pushDismissRequestId = state.pushDismissRequestId + 1)
+        if (state.pushStack.isEmpty() || state.sheet != null || state.isTransitioning ||
+            state.pushTransition.mode != PushTransitionMode.Idle) return
+        startBackTransition(PushTransitionMode.Exit)
     }
 
-    fun completePop(key: String) {
+    /** キャンセルも明示的な遷移として扱い、元の位置に戻るまで次の操作を止める。 */
+    fun returnFromBackGesture() {
+        if (state.activeGesture != ActiveGesture.Back || state.isTransitioning) return
+        startBackTransition(PushTransitionMode.Return)
+    }
+
+    private fun startBackTransition(mode: PushTransitionMode) {
+        val key = state.pushStack.lastOrNull()?.key ?: return
         state = state.copy(
-            pushStack = state.pushStack.filter { it.key != key },
-            backDragOffsetPx = 0f,
+            activeGesture = ActiveGesture.None,
+            isTransitioning = true,
+            pushTransition = PushTransitionState(mode = mode, routeKey = key),
         )
     }
 
+    fun completePop(key: String) {
+        if (state.pushStack.lastOrNull()?.key != key || state.pushTransition.routeKey != key ||
+            state.pushTransition.mode != PushTransitionMode.Exit) return
+        state = state.copy(
+            pushStack = state.pushStack.dropLast(1),
+            backDragOffsetPx = 0f,
+            pushTransition = PushTransitionState(),
+            isTransitioning = false,
+        )
+    }
+
+    fun finishBackReturn(key: String) {
+        if (state.pushTransition.routeKey != key || state.pushTransition.mode != PushTransitionMode.Return) return
+        state = state.copy(backDragOffsetPx = 0f, pushTransition = PushTransitionState(), isTransitioning = false)
+    }
+
     fun presentSheet(screen: Screen) {
-        if (state.sheet != null) return
+        if (state.sheet != null || interactionLocked) return
         val entry = SheetEntry(
             key = "${screen.key}_${Clock.nextId()}",
             screen = screen
         )
-        state = state.copy(sheet = entry)
+        state = state.copy(sheet = entry, isTransitioning = true)
     }
 
     fun requestDismissSheet() {
@@ -81,8 +112,9 @@ class NavigationController(
         state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
     }
 
-    // Gesture control
+    // ジェスチャーはアニメーション終了後にだけ開始できる。
     fun beginGesture(gesture: ActiveGesture) {
+        if (interactionLocked) return
         state = state.copy(activeGesture = gesture)
     }
 
@@ -90,13 +122,14 @@ class NavigationController(
         state = state.copy(activeGesture = ActiveGesture.None)
     }
 
-    fun setPushEnterProgress(progress: Float) {
+    fun setPushEnterProgress(key: String, progress: Float) {
+        if (state.pushTransition.routeKey != key || state.pushTransition.mode != PushTransitionMode.Enter) return
         state = state.copy(pushTransition = state.pushTransition.copy(progress = progress))
     }
 
     fun finishPushEnter(key: String) {
-        if (state.pushTransition.routeKey == key) {
-            state = state.copy(pushTransition = PushTransitionState(mode = PushTransitionMode.Idle))
+        if (state.pushTransition.routeKey == key && state.pushTransition.mode == PushTransitionMode.Enter) {
+            state = state.copy(pushTransition = PushTransitionState(), isTransitioning = false)
         }
     }
 

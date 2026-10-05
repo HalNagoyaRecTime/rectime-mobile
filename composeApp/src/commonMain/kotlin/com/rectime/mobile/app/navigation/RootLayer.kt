@@ -66,5 +66,6 @@ fun RootLayer(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),
         )
+        if (state.pushStack.isNotEmpty() || state.sheet != null || state.isTransitioning) NavigationInputBlocker()
     }
 }

@@ -9,6 +9,8 @@ enum class ActiveGesture {
 enum class PushTransitionMode {
     Idle,
     Enter,
+    Exit,
+    Return,
 }
 
 data class PushEntry(
