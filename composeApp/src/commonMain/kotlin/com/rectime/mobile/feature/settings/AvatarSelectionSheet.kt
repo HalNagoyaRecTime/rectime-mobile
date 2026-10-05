@@ -28,6 +28,9 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -113,35 +116,50 @@ internal fun AvatarSelectionSheet(
                     repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
-            if (selection.sport != null || photoBytes == null) {
-                Spacer(Modifier.height(16.dp))
-                Text("背景色", fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                    color = AppTheme.colors.textPrimary)
-                val currentColor = selection.colorIndex ?: avatarSeed(userId) % AvatarBackgrounds.size
-                BoxWithConstraints(Modifier.fillMaxWidth().selectableGroup()) {
-                    val columns = if (maxWidth >= 288.dp) 6 else 3
-                    Column {
-                        AvatarBackgrounds.indices.chunked(columns).forEach { colors ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                colors.forEach { index ->
+            val colorsEnabled = selection.sport != null || photoBytes == null
+            Spacer(Modifier.height(16.dp))
+            Text("背景色", fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                color = if (colorsEnabled) AppTheme.colors.textPrimary else AppTheme.colors.textMuted)
+            val disabledSlashColor = AppTheme.colors.textMuted.copy(alpha = 0.65f)
+            val currentColor = selection.colorIndex ?: avatarSeed(userId) % AvatarBackgrounds.size
+            BoxWithConstraints(Modifier.fillMaxWidth().selectableGroup()) {
+                val columns = if (maxWidth >= 288.dp) 6 else 3
+                Column {
+                    AvatarBackgrounds.indices.chunked(columns).forEach { colors ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            colors.forEach { index ->
+                                Box(
+                                    modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(12.dp))
+                                        .semantics {
+                                            contentDescription = "背景色：${AvatarColorNames[index]}"
+                                            if (!colorsEnabled) stateDescription = "プロフィール写真では変更できません"
+                                        }
+                                        .selectable(enabled = colorsEnabled, selected = colorsEnabled && currentColor == index,
+                                            role = Role.RadioButton,
+                                            onClick = {
+                                                onSelect(AvatarSelection(sport = selection.sport ?: avatarSport(userId),
+                                                    colorIndex = index))
+                                            }),
+                                    contentAlignment = Alignment.Center,
+                                ) {
                                     Box(
-                                        modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(12.dp))
-                                            .semantics { contentDescription = "背景色：${AvatarColorNames[index]}" }
-                                            .selectable(selected = currentColor == index, role = Role.RadioButton,
-                                                onClick = {
-                                                    onSelect(AvatarSelection(sport = selection.sport ?: avatarSport(userId),
-                                                        colorIndex = index))
-                                                }),
+                                        modifier = Modifier.size(36.dp)
+                                            .background(if (colorsEnabled) AvatarBackgrounds[index]
+                                                else AvatarBackgrounds[index].copy(alpha = 0.35f), CircleShape)
+                                            .border(2.dp, if (colorsEnabled && currentColor == index) AppTheme.colors.themeColorSecond
+                                                else AppTheme.colors.borderSubtle, CircleShape)
+                                            .drawWithContent {
+                                                drawContent()
+                                                if (!colorsEnabled) drawLine(
+                                                    color = disabledSlashColor,
+                                                    start = Offset(size.width * 0.22f, size.height * 0.78f),
+                                                    end = Offset(size.width * 0.78f, size.height * 0.22f),
+                                                    strokeWidth = 1.5.dp.toPx(),
+                                                )
+                                            },
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        Box(
-                                            modifier = Modifier.size(36.dp).background(AvatarBackgrounds[index], CircleShape)
-                                                .border(2.dp, if (currentColor == index) AppTheme.colors.themeColorSecond
-                                                    else AppTheme.colors.borderSubtle, CircleShape),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            if (currentColor == index) Text("✓", color = Color(0xFF354657))
-                                        }
+                                        if (colorsEnabled && currentColor == index) Text("✓", color = Color(0xFF354657))
                                     }
                                 }
                             }
