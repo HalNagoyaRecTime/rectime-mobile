@@ -116,9 +116,6 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     )
 
     val authState by authViewModel.uiState.collectAsState()
-    if (authState.session == null && !authState.isRestoringSession) {
-        ScheduleLiveActivityEffect(emptyList(), "", ready = true)
-    }
     LaunchedEffect(notificationPermissionStartup) {
         notificationPermissionStartup?.requestIfNeeded()
     }
@@ -143,6 +140,9 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     }
 
     AppTheme(themeStateHolder = themeStateHolder) {
+        if (authState.session == null && !authState.isRestoringSession) {
+            ScheduleLiveActivityEffect(emptyList(), "", ready = true)
+        }
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
             val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())

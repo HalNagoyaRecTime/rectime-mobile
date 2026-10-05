@@ -13,6 +13,8 @@ private struct LiveSchedule: Decodable {
     let accountId: String
     let events: [Event]
     let eventDate: String?
+    let backgroundColor: Int?
+    let textColor: Int?
 }
 
 @MainActor
@@ -24,12 +26,23 @@ final class LiveActivityCoordinator {
     private var revision = 0
     private var timer: Timer?
     private var startedKey: String?
+    #if DEBUG
+    private let demoEnabled = ProcessInfo.processInfo.environment["RECREATION_LIVE_ACTIVITY_DEMO"] == "1"
+    private var demoStart: Date?
+    #else
+    private let demoEnabled = false
+    #endif
 
     func receive(_ json: String?) {
         if let json, let data = json.data(using: .utf8) {
             do { schedule = try JSONDecoder().decode(LiveSchedule.self, from: data) }
             catch { print("[LiveActivity] Invalid schedule: \(error)"); return }
-        } else { schedule = nil }
+        } else {
+            schedule = nil
+            #if DEBUG
+            demoStart = nil
+            #endif
+        }
         hasReceivedSchedule = true
         synchronize()
     }
@@ -72,33 +85,79 @@ final class LiveActivityCoordinator {
         // 開催日のAPI契約が入るまでReleaseで毎日表示しない。
         let eligible = schedule?.eventDate == day
         #endif
-        guard let schedule, eligible, !schedule.events.isEmpty else {
+        guard let schedule, eligible, !schedule.accountId.isEmpty,
+              !schedule.events.isEmpty || demoEnabled else {
             for activity in Activity<RecreationActivityAttributes>.activities {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }
             startedKey = nil
+            #if DEBUG
+            demoStart = nil
+            #endif
             return
         }
         let midnight = calendar.startOfDay(for: now)
         func event(_ item: LiveSchedule.Event) -> RecreationActivityAttributes.Event {
-            .init(id: item.id, title: String(item.title.prefix(100)), venue: String(item.venue.prefix(100)),
+            .init(id: item.id, title: String(item.title.prefix(60)), venue: String(item.venue.prefix(40)),
                   start: calendar.date(byAdding: .minute, value: item.start, to: midnight)!,
-                  end: calendar.date(byAdding: .minute, value: item.end, to: midnight)!)
+                  end: calendar.date(byAdding: .minute, value: item.end, to: midnight)!,
+                  participating: item.participating)
         }
         let valid = schedule.events.filter { $0.start >= 0 && $0.end <= 1440 && $0.end > $0.start }
             .sorted { ($0.start, $0.id) < ($1.start, $1.id) }
-        let current = valid.filter { event($0).start <= now && now < event($0).end }
+        var available = valid.map(event)
+        var demoParticipation: RecreationActivityAttributes.Event?
+        #if DEBUG
+        if demoEnabled {
+            if demoStart == nil { demoStart = now }
+            let origin = demoStart!
+            // 実データを変更せず、起動時刻を基準に状態遷移を目視できる予定を渡す。
+            let rounds: [RecreationActivityAttributes.Round] = (1...5).map { round in
+                .init(number: round, callTime: origin.addingTimeInterval(Double(round - 3) * 180 - 780))
+            }
+            demoParticipation = .init(id: -1, title: "バスケットボール", venue: "体育館２",
+                start: origin.addingTimeInterval(120), end: origin.addingTimeInterval(720),
+                participating: true, callTime: origin.addingTimeInterval(30), gatheringSpot: "体育館２ 入口",
+                participationRound: 3)
+            available = [
+                .init(id: -1, title: "バスケットボール", venue: "体育館２",
+                      start: origin.addingTimeInterval(-300), end: origin.addingTimeInterval(1200), rounds: rounds),
+                .init(id: -3, title: "バドミントン", venue: "体育館１",
+                      start: origin.addingTimeInterval(-120), end: origin.addingTimeInterval(900)),
+            ]
+        }
+        #endif
+        available = available.map { event in
+            var value = event
+            if let progress = event.roundProgress {
+                value.currentRound = progress.current
+                value.totalRounds = progress.total
+            }
+            return value
+        }
+        let active = available.filter { $0.start <= now && now < $0.end }
             .sorted { lhs, rhs in
-                if lhs.participating != rhs.participating { return lhs.participating }
+                if lhs.participating != rhs.participating { return lhs.participating == true }
                 return (lhs.start, lhs.id) < (rhs.start, rhs.id)
-            }.first.map(event)
-        let next = valid.first { $0.participating && event($0).start > now }.map(event)
-        let following = valid.first { event($0).start > now }.map(event)
-        let boundary = [current?.end, following?.start, next?.start, calendar.date(byAdding: .day, value: 1, to: midnight)]
-            .compactMap { $0 }.filter { $0 > now }.min()
+            }
+        let current = active.first
+        var next = available.filter { $0.participating == true && $0.start > now }.min { $0.start < $1.start }
+        var currentParticipation = active.first { $0.participating == true }
+        if let personal = demoParticipation {
+            currentParticipation = personal.start <= now && now < personal.end ? personal : nil
+            next = personal.start > now ? personal : nil
+        }
+        let following = available.filter { $0.start > now }.min { $0.start < $1.start }
+        let roundBoundaries = available.flatMap { $0.rounds?.map(\.estimatedStart) ?? [] }
+        let boundary = (active.map(\.end) + roundBoundaries + [following?.start, next?.start, next?.callTime, currentParticipation?.end,
+            calendar.date(byAdding: .day, value: 1, to: midnight)].compactMap { $0 })
+            .filter { $0 > now }.min()
         let state = RecreationActivityAttributes.ContentState(
             current: current, nextParticipation: next,
-            message: following == nil ? "本日の競技は終了しました" : "次の競技を待っています")
+            message: following == nil ? "本日の競技は終了しました" : "次の競技を待っています",
+            activeEvents: Array(active.prefix(3)), activeEventCount: active.count,
+            backgroundColor: schedule.backgroundColor, textColor: schedule.textColor,
+            currentParticipation: currentParticipation, scheduledEvent: following)
         let content = ActivityContent(state: state, staleDate: boundary)
         var existing: Activity<RecreationActivityAttributes>?
         for activity in Activity<RecreationActivityAttributes>.activities {
