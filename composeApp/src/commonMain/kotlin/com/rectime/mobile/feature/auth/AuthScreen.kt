@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.auth
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -33,9 +35,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
+import com.rectime.mobile.ui.component.AppBrandTitle
 import com.rectime.mobile.ui.component.AppLogoMark
 import com.rectime.mobile.ui.component.ProductionCredits
 import com.rectime.mobile.ui.theme.AppTheme
@@ -115,13 +117,7 @@ private fun AppLogoSection(modifier: Modifier = Modifier) {
     ) {
         AppLogoMark()
 
-        Text(
-            text = appDisplayName,
-            modifier = Modifier.offset(y=(-20).dp),
-            fontSize = 34.sp,
-            fontWeight = FontWeight.Black,
-            color = AppTheme.colors.textAppLogo,
-        )
+        AppBrandTitle(modifier = Modifier.offset(y = (-20).dp))
     }
 }
 
@@ -141,15 +137,28 @@ private fun SignInSection(
             onClick = onLogin,
         )
 
-        // エラーの有無でブロックの高さが変わると中央寄せの位置がずれるため、常に1行ぶん確保しておく。
         Spacer(modifier = Modifier.height(AppTheme.spacing.sm))
 
-        Text(
-            text = error.orEmpty(),
-            fontSize = 13.sp,
-            color = AppTheme.colors.textLoginError,
-            textAlign = TextAlign.Center,
-        )
+        // エラーがない場合も最低限の余白を残し、ボタンの位置が急に変わらないようにする。
+        val errorShape = RoundedCornerShape(12.dp)
+        Box(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).then(
+                if (!error.isNullOrBlank()) Modifier
+                    .background(AppTheme.colors.textLoginError.copy(alpha = 0.04f), errorShape)
+                    .border(1.dp, AppTheme.colors.textLoginError.copy(alpha = 0.55f), errorShape)
+                else Modifier,
+            ).padding(horizontal = 16.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (!error.isNullOrBlank()) {
+                Text(
+                    text = error,
+                    fontSize = 13.sp,
+                    color = AppTheme.colors.textLoginError,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
     }
 }
 
