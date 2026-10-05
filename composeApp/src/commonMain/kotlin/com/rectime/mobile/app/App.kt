@@ -32,6 +32,8 @@ import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
+import com.rectime.mobile.feature.schedule.ScheduleViewModel
+import com.rectime.mobile.feature.schedule.scheduleViewModelFactory
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationFeedStore
 import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
@@ -43,6 +45,7 @@ import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import okio.Path.Companion.toPath
+import kotlinx.coroutines.launch
 
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
@@ -132,6 +135,9 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             SessionTokenHolder.accessToken = session.accessToken
+            // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
+            val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
+            val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {
                     initializer { NotificationBadgeViewModel() }
@@ -142,11 +148,14 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                 badgeViewModel.onSession(session.user.id)
             }
             var hasResumed by remember(session.user.id) { mutableStateOf(false) }
-            LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-                // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
-                if (hasResumed) badgeViewModel.onForeground(session.user.id)
-                else badgeViewModel.onSession(session.user.id)
-                hasResumed = true
+            key(session.user.id) {
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
+                    if (hasResumed) badgeViewModel.onForeground(session.user.id)
+                    else badgeViewModel.onSession(session.user.id)
+                    hasResumed = true
+                    foregroundScope.launch { scheduleViewModel.onForeground() }
+                }
             }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             LaunchedEffect(badgeViewModel, session.user.id, lifecycle) {

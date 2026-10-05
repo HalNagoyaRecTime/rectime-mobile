@@ -4,6 +4,8 @@ import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.model.EventVenue
+import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.feature.event.EventCache
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -58,6 +60,397 @@ class ScheduleViewModelTest {
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun firstForegroundAfterScreenEntryDoesNotFetchTwiceEvenAfterInitialLoadCompletes() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient { calls++; respondJson(eventsJson) })
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun foregroundStartsInitialFetchWithoutScheduleBeingOpen() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient { calls++; respondJson(eventsJson) })
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(2, viewModel.events.value.size)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun foregroundUpdateKeepsDisplayedEventsAndDoesNotShowLoading() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) gate.await()
+            respondJson(if (calls == 1) eventsJson else eventsJson.replace("綱引き", "新しい予定"))
+        }, cache = cache)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        // ディスクの値が古くても、更新中は表示中のデータを優先する。
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(displayed, viewModel.events.value)
+        assertTrue(viewModel.isUpdating)
+        assertFalse(viewModel.isLoading)
+        assertFalse(viewModel.isRefreshing)
+        viewModel.refresh()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value == displayed)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun foregroundFailureKeepsDisplayedEventsInsteadOfOlderDiskCache() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) error("接続できません")
+            respondJson(eventsJson)
+        }, cache = cache)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun foregroundFailureKeepsMemoryEventsEvenWhenCacheCannotBeSaved() = runTest(testDispatcher) {
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) { error("保存できません") }
+            override suspend fun clear() = Unit
+        })
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) error("接続できません")
+            respondJson(eventsJson)
+        }, cache = cache)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        assertEquals(2, displayed.size)
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+        assertFalse(viewModel.isLoading)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun foregroundDuringManualRefreshKeepsSingleRequestAndRefreshAnimation() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls > 1) gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        assertTrue(viewModel.isRefreshing)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isRefreshing)
+    }
+
+    @Test
+    fun foregroundAfterSessionChangeCancelsOldUpdateAndLoadsNewSession() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 2) gate.await()
+            respondJson(if (calls == 3) """{"events":[],"total":0,"limit":100,"offset":0}""" else eventsJson)
+        })
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        CacheGeneration.bump()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(3, calls)
+        assertTrue(viewModel.events.value.isEmpty())
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun returningToScheduleDoesNotFetchAgainAndManualRefreshStillWorks() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertFalse(viewModel.isUpdating)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertFalse(viewModel.isRefreshing)
+    }
+
+    @Test
+    fun returningDuringInitialLoadKeepsSingleRequest() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertTrue(viewModel.isUpdating)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun enteringAfterSessionChangesCancelsPreviousLoadAndFetchesAgain() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        CacheGeneration.bump()
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun sessionChangeBeforeLoadStartsDoesNotLeaveUpdatingGuardLocked() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        CacheGeneration.bump()
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isUpdating)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun incompleteEmptyPageDoesNotReplaceSavedSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val saved = Json.decodeFromString<EventsResponse>(eventsJson)
+        cache.save("schedule_events_v1", saved)
+        val viewModel = buildViewModel(mockClient { request ->
+            val offset = requireNotNull(request.url.parameters["offset"]).toInt()
+            val page = if (offset == 0) saved.copy(total = 3) else saved.copy(
+                events = emptyList(), total = 3, offset = offset,
+            )
+            respondJson(Json.encodeToString(page))
+        }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(saved, cache.load<EventsResponse>("schedule_events_v1"))
+        assertEquals(2, viewModel.events.value.size)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun returningDuringManualRefreshKeepsRequestAndLoadingState() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 2) gate.await()
+            respondJson(eventsJson)
+        })
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        assertTrue(viewModel.isRefreshing)
+        assertTrue(viewModel.isUpdating)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isRefreshing)
+        assertFalse(viewModel.isUpdating)
+        assertEquals(2, viewModel.events.value.size)
+    }
+
+    @Test
+    fun logoutDuringLaterPageCannotSaveOrDisplayOldFeed() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val body = Json.decodeFromString<EventsResponse>(eventsJson)
+        cache.save("schedule_events_v1", body)
+        val gate = CompletableDeferred<Unit>()
+        val offsets = mutableListOf<Int>()
+        val viewModel = buildViewModel(mockClient { request ->
+            val offset = requireNotNull(request.url.parameters["offset"]).toInt()
+            offsets += offset
+            val page = if (offset == 0) body.copy(total = 3) else {
+                gate.await()
+                body.copy(events = listOf(body.events.first().copy(eventId = 99)), total = 3, offset = offset)
+            }
+            respondJson(Json.encodeToString(page))
+        }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(listOf(0, 2), offsets)
+        assertEquals(2, viewModel.events.value.size)
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(cache.load<EventsResponse>("schedule_events_v1"))
+        assertTrue(viewModel.events.value.isEmpty())
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun savedScheduleIsVisibleAndRefreshIsBlockedUntilInitialUpdateCompletes() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson))
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++; gate.await(); respondJson(eventsJson)
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, viewModel.events.value.size)
+        assertFalse(viewModel.isLoading)
+        assertTrue(viewModel.isUpdating)
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun logoutDuringMinimumRefreshDurationCannotRestoreOldSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJson) }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.isEmpty())
+        assertFalse(viewModel.isRefreshing)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun eventListReadsAllPagesBeforeSavingCompleteFeed() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val body = Json.decodeFromString<EventsResponse>(eventsJson)
+        val offsets = mutableListOf<Int>()
+        val viewModel = buildViewModel(mockClient { request ->
+            val offset = requireNotNull(request.url.parameters["offset"]).toInt()
+            offsets += offset
+            assertEquals("100", request.url.parameters["limit"])
+            val page = if (offset == 0) body.copy(total = 3) else body.copy(
+                events = listOf(body.events.first().copy(eventId = 99)), total = 3, offset = offset)
+            respondJson(Json.encodeToString(page))
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf(0, 2), offsets)
+        assertEquals(3, viewModel.events.value.size)
+        assertEquals(3, cache.load<EventsResponse>("schedule_events_v1")?.events?.size)
+    }
+
+    @Test
+    fun laterPageFailureDoesNotOverwriteFullSavedSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val saved = Json.decodeFromString<EventsResponse>(eventsJson)
+        cache.save("schedule_events_v1", saved)
+        val viewModel = buildViewModel(mockClient { request ->
+            if (request.url.parameters["offset"] != "0") error("offline on second page")
+            respondJson(Json.encodeToString(saved.copy(total = 3)))
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(saved, cache.load<EventsResponse>("schedule_events_v1"))
+        assertEquals(2, viewModel.events.value.size)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun forbiddenResponseClearsSavedSchedulePreview() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson))
+        val viewModel = buildViewModel(mockClient {
+            respondJson("""{"error":{"code":"FORBIDDEN"}}""", HttpStatusCode.Forbidden)
+        }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals("スケジュールを表示する権限がありません", viewModel.error)
+        viewModel.onEnter()
+        assertTrue(viewModel.events.value.isEmpty())
     }
 
     // ---- 引っ張って更新 ----
@@ -198,7 +591,7 @@ class ScheduleViewModelTest {
 
         assertEquals(
             "https://api.example.com/api/v1/events",
-            requireNotNull(capturedRequest).url.toString(),
+            requireNotNull(capturedRequest).url.toString().substringBefore('?'),
         )
     }
 
@@ -355,6 +748,63 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertNull(viewModel.error)
         assertEquals(2, viewModel.events.value.size)
+    }
+
+    @Test
+    fun delayedListResponseCannotRollBackSavedDetailOrVisibleSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { gate.await(); respondJson(eventsJson) }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        EventCache(cache).saveDetail(EventDetailResponse(3, "更新後", emptyList(), "1030", "1100", null))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.events.value.first { it.eventId == 3 }.title)
+        assertEquals("更新後", EventCache(cache).loadDetail(3)?.eventName)
+    }
+
+    @Test
+    fun detailUpdateDuringMinimumRefreshDurationIsUsedForVisibleSchedule() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJson) }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.isRefreshing)
+        EventCache(cache).saveDetail(EventDetailResponse(3, "更新後", emptyList(), "1030", "1100", null))
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.events.value.first { it.eventId == 3 }.title)
+        assertEquals("更新後", EventCache(cache).loadDetail(3)?.eventName)
+    }
+
+    @Test
+    fun returningToScheduleReflectsDetailUpdateWithoutAnotherRequest() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var requests = 0
+        val viewModel = buildViewModel(mockClient { requests++; respondJson(eventsJson) }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        EventCache(cache).saveDetail(EventDetailResponse(3, "詳細で更新", emptyList(), "1030", "1100", null))
+        viewModel.onEnter()
+        assertEquals(1, requests)
+        assertEquals("詳細で更新", viewModel.events.value.first { it.eventId == 3 }.title)
+    }
+
+    @Test
+    fun failedListRequestUsesDetailSavedWhileItWasWaiting() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson))
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { gate.await(); throw RuntimeException("offline") }, cache = cache)
+        viewModel.onEnter()
+        testDispatcher.scheduler.runCurrent()
+        EventCache(cache).saveDetail(EventDetailResponse(3, "取得中に更新", emptyList(), "1030", "1100", null))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("取得中に更新", viewModel.events.value.first { it.eventId == 3 }.title)
+        assertTrue(viewModel.isOffline)
     }
 
     // ---- fetchEvents 異常系(キャッシュなし) ----

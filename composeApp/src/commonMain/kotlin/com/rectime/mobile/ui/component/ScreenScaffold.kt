@@ -154,6 +154,7 @@ fun PushScreenScaffold(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
+    contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
     val hPad = AppTheme.layout.screenHorizontalPadding
@@ -169,6 +170,7 @@ fun PushScreenScaffold(
         .fillMaxSize()
         .background(AppTheme.colors.commonBackground),
     ) {
+        contentBackground()
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
