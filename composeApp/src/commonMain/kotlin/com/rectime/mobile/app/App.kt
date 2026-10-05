@@ -10,6 +10,9 @@ import coil3.compose.LocalPlatformContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -21,15 +24,19 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
+import com.rectime.mobile.core.haptics.HapticPreference
+import com.rectime.mobile.core.haptics.LocalHapticPreference
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
-import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
+import com.rectime.mobile.feature.schedule.ScheduleViewModel
+import com.rectime.mobile.feature.schedule.scheduleViewModelFactory
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.feature.notifications.NotificationFeedStore
 import com.rectime.mobile.feature.notifications.NotificationBadgeViewModel
 import com.rectime.mobile.feature.notifications.NotificationDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationNavigationHandler
@@ -39,6 +46,7 @@ import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
 import okio.Path.Companion.toPath
+import kotlinx.coroutines.launch
 
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
@@ -87,6 +95,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     }
 
     val navigationController = remember { NavigationController() }
+    val hapticPreference = remember { HapticPreference() }
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
@@ -107,10 +116,13 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     LaunchedEffect(notificationPermissionStartup) {
         notificationPermissionStartup?.requestIfNeeded()
     }
+    LaunchedEffect(hapticPreference) {
+        hapticPreference.load()
+    }
     var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
-        SessionTokenHolder.accessToken = authState.session?.accessToken
         if (authState.session == null && hadSession) {
+            NotificationFeedStore.shared.reset()
             navigationController.reset(ScheduleScreen)
         }
         hadSession = authState.session != null
@@ -126,7 +138,9 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
 
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
-            SessionTokenHolder.accessToken = session.accessToken
+            // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
+            val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
+            val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {
                     initializer { NotificationBadgeViewModel() }
@@ -135,6 +149,26 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             val hasUnreadNotifications by badgeViewModel.hasUnreadNotifications.collectAsState()
             LaunchedEffect(session.user.id) {
                 badgeViewModel.onSession(session.user.id)
+            }
+            var hasResumed by remember(session.user.id) { mutableStateOf(false) }
+            key(session.user.id) {
+                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    authViewModel.onForeground()
+                    // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
+                    if (hasResumed) badgeViewModel.onForeground(session.user.id)
+                    else badgeViewModel.onSession(session.user.id)
+                    hasResumed = true
+                    foregroundScope.launch { scheduleViewModel.onForeground() }
+                }
+            }
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            LaunchedEffect(badgeViewModel, session.user.id, lifecycle) {
+                NotificationNavigationHandler.updates.collect {
+                    // バックグラウンド中は通信せず、次の前面復帰で更新する。
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                        badgeViewModel.onPush(session.user.id)
+                    }
+                }
             }
             LaunchedEffect(notificationNavigationTarget) {
                 when (val target = notificationNavigationTarget) {
@@ -147,7 +181,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     }
                     is NotificationNavigationTarget.NotificationDetail -> {
                         navigationController.reset(ScheduleScreen)
-                        navigationController.push(NotificationDetailScreen(target.notificationId))
+                        navigationController.push(NotificationDetailScreen(target.notificationId, refreshOnOpen = true))
                     }
                     null -> Unit
                 }
@@ -158,7 +192,10 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     .background(AppTheme.colors.surfacePrimary)
                     .fillMaxSize(),
             ) {
-                CompositionLocalProvider(LocalProfilePhotoRepository provides authViewModel.photoRepository) {
+                CompositionLocalProvider(
+                    LocalProfilePhotoRepository provides authViewModel.photoRepository,
+                    LocalHapticPreference provides hapticPreference,
+                ) {
                     NavigationHost(
                         navigationController = navigationController,
                         session = session,

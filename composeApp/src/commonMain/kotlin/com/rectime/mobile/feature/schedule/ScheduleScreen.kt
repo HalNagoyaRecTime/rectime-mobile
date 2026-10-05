@@ -3,6 +3,7 @@ package com.rectime.mobile.feature.schedule
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,9 +50,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppModal
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
+import com.rectime.mobile.ui.component.PullRefreshHoldDistance
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.component.resolveEventCardShadowSpec
 import com.rectime.mobile.ui.modifier.outerShadow
@@ -89,12 +91,14 @@ object ScheduleScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        val viewModel = viewModel { ScheduleViewModel() }
+        val viewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
         val events by viewModel.events
 
-        LaunchedEffect(Unit) {
-            viewModel.fetchEvents()
+        val isRootVisible = navigationController.state.pushStack.isEmpty()
+        LaunchedEffect(viewModel, isRootVisible) {
+            // 詳細画面の背面でも一覧は描画され続けるため、戻った時にも保存内容を照合する。
+            if (isRootVisible) viewModel.onEnter()
         }
 
         ScheduleScreenUI(
@@ -102,6 +106,9 @@ object ScheduleScreen : Screen {
             onOpenEventDetail = { eventId -> navigationController.push(EventDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
+            isRefreshing = viewModel.isRefreshing,
+            isUpdating = viewModel.isUpdating,
+            onRefresh = viewModel::refresh,
             error = viewModel.error,
         )
     }
@@ -113,6 +120,9 @@ private fun ScheduleScreenUI(
     onOpenEventDetail: (Int) -> Unit,
     events: List<TimelineEvent>,
     isLoading: Boolean,
+    isRefreshing: Boolean,
+    isUpdating: Boolean,
+    onRefresh: () -> Unit,
     error: String?,
 ) {
     val timelineTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + AppTheme.layout.headerAction + 20.dp
@@ -131,14 +141,19 @@ private fun ScheduleScreenUI(
 
     val lazyListState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedOverflowEvents by remember { mutableStateOf<List<TimelineEvent>?>(null) }
+    var selectedOverflowEventIds by remember { mutableStateOf<List<Int>?>(null) }
+    val selectedOverflowEvents = resolveOverflowSelection(events, selectedOverflowEventIds)
+    LaunchedEffect(selectedOverflowEventIds, selectedOverflowEvents.isEmpty()) {
+        // 更新で対象がなくなった場合、古い選択を残して再表示しない。
+        if (selectedOverflowEventIds != null && selectedOverflowEvents.isEmpty()) selectedOverflowEventIds = null
+    }
 
     val windowInfo = LocalWindowInfo.current
     val density = LocalDensity.current
     // Keep the scrollable range at 9:00–20:00 while painting the full 0:00–24:00 day.
     val viewportHeight = with(density) { windowInfo.containerSize.height.toDp() }
-    val bouncePaintTop = timelineGeometry.paintTop(viewportHeight)
-    val bouncePaintBottom = timelineGeometry.paintBottom(viewportHeight)
+    val bouncePaintTop = timelineGeometry.paintTop(viewportHeight + PullRefreshHoldDistance)
+    val bouncePaintBottom = timelineGeometry.paintBottom(viewportHeight + PullRefreshHoldDistance)
     val screenWidthDp = remember(windowInfo.containerSize.width) {
         with(density) { windowInfo.containerSize.width.toDp() }
     }
@@ -153,9 +168,14 @@ private fun ScheduleScreenUI(
     }
 
     var hasAutoScrolled by remember { mutableStateOf(false) }
+    val isDragged by lazyListState.interactionSource.collectIsDraggedAsState()
+
+    LaunchedEffect(isDragged) {
+        if (isDragged) hasAutoScrolled = true
+    }
 
     LaunchedEffect(isLoading) {
-        if (!isLoading && !hasAutoScrolled) {
+        if (!isLoading && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
             val totalHours = hourEnd - hourStart
             val clampedNowMinute = nowMinute.coerceIn(hourStart * 60, hourEnd * 60)
             val nowOffsetPx = with(density) { timelineGeometry.minuteY(clampedNowMinute).toPx() }
@@ -175,6 +195,88 @@ private fun ScheduleScreenUI(
         RootScreenScaffold(
             title = "スケジュール",
             lazyListState = lazyListState,
+            isRefreshing = isRefreshing,
+            refreshEnabled = !isUpdating,
+            onRefresh = onRefresh,
+            contentBackground = {
+                // This surface and the list share the same bounce/refresh transform.
+                // Scroll changes timeline coordinates; pulling never changes them.
+                val pastColor = AppTheme.colors.pastAreaBackground
+                val backgroundColor = AppTheme.colors.commonBackground
+                val nowY = with(density) { timelineGeometry.minuteY(nowMinute).toPx() } -
+                    lazyListState.firstVisibleItemScrollOffset
+                Canvas(Modifier.fillMaxSize()) {
+                    val top = -bouncePaintTop.toPx()
+                    val bottom = size.height + bouncePaintBottom.toPx()
+                    drawRect(backgroundColor, Offset(0f, top), Size(size.width, bottom - top))
+                    val pastEnd = nowY.coerceIn(top, bottom)
+                    drawRect(pastColor, Offset(0f, top), Size(size.width, pastEnd - top))
+                }
+                val separatorLineColor = AppTheme.colors.textScheduleTimeLine
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val totalHours = hourEnd - hourStart
+                    val step = hourHeight.toPx()
+                    val topPadPx = timelineTopPadding.toPx()
+                    val contentLeft = timeBarWidth.toPx()
+
+                    repeat(totalHours + 1) { index ->
+                        val y = topPadPx + (index * step) - lazyListState.firstVisibleItemScrollOffset
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    separatorLineColor.copy(alpha = 0.8f),
+                                    separatorLineColor.copy(alpha = 0.8f),
+                                    Color.Transparent
+                                ),
+                                startX = contentLeft,
+                                endX = size.width
+                            ),
+                            topLeft = Offset(contentLeft, y),
+                            size = Size(size.width - contentLeft, 1.dp.toPx())
+                        )
+                    }
+                }
+
+                Box(
+                    Modifier.wrapContentSize(unbounded = true, align = Alignment.TopStart)
+                        .width(timeBarWidth)
+                        .height(viewportHeight + bouncePaintTop + bouncePaintBottom)
+                        .offset(y = -bouncePaintTop)
+                        .outerShadow(
+                            shape = RectangleShape,
+                            color = AppTheme.colors.dropShadow,
+                            blurRadius = 8.dp,
+                            offsetX = 2.dp,
+                            offsetY = 0.dp,
+                        )
+                        .background(AppTheme.colors.scheduleTimeBarBackground),
+                )
+                if (nowMinute in 0..(24 * 60)) {
+                    val accentColor = AppTheme.colors.themeColorFirst
+                    Box(
+                        Modifier.fillMaxWidth().height(16.dp)
+                            .offset(y = with(density) { nowY.toDp() } - 8.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(2.dp).padding(start = timeBarWidth)
+                                .outerShadow(
+                                    shape = RectangleShape,
+                                    color = accentColor.copy(alpha = 0.6f),
+                                    blurRadius = dim.glowRadius,
+                                    spread = dim.glowRadius * 0.1f,
+                                    offsetY = 0.dp,
+                                )
+                                .background(accentColor),
+                        )
+                        Box(
+                            Modifier.offset(x = timeBarWidth - 5.dp).size(10.dp)
+                                .background(accentColor, CircleShape),
+                        )
+                    }
+                }
+            },
             horizontalPadding = false,
             contentTopPadding = false,
             contentBottomPadding = false,
@@ -185,61 +287,7 @@ private fun ScheduleScreenUI(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(totalTimelineHeight)
-                        .background(AppTheme.colors.commonBackground)
                 ) {
-                    val commonBackground = AppTheme.colors.commonBackground
-                    val pastAreaBackground = AppTheme.colors.pastAreaBackground
-                    Canvas(Modifier.fillMaxSize()) {
-                        val top = -bouncePaintTop.toPx()
-                        val bottom = size.height + bouncePaintBottom.toPx()
-                        drawRect(commonBackground, Offset(0f, top), Size(size.width, -top))
-                        drawRect(commonBackground, Offset(0f, size.height), Size(size.width, bottom - size.height))
-                        val pastAbove = timelineGeometry.pastAboveHeight(nowMinute, bouncePaintTop).toPx()
-                        if (pastAbove > 0f) {
-                            drawRect(pastAreaBackground, Offset(0f, top), Size(size.width, pastAbove))
-                        }
-                        val pastBelow = timelineGeometry.pastBelowHeight(nowMinute, bouncePaintBottom).toPx()
-                        if (pastBelow > 0f) {
-                            drawRect(pastAreaBackground, Offset(0f, size.height), Size(size.width, pastBelow))
-                        }
-                    }
-                    val separatorLineColor = AppTheme.colors.textScheduleTimeLine
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val totalHours = hourEnd - hourStart
-                        val step = (timelineContentHeight.toPx()) / totalHours
-                        val topPadPx = timelineTopPadding.toPx()
-                        val contentLeft = timeBarWidth.toPx()
-
-                        repeat(totalHours + 1) { index ->
-                            val y = topPadPx + (index * step)
-                            drawRect(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color.Transparent,
-                                        separatorLineColor.copy(alpha = 0.8f),
-                                        separatorLineColor.copy(alpha = 0.8f),
-                                        Color.Transparent
-                                    ),
-                                    startX = contentLeft,
-                                    endX = size.width
-                                ),
-                                topLeft = Offset(contentLeft, y),
-                                size = Size(size.width - contentLeft, 1.dp.toPx())
-                            )
-                        }
-                    }
-
-                    val pastHeight = timelineGeometry.pastHeight(nowMinute)
-
-                    if (pastHeight > 0.dp) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(pastHeight)
-                                .background(AppTheme.colors.pastAreaBackground)
-                        )
-                    }
-
                     BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxSize()
@@ -322,20 +370,6 @@ private fun ScheduleScreenUI(
                             .height(totalTimelineHeight)
                     ) {
                         Box(
-                            Modifier.wrapContentSize(unbounded = true, align = Alignment.TopStart)
-                                .width(timeBarWidth)
-                                .height(totalTimelineHeight + bouncePaintTop + bouncePaintBottom)
-                                .offset(y = -bouncePaintTop)
-                                .outerShadow(
-                                    shape = RectangleShape,
-                                    color = AppTheme.colors.dropShadow,
-                                    blurRadius = 8.dp,
-                                    offsetX = 2.dp,
-                                    offsetY = 0.dp,
-                                )
-                                .background(AppTheme.colors.scheduleTimeBarBackground),
-                        )
-                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = timelineTopPadding)
@@ -363,41 +397,6 @@ private fun ScheduleScreenUI(
                                     )
                                 }
                             }
-                        }
-                    }
-
-                    if (nowMinute in 0..(24 * 60)) {
-                        val nowOffset = timelineGeometry.minuteY(nowMinute)
-                        val accentColor = AppTheme.colors.themeColorFirst
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(16.dp)
-                                .offset(y = nowOffset - 8.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(2.dp)
-                                    .padding(start = timeBarWidth)
-                                    .outerShadow(
-                                        shape = RectangleShape,
-                                        color = accentColor.copy(alpha = 0.6f),
-                                        blurRadius = dim.glowRadius,
-                                        spread = dim.glowRadius * 0.1f,
-                                        offsetY = 0.dp
-                                    )
-                                    .background(accentColor)
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = timeBarWidth - 5.dp)
-                                    .size(10.dp)
-                                    .background(accentColor, shape = CircleShape)
-                            )
                         }
                     }
 
@@ -432,7 +431,7 @@ private fun ScheduleScreenUI(
                                         .padding(dim.borderExtend) // 外側に dim.borderExtend 分の余白
                                         .clip(RoundedCornerShape(dim.cornerRadius))
                                         .background(AppTheme.colors.eventOverflowBackground)
-                                        .clickable { selectedOverflowEvents = event.overflowEvents }
+                                        .clickable { selectedOverflowEventIds = event.overflowEvents.map { it.eventId } }
                                 ) {
                                     BoxWithConstraints(
                                         modifier = Modifier
@@ -484,8 +483,8 @@ private fun ScheduleScreenUI(
             }
         }
 
-        selectedOverflowEvents?.let { hiddenEvents ->
-            AppModal(onDismiss = { selectedOverflowEvents = null }) {
+        selectedOverflowEvents.takeIf { it.isNotEmpty() }?.let { hiddenEvents ->
+            AppModal(onDismiss = { selectedOverflowEventIds = null }) {
                 Text(
                     text = "その他のイベント (${hiddenEvents.size}件)",
                     color = AppTheme.colors.textDetailsScreenTitle,
@@ -505,7 +504,7 @@ private fun ScheduleScreenUI(
                         isLive = isLive,
                         isParticipating = event.isParticipating,
                         onClick = {
-                            selectedOverflowEvents = null
+                            selectedOverflowEventIds = null
                             onOpenEventDetail(event.eventId)
                         },
                         modifier = Modifier
@@ -521,7 +520,7 @@ private fun ScheduleScreenUI(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
-                CircularProgressIndicator(
+                AppLoadingIndicator(
                     modifier = Modifier.size(56.dp),
                     strokeWidth = 5.dp,
                 )

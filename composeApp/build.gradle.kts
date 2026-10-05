@@ -151,6 +151,9 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.kotlin.test)
         }
+        jvmTest.dependencies {
+            implementation("org.jetbrains.compose.ui:ui-test-junit4:${libs.versions.composeMultiplatform.get()}")
+        }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)

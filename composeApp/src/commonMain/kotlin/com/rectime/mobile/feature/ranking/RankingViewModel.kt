@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
@@ -49,6 +52,7 @@ class RankingViewModel(
     // updateMyTeamIdで差し替え可能にしている。
     private var myTeamId: Int? = initialMyTeamId
 
+    private var contentSession = CacheRequestGeneration()
     private var fetchJob: Job? = null
     private var displayedGeneration = CacheGeneration.value
 
@@ -81,10 +85,15 @@ class RankingViewModel(
             displayedGeneration = generationAtStart
         }
         fetchJob = viewModelScope.launch {
-            // 起動がキュー待ちしている間にログアウトした要求も開始しない。
+            // キュー待ち中にログアウトした要求を開始しない。
             if (generationAtStart != CacheGeneration.value) {
-                _uiState.value = RankingUiState(error = rankingErrorMessage(null))
+                _uiState.value = RankingUiState()
                 return@launch
+            }
+            val request = CacheRequestGeneration()
+            if (!contentSession.isCurrent) {
+                _uiState.value = RankingUiState()
+                contentSession = request
             }
             // 手動更新時に一覧が一瞬空にならないよう、既存のrankingItemsは
             // 保持したままローディング状態にする。isOfflineは今回の結果が
@@ -108,10 +117,10 @@ class RankingViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // 削除済み(404)・セッション切れ(401)の古いキャッシュを誤表示しないよう、
+                        // 削除済み(404)・閲覧拒否(403)の古いキャッシュを誤表示しないよう、
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status.clearsStaleRankingData()) {
+                        if (result.error.invalidatesDisplayedContent()) {
                             _uiState.value = RankingUiState(
                                 isLoading = false,
                                 error = rankingErrorMessage(status),
@@ -119,10 +128,11 @@ class RankingViewModel(
                         } else {
                             _uiState.value = RankingUiState(
                                 isLoading = false,
-                                rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
+                                rankingItems = _uiState.value.rankingItems.takeIf { it.isNotEmpty() }
+                                    ?: result.value.items.toModelList().toRankingItems(myTeamId),
                                 isOffline = true,
                             )
-                            // 401/404以外の理由でのフォールバックは「オフライン」として
+                            // 通信失敗時のフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
                             result.error.printStackTrace()
                         }
@@ -131,15 +141,15 @@ class RankingViewModel(
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
                         val status = (result.error as? HttpStatusException)?.status
-                        // 同じセッションの一時的な通信失敗では直前の一覧を維持する。
-                        // ログアウトや権限変更の場合は前ユーザーの情報を残さない。
-                        _uiState.update { state ->
-                            if (generationAtStart != CacheGeneration.value || status.clearsStaleRankingData()) {
-                                RankingUiState(error = rankingErrorMessage(status))
-                            } else {
-                                state.copy(isLoading = false, error = rankingErrorMessage(status))
-                            }
+                        if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(result.error, contentSession)) {
+                            _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                            return@launch
                         }
+                        // キャッシュ世代の変更（ログアウト等）もFailedになるため、
+                        // 有効なキャッシュがなければ前セッションの一覧を残さない。
+                        _uiState.value = RankingUiState(
+                            error = rankingErrorMessage(status),
+                        )
                     }
                 }
 
@@ -147,12 +157,10 @@ class RankingViewModel(
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.update { state ->
-                    if (generationAtStart != CacheGeneration.value) {
-                        RankingUiState(error = rankingErrorMessage(null))
-                    } else {
-                        state.copy(isLoading = false, error = rankingErrorMessage(null))
-                    }
+                if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(e, contentSession)) {
+                    _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                } else {
+                    _uiState.value = RankingUiState(error = rankingErrorMessage(null))
                 }
             }
         }
@@ -188,12 +196,9 @@ private suspend fun fetchAllRankings(httpClient: HttpClient, baseUrl: String): R
 
 private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status) {
     HttpStatusCode.NotFound -> "ランキング一覧が見つかりません"
-    HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
     HttpStatusCode.Forbidden -> "ランキングを表示する権限がありません"
     else -> "ランキング情報の取得に失敗しました"
 }
 
-// 削除済み(404)・セッション切れ(401)は、キャッシュや直前の表示内容が
+// 削除済み(404)・閲覧拒否(403)は、キャッシュや直前の表示内容が
 // あっても誤表示しないよう一覧を消してエラーを優先する対象。
-private fun HttpStatusCode?.clearsStaleRankingData(): Boolean =
-    this == HttpStatusCode.NotFound || this == HttpStatusCode.Unauthorized || this == HttpStatusCode.Forbidden

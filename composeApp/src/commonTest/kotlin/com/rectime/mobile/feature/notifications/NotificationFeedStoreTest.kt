@@ -1,17 +1,94 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.BeforeTest
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotificationFeedStoreTest {
+    @BeforeTest
+    fun resetGeneration() { CacheGeneration.resetForTest() }
+
+    @Test
+    fun savedFeedIsPublishedBeforeNetworkCompletes() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(1)))
+        val gate = CompletableDeferred<Unit>()
+        val store = NotificationFeedStore(FakeGateway { limit, offset ->
+            gate.await(); page(listOf(notification(2)), 1, limit, offset)
+        }, cache)
+        val loading = async { store.load() }
+        runCurrent()
+        assertEquals(listOf(1), store.notifications.value.map(UserNotification::id))
+        assertFalse(loading.isCompleted)
+        gate.complete(Unit)
+        loading.await()
+        assertEquals(listOf(2), store.notifications.value.map(UserNotification::id))
+    }
+
+    @Test
+    fun simultaneousForcedLoadsJoinOneNetworkRequest() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val gateway = FakeGateway { limit, offset -> gate.await(); page(listOf(notification(1)), 1, limit, offset) }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()))
+        val first = async { store.load(force = true) }
+        runCurrent()
+        val second = async { store.load(force = true) }
+        runCurrent()
+        assertEquals(1, gateway.requestedOffsets.size)
+        gate.complete(Unit)
+        assertEquals(first.await(), second.await())
+        assertEquals(1, gateway.requestedOffsets.size)
+    }
+
+    @Test
+    fun offlineFallbackIsRetriedByNextLoad() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(1)))
+        var calls = 0
+        val store = NotificationFeedStore(FakeGateway { limit, offset ->
+            calls++
+            if (calls == 1) error("offline")
+            page(listOf(notification(2)), 1, limit, offset)
+        }, cache)
+        assertIs<CachedFetchResult.Cached<List<UserNotification>>>(store.load())
+        assertIs<CachedFetchResult.Fresh<List<UserNotification>>>(store.load())
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun sessionChangeDiscardsMemoizedFeedAndLateResponse() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val store = NotificationFeedStore(FakeGateway { limit, offset ->
+            calls++
+            if (calls == 2) gate.await()
+            page(listOf(notification(calls)), 1, limit, offset)
+        }, cache)
+        store.load()
+        val refresh = async { store.load(force = true) }
+        runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        assertIs<CachedFetchResult.Failed>(refresh.await())
+        assertTrue(store.notifications.value.isEmpty())
+        store.load()
+        assertEquals(listOf(3), store.notifications.value.map(UserNotification::id))
+    }
+
 
     @Test
     fun successfulLoadPublishesNotifications() = runTest {

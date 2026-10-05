@@ -122,6 +122,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                 notification.request.content.userInfo
             )
         }
+        DispatchQueue.main.async {
+            NotificationNavigationHandler.shared.onNotificationReceived()
+        }
         completionHandler([.banner, .list, .sound, .badge])
     }
 

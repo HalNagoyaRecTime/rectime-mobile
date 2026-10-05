@@ -6,6 +6,14 @@ import kotlin.test.assertFalse
 
 class AuthFailureTest {
     @Test
+    fun deletionRequiresExactStatusAndCodeAndInvitesAnotherLogin() {
+        assertEquals(AUTH_DELETED_MESSAGE, accountRejectionMessage(410, ACCOUNT_DELETION_PENDING_CODE))
+        assertEquals(null, accountRejectionMessage(401, ACCOUNT_DELETION_PENDING_CODE))
+        assertEquals(null, accountRejectionMessage(410, "EVENT_GONE"))
+        assertEquals(AUTH_DELETED_MESSAGE, authErrorMessage(AuthApiException(410, ACCOUNT_DELETION_PENDING_CODE), false))
+    }
+
+    @Test
     fun unauthorizedDuringLoginIsShownAsAuthenticationFailure() {
         val message = authErrorMessage(
             error = AuthApiException(statusCode = 401, errorCode = "UNAUTHORIZED"),

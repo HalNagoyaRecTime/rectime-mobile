@@ -26,6 +26,7 @@ data class PendingAuth(
 )
 
 data class AuthUiState(
+    val isRestoringSession: Boolean = false,
     val isLoading: Boolean = false,
     val session: AuthSession? = null,
     val pendingAuth: PendingAuth? = null,

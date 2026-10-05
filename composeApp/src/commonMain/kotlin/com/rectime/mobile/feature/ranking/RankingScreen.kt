@@ -5,7 +5,6 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
@@ -28,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.LocalUserProfile
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.theme.AppTheme
@@ -104,9 +104,7 @@ object RankingScreen : Screen {
             },
             trailing = {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        color = AppTheme.colors.textPrimary,
-                        strokeWidth = 2.dp,
+                    AppLoadingIndicator(
                         modifier = Modifier.size(18.dp),
                     )
                 } else {
@@ -120,6 +118,15 @@ object RankingScreen : Screen {
             },
         ) {
             when {
+                uiState.isLoading && !hasRankingItems -> item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AppLoadingIndicator()
+                    }
+                }
+
                 uiState.error != null && !hasRankingItems -> item {
                     StatusMessage(
                         message = uiState.error.orEmpty(),

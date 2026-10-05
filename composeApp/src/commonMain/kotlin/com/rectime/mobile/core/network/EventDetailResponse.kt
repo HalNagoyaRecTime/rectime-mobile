@@ -18,6 +18,8 @@ data class EventDetailResponse(
     val endTime: String,
     @SerialName("rule_text")
     val ruleText: String?,
+    @SerialName("updated_at")
+    val updatedAt: String? = null,
 )
 
 fun EventDetailResponse.toModel(): EventDetail {
