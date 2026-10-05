@@ -158,7 +158,7 @@ internal fun AvatarSelectionSheet(
                                                 )
                                             },
                                         contentAlignment = Alignment.Center,
-                                    )
+                                    ) {}
                                 }
                             }
                         }
