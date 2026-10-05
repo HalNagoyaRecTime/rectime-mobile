@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -22,9 +21,6 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.rectime.mobile.ui.theme.AppTheme
-import org.jetbrains.compose.resources.painterResource
-import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.ic_profile_person
 
 private val AvatarBackgrounds = listOf(
     Color(0xFFD4EEF0), Color(0xFFF5DDD5), Color(0xFFF5EBCB),
@@ -33,15 +29,15 @@ private val AvatarBackgrounds = listOf(
 
 // 同じユーザーは起動・ログアウト・名前変更を経ても同じ色になる。
 internal fun avatarBackground(userId: String): Color {
-    val hash = userId.fold(0) { value, character -> (value * 31 + character.code) and Int.MAX_VALUE }
-    return AvatarBackgrounds[hash % AvatarBackgrounds.size]
+    return AvatarBackgrounds[avatarSeed(userId) % AvatarBackgrounds.size]
 }
 
-/** 写真のない時や画像の描画失敗時も、人物アイコンを表示する。追加通信は行わない。 */
+/** 写真のない時や画像の描画失敗時も、スポーツのピクトグラムを表示する。追加通信は行わない。 */
 @Composable
 internal fun UserAvatar(userId: String, photoBytes: ByteArray?, modifier: Modifier = Modifier) {
     val platformContext = LocalPlatformContext.current
     val background = remember(userId) { avatarBackground(userId) }
+    val sport = remember(userId) { avatarSport(userId) }
     val request = remember(platformContext, userId, photoBytes) {
         photoBytes?.let { bytes ->
             ImageRequest.Builder(platformContext)
@@ -63,10 +59,11 @@ internal fun UserAvatar(userId: String, photoBytes: ByteArray?, modifier: Modifi
     ) {
         Box(Modifier.fillMaxSize().clip(CircleShape).background(background), contentAlignment = Alignment.Center) {
             Icon(
-                painter = painterResource(Res.drawable.ic_profile_person),
+                painter = sportAvatarPainter(sport),
                 contentDescription = null,
                 tint = Color(0xFF354657),
-                modifier = Modifier.size(44.dp),
+                // 手足・用具を含む矩形全体が丸の内側に収まる大きさにする。
+                modifier = Modifier.fillMaxSize(0.64f),
             )
             if (request != null) {
                 AsyncImage(
