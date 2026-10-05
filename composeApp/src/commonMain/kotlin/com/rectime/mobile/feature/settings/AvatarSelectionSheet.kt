@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -22,10 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,40 +69,42 @@ internal fun AvatarSelectionSheet(
             Text("プロフィールアイコン", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.textPrimary)
             Spacer(Modifier.height(16.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-                    .border(2.dp, if (selection.isAutomatic) AppTheme.colors.themeColorSecond else AppTheme.colors.borderSubtle,
-                        RoundedCornerShape(16.dp))
-                    .selectable(selected = selection.isAutomatic, role = Role.RadioButton,
-                        onClick = { onSelect(AvatarSelection()) }).padding(14.dp),
-            ) {
-                UserAvatar(userId, photoBytes, Modifier.size(48.dp))
-                Text(if (selection.isAutomatic) "✓ 自動" else "自動", color = AppTheme.colors.textPrimary,
-                    fontWeight = FontWeight.Medium)
+            // 候補の色はシートを開いた時だけ選び、再描画では変えない。
+            val candidateColors = remember(userId) {
+                SportAvatarPictogram.entries.associateWith { Random.nextInt(AvatarBackgrounds.size) }
             }
-            Spacer(Modifier.height(16.dp))
             val choices = buildList {
-                if (photoBytes != null) add(AvatarSelection(photo = true))
-                addAll(SportAvatarPictogram.entries.map { AvatarSelection(sport = it) })
+                add(if (photoBytes != null) AvatarSelection(photo = true) else AvatarSelection())
+                addAll(SportAvatarPictogram.entries.map { sport ->
+                    AvatarSelection(sport = sport, colorIndex = candidateColors.getValue(sport))
+                })
             }
             choices.chunked(3).forEach { row ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.forEach { choice ->
-                        val selected = !selection.isAutomatic && selection.sport == choice.sport && selection.photo == choice.photo
+                        val automaticAction = choice.isAutomatic
+                        val selected = !automaticAction && (
+                            if (choice.photo) selection.sport == null && photoBytes != null
+                            else selection.sport == choice.sport
+                        )
+                        val displayedChoice = if (selected && !choice.photo) choice.copy(colorIndex = selection.colorIndex)
+                            else choice
+                        val action = if (automaticAction) Modifier.clickable(role = Role.Button,
+                            onClick = { onSelect(randomAvatarSelection(userId, selection)) })
+                        else Modifier.selectable(selected = selected, role = Role.RadioButton,
+                            onClick = { onSelect(displayedChoice) })
                         Column(
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
                                 .border(2.dp, if (selected) AppTheme.colors.themeColorSecond else Color.Transparent,
                                     RoundedCornerShape(16.dp))
-                                .selectable(selected = selected, role = Role.RadioButton, onClick = {
-                                    onSelect(if (choice.photo) choice else choice.copy(colorIndex = selection.colorIndex))
-                                })
+                                .then(action)
                                 .padding(vertical = 10.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             UserAvatar(userId, photoBytes, Modifier.widthIn(max = 64.dp).fillMaxWidth().aspectRatio(1f),
-                                sportOverride = choice.sport, usePhoto = choice.photo, colorIndex = selection.colorIndex)
+                                sportOverride = if (automaticAction) selection.sport else displayedChoice.sport,
+                                usePhoto = choice.photo,
+                                colorIndex = if (automaticAction) selection.colorIndex else displayedChoice.colorIndex)
                             Spacer(Modifier.height(6.dp))
                             Text(choice.label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 color = AppTheme.colors.textPrimary, modifier = Modifier.padding(horizontal = 4.dp))
@@ -121,7 +125,7 @@ internal fun AvatarSelectionSheet(
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 colors.forEach { index ->
                                     Box(
-                                        modifier = Modifier.weight(1f).height(48.dp)
+                                        modifier = Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(12.dp))
                                             .semantics { contentDescription = "背景色：${AvatarColorNames[index]}" }
                                             .selectable(selected = currentColor == index, role = Role.RadioButton,
                                                 onClick = {
@@ -144,9 +148,6 @@ internal fun AvatarSelectionSheet(
                         }
                     }
                 }
-            }
-            TextButton(onClick = { onSelect(randomAvatarSelection(userId, selection)) }) {
-                Text("ランダムで選ぶ", color = AppTheme.colors.themeColorSecond)
             }
             Spacer(Modifier.height(16.dp))
         }

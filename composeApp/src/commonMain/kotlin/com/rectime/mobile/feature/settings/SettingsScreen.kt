@@ -1,6 +1,9 @@
 package com.rectime.mobile.feature.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ripple
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -322,6 +325,7 @@ private fun UserInfoHeader(
     modifier: Modifier = Modifier,
 ) {
     val preference = remember(userId) { AvatarPreference(userId) }
+    val avatarInteraction = remember { MutableInteractionSource() }
     var selection by remember(userId) { mutableStateOf(AvatarSelection()) }
     var selectionLoaded by remember(userId) { mutableStateOf(false) }
     var showAvatarSelection by remember(userId) { mutableStateOf(false) }
@@ -423,12 +427,14 @@ private fun UserInfoHeader(
             Modifier.align(Alignment.TopCenter).offset(y = avatarTop).size(ProfileAvatarSize)
                 .semantics { contentDescription = "プロフィールアイコン" }
                 .clickable(enabled = selectionLoaded, role = Role.Button,
+                    interactionSource = avatarInteraction, indication = null,
                     onClickLabel = "プロフィールアイコンを選ぶ", onClick = { showAvatarSelection = true }),
         ) {
             UserAvatar(
                 userId = userId,
                 photoBytes = photoBytes,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape)
+                    .indication(avatarInteraction, ripple()),
                 sportOverride = selection.sport,
                 usePhoto = selection.sport == null,
                 colorIndex = selection.colorIndex,
@@ -436,7 +442,8 @@ private fun UserInfoHeader(
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(AppTheme.colors.themeColorSecond),
+                    .background(AppTheme.colors.themeColorSecond)
+                    .indication(avatarInteraction, ripple()),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
