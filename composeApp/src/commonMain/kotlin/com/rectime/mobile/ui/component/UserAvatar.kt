@@ -22,7 +22,7 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.rectime.mobile.ui.theme.AppTheme
 
-private val AvatarBackgrounds = listOf(
+internal val AvatarBackgrounds = listOf(
     Color(0xFFD4EEF0), Color(0xFFF5DDD5), Color(0xFFF5EBCB),
     Color(0xFFDFE4F5), Color(0xFFEADDF1), Color(0xFFDDEEDF),
 )
@@ -40,9 +40,11 @@ internal fun UserAvatar(
     modifier: Modifier = Modifier,
     sportOverride: SportAvatarPictogram? = null,
     usePhoto: Boolean = true,
+    colorIndex: Int? = null,
 ) {
     val platformContext = LocalPlatformContext.current
-    val background = remember(userId) { avatarBackground(userId) }
+    val background = AvatarBackgrounds.getOrNull(colorIndex ?: -1)
+        ?: remember(userId) { avatarBackground(userId) }
     val sport = sportOverride ?: remember(userId) { avatarSport(userId) }
     val request = remember(platformContext, userId, photoBytes) {
         photoBytes?.let { bytes ->

@@ -16,7 +16,7 @@ actual class PlatformKeyValueStore : KeyValueStore {
     override suspend fun clear() {
         val keysToRemove = defaults.dictionaryRepresentation().keys
             .filterIsInstance<String>()
-            .filter { it.startsWith(PREFIX) }
+            .filter { it.startsWith(PREFIX) || it.startsWith("rectime_avatar_preference_") }
         keysToRemove.forEach { defaults.removeObjectForKey(it) }
     }
 

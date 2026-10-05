@@ -23,6 +23,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import org.jetbrains.compose.resources.painterResource
+import rectime_mobile.composeapp.generated.resources.Res
+import rectime_mobile.composeapp.generated.resources.ic_avatar_edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Switch
@@ -417,7 +421,6 @@ private fun UserInfoHeader(
         // タップの意味は外側のボタンが持ち、装飾画像のセマンティクスと分離する。
         Box(
             Modifier.align(Alignment.TopCenter).offset(y = avatarTop).size(ProfileAvatarSize)
-                .clip(androidx.compose.foundation.shape.CircleShape)
                 .semantics { contentDescription = "プロフィールアイコン" }
                 .clickable(enabled = selectionLoaded, role = Role.Button,
                     onClickLabel = "プロフィールアイコンを選ぶ", onClick = { showAvatarSelection = true }),
@@ -428,7 +431,21 @@ private fun UserInfoHeader(
                 modifier = Modifier.fillMaxSize(),
                 sportOverride = selection.sport,
                 usePhoto = selection.sport == null,
+                colorIndex = selection.colorIndex,
             )
+            Box(
+                modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(AppTheme.colors.themeColorSecond),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_avatar_edit),
+                    contentDescription = null,
+                    tint = AppTheme.colors.textThemeColorSecond,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
     }
 }
