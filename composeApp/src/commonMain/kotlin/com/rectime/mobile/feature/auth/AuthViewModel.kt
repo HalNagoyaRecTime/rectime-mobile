@@ -50,7 +50,7 @@ class AuthViewModel(
     private var sessionCheckJob: Job? = null
 
     init {
-        AuthSessionInvalidationHandler.register(this, ::refreshAfterUnauthorized, ::handleAccountDeactivated)
+        AuthSessionInvalidationHandler.register(this, ::refreshAfterUnauthorized, ::handleAccountDeactivated, ::handleAccountDeleted)
         restoreSession()
 
         viewModelScope.launch {
@@ -172,8 +172,9 @@ class AuthViewModel(
             }
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
-            if (error is AuthApiException && error.errorCode == USER_DEACTIVATED_CODE && error.statusCode == 401) {
-                handleAccountDeactivated(stored.accessToken)
+            val rejectionMessage = (error as? AuthApiException)?.let { accountRejectionMessage(it.statusCode, it.errorCode) }
+            if (rejectionMessage != null) {
+                handleAccountRejected(stored.accessToken, rejectionMessage)
                 return
             }
             // 一時的な通信・Server障害では保存済みSessionとPKCE情報を維持する。
@@ -200,7 +201,13 @@ class AuthViewModel(
         }
     }
 
-    internal suspend fun handleAccountDeactivated(accessToken: String) {
+    internal suspend fun handleAccountDeactivated(accessToken: String) =
+        handleAccountRejected(accessToken, AUTH_DEACTIVATED_MESSAGE)
+
+    internal suspend fun handleAccountDeleted(accessToken: String) =
+        handleAccountRejected(accessToken, AUTH_DELETED_MESSAGE)
+
+    private suspend fun handleAccountRejected(accessToken: String, message: String) {
         val current = _uiState.value.session ?: return
         // 別ユーザーのログイン後に届いた、古い通信の拒否では締め出さない。
         if (accessToken != current.accessToken && accessToken != previousAccessToken) return
@@ -208,7 +215,7 @@ class AuthViewModel(
         // 通信元の画面が閉じても、認証情報の削除は最後まで実行する。
         viewModelScope.async {
             invalidateSession(
-                AUTH_DEACTIVATED_MESSAGE,
+                message,
                 expectedAccessToken = current.accessToken,
                 expectedSession = current,
                 expectedPendingAuth = pending,
@@ -548,8 +555,9 @@ class AuthViewModel(
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                if (error is AuthApiException && error.statusCode == 401 && error.errorCode == USER_DEACTIVATED_CODE) {
-                    handleAccountDeactivated(accessToken)
+                val rejectionMessage = (error as? AuthApiException)?.let { accountRejectionMessage(it.statusCode, it.errorCode) }
+                if (rejectionMessage != null) {
+                    handleAccountRejected(accessToken, rejectionMessage)
                 } else if (error.isUnauthorizedAuthError()) {
                     invalidateSession(
                         AUTH_EXPIRED_MESSAGE,

@@ -106,6 +106,106 @@ class AuthRequestRecoveryTest {
     }
 
     @Test
+    fun deletionSkipsRefreshAndLeavesResponseReadable() = runTest {
+        var refreshes = 0
+        val rejectedTokens = mutableListOf<String>()
+        SessionTokenHolder.accessToken = "old-token"
+        val body = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Gone) }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                refreshToken = { refreshes++; "new-token" }
+                accountDeleted = { rejectedTokens += it }
+            }
+        }
+        try {
+            for (path in listOf("/api/v1/events", "/api/v1/auth/me", "/api/v1/auth/me/photo")) {
+                assertEquals(body, client.get("$BASE$path").bodyAsText())
+            }
+            assertEquals(0, refreshes)
+            assertEquals(listOf("old-token", "old-token", "old-token"), rejectedTokens)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun deletionDuringRetryIsReportedWithTheRefreshedToken() = runTest {
+        var calls = 0
+        val rejectedTokens = mutableListOf<String>()
+        SessionTokenHolder.accessToken = "old-token"
+        val body = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine {
+            calls++
+            respond(if (calls == 1) "expired" else body, if (calls == 1) HttpStatusCode.Unauthorized else HttpStatusCode.Gone)
+        }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                refreshToken = { "new-token" }
+                accountDeleted = { rejectedTokens += it }
+            }
+        }
+        try {
+            assertEquals(body, client.get("$BASE/api/v1/events").bodyAsText())
+            assertEquals(2, calls)
+            assertEquals(listOf("new-token"), rejectedTokens)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun rejectionDuringAnotherLoginCannotDeleteCurrentSession() = runTest {
+        var deletions = 0
+        SessionTokenHolder.accessToken = "current-user-token"
+        val body = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Gone) }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                accountDeleted = { deletions++ }
+            }
+        }
+        try {
+            assertEquals(body, client.post("$BASE/api/v1/auth/microsoft/token").bodyAsText())
+            assertEquals(0, deletions)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun externalDeletionResponseCannotSignOutTheUser() = runTest {
+        var deletions = 0
+        SessionTokenHolder.accessToken = "old-token"
+        val body = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"無効化されています"}}"""
+        val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Gone) }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                accountDeleted = { deletions++ }
+            }
+        }
+        try {
+            assertEquals(body, client.get("https://external.example.com/page").bodyAsText())
+            assertEquals(0, deletions)
+        } finally { client.close() }
+    }
+
+    @Test
+    fun unrelatedGoneDoesNotRefreshOrEndSession() = runTest {
+        var refreshes = 0
+        var deletions = 0
+        SessionTokenHolder.accessToken = "old-token"
+        val client = HttpClient(MockEngine {
+            respond("""{"error":{"code":"EVENT_GONE"}}""", HttpStatusCode.Gone)
+        }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = BASE
+                refreshToken = { refreshes++; "new-token" }
+                accountDeleted = { deletions++ }
+            }
+        }
+        try {
+            assertEquals(HttpStatusCode.Gone, client.get("$BASE/api/v1/events").status)
+            assertEquals(0, refreshes)
+            assertEquals(0, deletions)
+        } finally { client.close() }
+    }
+
+    @Test
     fun retriesTheOriginalRequestWithTheRefreshedToken() = runTest {
         val tokens = mutableListOf<String?>()
         var refreshes = 0

@@ -336,6 +336,117 @@ class AuthViewModelTest {
         assertNull(viewModel.uiState.value.error)
     }
 
+    @Test
+    fun startupDeletionReturnsToLoginWithoutRefreshingAndClearsCache() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val gate = CompletableDeferred<Unit>()
+        val paths = mutableListOf<String>()
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            paths += request.url.encodedPath
+            gate.await()
+            respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.runCurrent()
+        assertNotNull(viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        viewModel.onForeground()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf("/api/v1/auth/me"), paths)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(cache.load<String>("saved"))
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun foregroundDeletionReturnsToLoginWithSpecificError() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        var calls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            calls++
+            if (calls == 1) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun refreshDeletionUsesSpecificErrorInsteadOfExpiredMessage() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/me")) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+        assertNull(store.session)
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun unrelatedOldTokenCannotDeleteCurrentSession() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(okApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleAccountDeleted("different-session-token")
+        assertNotNull(store.session)
+        assertNotNull(viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun deletionStillClearsUiAndCacheWhenSessionStorageFails() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession, clearFails = true)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(cache.load<String>("saved"))
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun deletedAccountCanLogInAgainAndOldTokenCannotEndNewLogin() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val newSessionBody = sessionJson.replace("access-token", "new-access-token")
+            .replace("refresh-token-id", "new-refresh-token-id")
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            when {
+                request.url.encodedPath.endsWith("/microsoft/token") -> respond(newSessionBody, HttpStatusCode.OK, jsonHeaders)
+                request.url.encodedPath.endsWith("/microsoft/login") -> respond("""{"auth_url":"https://login.example.com"}""", HttpStatusCode.OK, jsonHeaders)
+                else -> respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+            }
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.session)
+        viewModel.startLogin()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val pending = store.pendingAuth!!
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=${pending.state}")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("new-access-token", viewModel.uiState.value.session?.accessToken)
+        assertNull(viewModel.uiState.value.error)
+        viewModel.handleAccountDeleted(storedSession.accessToken)
+        assertEquals("new-access-token", store.session?.accessToken)
+        assertEquals("new-access-token", viewModel.uiState.value.session?.accessToken)
+    }
+
+    private val deletedBody = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"削除済み"}}"""
+
     private val meBody = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}"""
     private val deactivatedBody = """{"error":{"code":"USER_DEACTIVATED","message":"このアカウントは無効化されています"}}"""
 
