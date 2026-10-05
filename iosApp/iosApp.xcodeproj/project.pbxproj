@@ -12,6 +12,7 @@
 		A10000000000000000000002 /* LiveActivityShared/RecreationActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* LiveActivityShared/RecreationActivityAttributes.swift */; };
 		A10000000000000000000004 /* RecreationLiveActivity/RecreationLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* RecreationLiveActivity/RecreationLiveActivity.swift */; };
 		A10000000000000000000006 /* RecreationLiveActivity.appex in Embed Live Activity */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* RecreationLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000018 /* iosApp/AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* iosApp/AppIcon.icon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +43,7 @@
 		A10000000000000000000003 /* LiveActivityShared/RecreationActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityShared/RecreationActivityAttributes.swift; sourceTree = "<group>"; };
 		A10000000000000000000005 /* RecreationLiveActivity/RecreationLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecreationLiveActivity/RecreationLiveActivity.swift; sourceTree = "<group>"; };
 		A10000000000000000000007 /* RecreationLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; path = RecreationLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000019 /* iosApp/AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.icon; path = iosApp/AppIcon.icon; sourceTree = "<group>"; };
 		E7C46A350BC0382DA91661D2 /* Rectimemobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rectimemobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -108,6 +110,7 @@
 				B575E86706B6F6ADE5C16A16 /* Products */,
 				A10000000000000000000003 /* LiveActivityShared/RecreationActivityAttributes.swift */,
 				A10000000000000000000005 /* RecreationLiveActivity/RecreationLiveActivity.swift */,
+				A10000000000000000000019 /* iosApp/AppIcon.icon */,
 			);
 			sourceTree = "<group>";
 		};
@@ -200,6 +203,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000018 /* iosApp/AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -353,6 +357,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -375,6 +380,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = "$(TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = YES;
