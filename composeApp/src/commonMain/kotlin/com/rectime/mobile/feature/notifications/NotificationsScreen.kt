@@ -1,5 +1,8 @@
 package com.rectime.mobile.feature.notifications
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,12 +20,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,6 +45,9 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -71,23 +80,13 @@ object NotificationsScreen : Screen {
 
         RootScreenScaffold(
             title = "通知一覧",
+            isRefreshing = uiState.isPullRefreshing,
+            refreshEnabled = !uiState.isLoading && !uiState.isRefreshing,
+            onRefresh = viewModel::refreshFromPull,
             modifier = Modifier.background(AppTheme.colors.notificationBackground),
-            onTrailingClick = viewModel::refresh,
+            onTrailingClick = if (uiState.isLoading || uiState.isRefreshing) null else viewModel::refresh,
             trailing = {
-                if (uiState.isRefreshing) {
-                    CircularProgressIndicator(
-                        color = AppTheme.colors.textPrimary,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(18.dp),
-                    )
-                } else {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_ic_refresh),
-                        contentDescription = "更新",
-                        tint = AppTheme.colors.textNavigationInactive,
-                        modifier = Modifier.size(29.dp),
-                    )
-                }
+                NotificationRefreshIcon(isRefreshing = uiState.isHeaderRefreshing)
             },
         ) {
             when {
@@ -131,6 +130,45 @@ object NotificationsScreen : Screen {
         }
     }
 }
+
+@Composable
+private fun NotificationRefreshIcon(isRefreshing: Boolean) {
+    val rotation = remember { Animatable(0f) }
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            while (true) {
+                // A new request can interrupt the final turn of the previous one.
+                // Always reach a full-turn boundary before resetting the angle.
+                val endAngle = nextRefreshRotationTarget(rotation.value)
+                rotation.animateTo(
+                    endAngle,
+                    tween(refreshRotationDurationMillis(rotation.value, endAngle), easing = LinearEasing),
+                )
+                rotation.snapTo(0f)
+            }
+        } else {
+            // Finish the current turn before resetting, rather than jumping backwards.
+            val endAngle = ceil(rotation.value / 360f) * 360f
+            val remainingMillis = refreshRotationDurationMillis(rotation.value, endAngle)
+            if (remainingMillis > 0) {
+                rotation.animateTo(endAngle, tween(remainingMillis, easing = LinearEasing))
+            }
+            rotation.snapTo(0f)
+        }
+    }
+    Icon(
+        painter = painterResource(Res.drawable.ic_ic_refresh),
+        contentDescription = if (isRefreshing) "更新中" else "更新",
+        tint = AppTheme.colors.textNavigationInactive,
+        modifier = Modifier.size(29.dp).graphicsLayer { rotationZ = rotation.value },
+    )
+}
+
+internal fun nextRefreshRotationTarget(angle: Float): Float =
+    (floor(angle / 360f) + 1f) * 360f
+
+internal fun refreshRotationDurationMillis(startAngle: Float, endAngle: Float): Int =
+    ((endAngle - startAngle) / 360f * 600).roundToInt().coerceAtLeast(0)
 
 @Composable
 private fun NotificationCard(

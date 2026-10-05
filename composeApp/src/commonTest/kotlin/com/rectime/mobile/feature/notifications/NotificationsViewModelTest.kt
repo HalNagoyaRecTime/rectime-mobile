@@ -118,7 +118,7 @@ class NotificationsViewModelTest {
     }
 
     @Test
-    fun refreshFallsBackToFullLoadingWhenNothingIsLoadedYet() = runTest(testDispatcher) {
+    fun refreshShowsRefreshingIndicatorEvenWhenNothingIsLoadedYet() = runTest(testDispatcher) {
         val gate = CompletableDeferred<Unit>()
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
@@ -134,8 +134,8 @@ class NotificationsViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertTrue(state.isLoading)
-        assertFalse(state.isRefreshing)
+        assertFalse(state.isLoading)
+        assertTrue(state.isRefreshing)
         assertNull(state.error)
 
         gate.complete(Unit)
@@ -183,6 +183,49 @@ class NotificationsViewModelTest {
 
         assertEquals(1, callCount)
         assertEquals(listOf(1), viewModel.uiState.value.notifications.map(UserNotification::id))
+    }
+
+    @Test
+    fun headerRefreshIgnoresPullAndRepeatedHeaderRequests() =
+        assertRefreshOwner(NotificationRefreshSource.Header)
+
+    @Test
+    fun pullRefreshIgnoresHeaderAndRepeatedPullRequests() =
+        assertRefreshOwner(NotificationRefreshSource.Pull)
+
+    private fun assertRefreshOwner(source: NotificationRefreshSource) = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var callCount = 0
+        val gateway = FakeGateway { limit, offset ->
+            callCount++
+            if (callCount > 1) gate.await()
+            page(listOf(notification(callCount)), total = 1, limit, offset)
+        }
+        val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        if (source == NotificationRefreshSource.Header) viewModel.refresh() else viewModel.refreshFromPull()
+        viewModel.refresh()
+        viewModel.refreshFromPull()
+        testDispatcher.scheduler.runCurrent()
+
+        val state = viewModel.uiState.value
+        assertEquals(source, state.refreshSource)
+        assertEquals(source == NotificationRefreshSource.Header, state.isHeaderRefreshing)
+        assertEquals(source == NotificationRefreshSource.Pull, state.isPullRefreshing)
+        assertEquals(2, callCount)
+
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.refreshSource)
+        assertFalse(viewModel.uiState.value.isHeaderRefreshing)
+        assertFalse(viewModel.uiState.value.isPullRefreshing)
+        assertEquals(2, callCount)
+
+        // Completion releases the guard; the other entry point can start the next update.
+        if (source == NotificationRefreshSource.Header) viewModel.refreshFromPull() else viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(3, callCount)
     }
 
     // ---- 異常系 ----
