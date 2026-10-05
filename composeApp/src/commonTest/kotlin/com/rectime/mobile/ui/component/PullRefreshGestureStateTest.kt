@@ -9,6 +9,45 @@ class PullRefreshGestureStateTest {
     private fun state() = PullRefreshGestureState(80f).apply { viewportHeight = 800f }
 
     @Test
+    fun restoredRefreshDoesNotEmitHapticsAndNextPullStillWorks() {
+        var count = 0
+        val detector = com.rectime.mobile.core.haptics.HapticThresholdDetector({ count++ })
+        val state = PullRefreshGestureState(80f, initiallyRefreshing = true) {
+            detector.onDistanceFractionChanged(it, true)
+        }.apply { viewportHeight = 800f }
+        assertEquals(80f, state.offset)
+        assertEquals(0, count)
+        state.beginDrag(refreshing = true)
+        state.dragBy(500f)
+        state.release(true, true)
+        assertEquals(0, count)
+        state.updateRefreshing(false)
+        state.offset = 0f
+        state.beginDrag(false)
+        state.dragBy(500f)
+        assertEquals(1, count)
+    }
+
+    @Test
+    fun headerRefreshStopsHapticsUntilNextEligibleDrag() {
+        var count = 0
+        val detector = com.rectime.mobile.core.haptics.HapticThresholdDetector({ count++ })
+        val state = PullRefreshGestureState(80f) {
+            detector.onDistanceFractionChanged(it, true)
+        }.apply { viewportHeight = 800f }
+        state.beginDrag(false)
+        state.dragBy(50f)
+        state.disableRefreshForCurrentDrag()
+        state.dragBy(500f)
+        state.release(false, true)
+        assertEquals(0, count)
+        state.offset = 0f
+        state.beginDrag(false)
+        state.dragBy(500f)
+        assertEquals(1, count)
+    }
+
+    @Test
     fun returningDuringRefreshStartsAtHoldPosition() {
         val state = PullRefreshGestureState(80f, initiallyRefreshing = true)
         assertEquals(80f, state.offset)
@@ -27,6 +66,38 @@ class PullRefreshGestureStateTest {
         val state = PullRefreshGestureState(80f)
         assertEquals(0f, state.offset)
         assertEquals(0f, state.restingOffset(false))
+    }
+
+    @Test
+    fun hapticsFollowEligibleFingerMovementOnly() {
+        var count = 0
+        val detector = com.rectime.mobile.core.haptics.HapticThresholdDetector({ count++ })
+        val state = PullRefreshGestureState(80f) { detector.onDistanceFractionChanged(it, true) }
+            .apply { viewportHeight = 800f }
+        state.beginDrag(false)
+        state.dragBy(500f)
+        state.dragBy(500f)
+        assertEquals(1, count)
+        state.release(false, true)
+        // 復帰アニメーションは座標だけを変更し、引っ張りの進捗を通知しない。
+        state.offset = 180f
+        state.offset = 0f
+        assertEquals(1, count)
+        state.beginDrag(refreshing = true)
+        state.dragBy(500f)
+        state.release(true, false)
+        state.beginDrag(refreshing = false, enabled = false)
+        state.dragBy(500f)
+        state.release(false, false)
+        state.beginDrag(false)
+        state.dragBy(-500f)
+        state.release(false, true)
+        assertEquals(1, count)
+        state.updateRefreshing(false)
+        state.offset = 0f
+        state.beginDrag(false)
+        state.dragBy(500f)
+        assertEquals(2, count)
     }
 
     @Test

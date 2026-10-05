@@ -24,8 +24,6 @@
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict>
-		<key>UIImageName</key>
-		<string>splash_logo</string>
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>

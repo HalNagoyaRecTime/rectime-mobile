@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.network.MyEventsApi
 import com.rectime.mobile.core.network.HttpStatusException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine

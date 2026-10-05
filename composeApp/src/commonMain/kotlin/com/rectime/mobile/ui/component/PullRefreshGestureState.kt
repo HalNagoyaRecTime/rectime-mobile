@@ -8,7 +8,11 @@ import kotlin.math.abs
 import kotlin.math.sign
 
 /** 上下のバウンス、更新中の表示位置、復帰アニメーションの中断を同じ座標で管理する。 */
-internal class PullRefreshGestureState(private val holdDistance: Float, initiallyRefreshing: Boolean = false) {
+internal class PullRefreshGestureState(
+    private val holdDistance: Float,
+    initiallyRefreshing: Boolean = false,
+    private val onPullProgress: (Float) -> Unit = {},
+) {
     // タブへ戻った時点で更新中なら、表示位置も更新中として復元する。
     var offset by mutableFloatStateOf(if (initiallyRefreshing) holdDistance else 0f)
     var refreshRequested by mutableStateOf(false)
@@ -39,6 +43,7 @@ internal class PullRefreshGestureState(private val holdDistance: Float, initiall
 
     fun disableRefreshForCurrentDrag() {
         dragCanRefresh = false
+        onPullProgress(0f)
     }
 
     fun dragBy(delta: Float) {
@@ -46,6 +51,7 @@ internal class PullRefreshGestureState(private val holdDistance: Float, initiall
         val extent = viewportHeight.coerceAtLeast(holdDistance * 2)
         val stretch = abs(distance) * 0.55f
         offset = dragOrigin + distance.sign * extent * stretch / (extent + stretch)
+        onPullProgress(if (dragCanRefresh) offset.coerceAtLeast(0f) / holdDistance else 0f)
     }
 
     fun reverseBy(delta: Float): Float {
@@ -65,6 +71,7 @@ internal class PullRefreshGestureState(private val holdDistance: Float, initiall
         if (request) refreshRequested = true
         isDragging = false
         distance = 0f
+        onPullProgress(0f)
         return PullRefreshRelease(request, restingOffset(refreshing))
     }
 

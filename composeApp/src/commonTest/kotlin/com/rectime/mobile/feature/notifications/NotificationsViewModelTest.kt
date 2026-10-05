@@ -20,7 +20,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private const val SESSION_EXPIRED_MESSAGE = "ログイン情報の有効期限が切れました"
 private const val NOT_FOUND_MESSAGE = "通知が見つかりません"
 private const val LOAD_FAILED_MESSAGE = "通知の取得に失敗しました"
 
@@ -202,7 +201,7 @@ class NotificationsViewModelTest {
     }
 
     @Test
-    fun unauthorizedRefreshClearsVisibleCachedNotifications() = runTest(testDispatcher) {
+    fun unauthorizedRefreshKeepsVisibleCachedNotifications() = runTest(testDispatcher) {
         var calls = 0
         val gateway = FakeGateway { limit, offset ->
             calls++
@@ -213,8 +212,9 @@ class NotificationsViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         viewModel.refresh()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertTrue(viewModel.uiState.value.notifications.isEmpty())
-        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+        assertEquals(listOf(1), viewModel.uiState.value.notifications.map { it.id })
+        assertNull(viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.isOffline)
     }
 
     @Test
@@ -405,14 +405,14 @@ class NotificationsViewModelTest {
     // ---- 異常系 ----
 
     @Test
-    fun unauthorizedResponseReportsExpiredSession() = runTest(testDispatcher) {
+    fun unauthorizedResponseWithoutCacheReportsFetchFailure() = runTest(testDispatcher) {
         val gateway = FakeGateway { _, _ -> throw notificationApiError(statusCode = 401) }
         val viewModel = NotificationsViewModel(feedStore(gateway), readStore())
 
         testDispatcher.scheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals(SESSION_EXPIRED_MESSAGE, state.error)
+        assertEquals(LOAD_FAILED_MESSAGE, state.error)
         assertFalse(state.isLoading)
         assertFalse(state.isRefreshing)
         assertTrue(state.notifications.isEmpty())

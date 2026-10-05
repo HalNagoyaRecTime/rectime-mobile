@@ -10,10 +10,15 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.feature.event.EventCache
 import com.rectime.mobile.feature.event.EventCacheRequest
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.config.isDebugBuild
+import com.rectime.mobile.core.network.MyEventsApi
+import com.rectime.mobile.core.network.MyEventsGateway
+import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
@@ -44,13 +49,16 @@ class ScheduleViewModel(
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val cache: LocalCache = LocalCache(),
+    private val myEventsGateway: MyEventsGateway = MyEventsApi(baseUrl = baseUrl),
 ) : ViewModel() {
     private val eventCache = EventCache(cache)
+    private var contentSession = CacheRequestGeneration()
     private var enteredSession: CacheRequestGeneration? = null
     private var displayedResponse: EventsResponse? = null
     private var displayedRequest: EventCacheRequest? = null
     private var hasEnteredForeground = false
     private var loadJob: Job? = null
+    private var participatingEventIds: Set<Int>? = null
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _events = mutableStateOf(listOf<TimelineEvent>())
@@ -90,6 +98,7 @@ class ScheduleViewModel(
         isLoading = false
         isRefreshing = false
         clearDisplayedEvents()
+        participatingEventIds = null
         isOffline = false
         enteredSession = CacheRequestGeneration()
         hasEnteredForeground = false
@@ -113,13 +122,33 @@ class ScheduleViewModel(
 
     private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false) {
         if (isUpdating) return
+        if (!contentSession.isCurrent) {
+            clearDisplayedEvents()
+            participatingEventIds = null
+            contentSession = CacheRequestGeneration()
+        }
         isUpdating = true
         isLoading = !isRefresh && !isBackground
         isRefreshing = isRefresh
         error = null
         loadJob = viewModelScope.launch {
             val request = CacheRequestGeneration()
+            var participationJob: Job? = null
             try {
+                // 保存済みの出場表示を一覧の初回描画に間に合わせる。
+                if (participatingEventIds == null) {
+                    val saved = try {
+                        cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        null
+                    }
+                    if (!request.isCurrent) return@launch
+                    saved?.let(::applyParticipation)
+                }
+                // 参加情報の取得が遅くても予定一覧は先に表示する。
+                participationJob = launch { updateParticipation(request) }
                 val cacheRequest = eventCache.beginRequest()
                 val result = request.validate(withMinimumRefreshDuration(isRefresh) {
                     fetchWithCacheFirst(
@@ -128,7 +157,7 @@ class ScheduleViewModel(
                         // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
                         saveCache = {},
                         onCached = { saved ->
-                            if (!isRefresh && !isBackground) {
+                            if (!isRefresh && !isBackground && _events.value.isEmpty()) {
                                 publishEvents(saved, cacheRequest)
                                 isLoading = false
                             }
@@ -148,26 +177,22 @@ class ScheduleViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // セッション切れはオフライン表示で隠さず、再ログインが必要なことを伝える。
-                        // errorはスナックバーで一瞬しか表示されないため、消えた後も未検証の
-                        // 古いイベントが表示され続けないよう_eventsもクリアする。
+                        // 失効の確定とログイン画面への遷移は共通の認証処理に任せる。
+                        // 更新を確認できない401では保存済みの内容を維持する。
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status in setOf(HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden)) {
+                        if (result.error.invalidatesDisplayedContent()) {
                             clearDisplayedEvents()
-                            error = when (status) {
-                                HttpStatusCode.Forbidden -> "スケジュールを表示する権限がありません"
-                                else -> "ログイン情報の有効期限が切れました"
-                            }
+                            error = if (status == HttpStatusCode.Forbidden) "スケジュールを表示する権限がありません" else "通信に失敗しました"
                             isOffline = false
                         } else {
                             // 前面復帰の失敗では、表示中の値を古いディスクキャッシュへ戻さない。
-                            if (!isBackground) {
-                                val latest = eventCache.reconcileEvents(result.value, cacheRequest)
-                                if (!request.isCurrent) return@launch
-                                publishEvents(latest, cacheRequest)
-                            }
+                            val displayed = displayedResponse ?: result.value
+                            val displayRequest = displayedRequest ?: cacheRequest
+                            val latest = eventCache.reconcileEvents(displayed, displayRequest)
+                            if (!request.isCurrent) return@launch
+                            publishEvents(latest, displayRequest)
                             isOffline = true
-                            // 401以外の理由での フォールバックは「オフライン」として静かに
+                            // 通信失敗時のフォールバックは「オフライン」として静かに
                             // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
                             // 可能性もある)を追えるようログには残す。
                             result.error.printStackTrace()
@@ -176,25 +201,18 @@ class ScheduleViewModel(
 
                     is CachedFetchResult.Failed -> {
                         val status = (result.error as? HttpStatusException)?.status
-                        if (
-                            isBackground && request.isCurrent && status !in setOf(
-                                HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden,
-                            )
-                        ) {
+                        if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(result.error, contentSession)) {
                             // 保存に失敗してキャッシュがなくても、表示中のデータは維持する。
                             isOffline = true
                             result.error.printStackTrace()
                             return@launch
                         }
                         error = when (status) {
-                            HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
                             HttpStatusCode.Forbidden -> "スケジュールを表示する権限がありません"
                             else -> "通信に失敗しました"
                         }
-                        // Cached分岐と同様、errorはスナックバーで一瞬しか表示されないため、
-                        // 消えた後も未検証の古いイベントが表示され続けないようクリアする。
-                        // 401以外(ログアウト・新規ログインによるStaleCacheGenerationException
-                        // 等を含む)でも、有効なキャッシュが無いFailedでは理由を問わずクリアする。
+                        // 保存済みデータがない場合やセッション切替後は、一覧を復元しない。
+                        // 失効が確定した場合の画面遷移は共通の認証処理が行う。
                         clearDisplayedEvents()
                         isOffline = false
                         result.error.printStackTrace()
@@ -203,13 +221,23 @@ class ScheduleViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (!isBackground) error = "通信に失敗しました"
-                isOffline = isBackground
+                if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(e, contentSession)) {
+                    isOffline = true
+                } else {
+                    clearDisplayedEvents()
+                    error = "通信に失敗しました"
+                    isOffline = false
+                }
                 e.printStackTrace()
             } finally {
                 isLoading = false
-                isRefreshing = false
-                isUpdating = false
+                try {
+                    participationJob?.join()
+                } finally {
+                    isLoading = false
+                    isRefreshing = false
+                    isUpdating = false
+                }
             }
         }
     }
@@ -224,6 +252,31 @@ class ScheduleViewModel(
         displayedResponse = response
         displayedRequest = request
         return toTimelineEvents(response).also { _events.value = it.events }
+    }
+
+    private suspend fun updateParticipation(request: CacheRequestGeneration) {
+        val result = fetchWithCacheFirst(
+            fetchLive = { myEventsGateway.getMyEventIds() },
+            loadCache = { cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY) },
+            saveCache = { cache.save(MY_EVENTS_CACHE_KEY, it) },
+            onCached = {},
+        )
+        if (!request.isCurrent) return
+        when (result) {
+            is CachedFetchResult.Fresh -> applyParticipation(result.value)
+            // 通信失敗で表示中の参加情報を古い保存値へ戻さない。
+            is CachedFetchResult.Cached -> result.error.printStackTrace()
+            is CachedFetchResult.Failed -> result.error.printStackTrace()
+        }
+    }
+
+    private fun applyParticipation(ids: Set<Int>) {
+        participatingEventIds = ids
+        fun TimelineEvent.withParticipation(): TimelineEvent = copy(
+            isParticipating = eventId in ids,
+            overflowEvents = overflowEvents.map { it.withParticipation() },
+        )
+        _events.value = _events.value.map { it.withParticipation() }
     }
 
     private suspend fun fetchAllEvents(): EventsResponse {
@@ -273,7 +326,7 @@ class ScheduleViewModel(
                 return@mapNotNull null
             }
 
-            timelineEvent
+            timelineEvent.copy(isParticipating = it.eventId in participatingEventIds.orEmpty())
         }
         return TimelineResult(
             events = assignLanes(timelineEvents),
@@ -284,6 +337,7 @@ class ScheduleViewModel(
     override fun onCleared() {
         super.onCleared()
         client.close()
+        myEventsGateway.close()
     }
 }
 

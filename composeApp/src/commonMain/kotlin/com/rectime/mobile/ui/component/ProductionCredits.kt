@@ -8,6 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.theme.AppTheme
 
+internal const val AppTeamCredit = "Developed by RE:CREATION App Team"
+
 @Composable
 fun ProductionCredits(
     modifier: Modifier = Modifier,
@@ -23,7 +25,7 @@ fun ProductionCredits(
             color = AppTheme.colors.textCopyRight,
         )
         Text(
-            text = "Developed by RE:CREATION Development Team",
+            text = AppTeamCredit,
             fontSize = 12.sp,
             color = AppTheme.colors.textCopyRight,
         )
