@@ -10,13 +10,20 @@ private class IosAppHapticFeedback : AppHapticFeedback {
         style = UIImpactFeedbackStyle.UIImpactFeedbackStyleMedium,
     )
 
+    private val preferenceGenerator = UIImpactFeedbackGenerator(
+        style = UIImpactFeedbackStyle.UIImpactFeedbackStyleLight,
+    )
+
     override fun perform(event: AppHapticEvent) {
-        if (event != AppHapticEvent.RefreshThreshold) return
+        val feedback = when (event) {
+            AppHapticEvent.RefreshThreshold -> generator
+            AppHapticEvent.PreferenceEnabled, AppHapticEvent.PreferenceDisabled -> preferenceGenerator
+        }
 
         // 振動を利用できるかどうかはUIKitとOSの設定に任せる。
         runCatching {
-            generator.prepare()
-            generator.impactOccurred()
+            feedback.prepare()
+            feedback.impactOccurred()
         }
     }
 }

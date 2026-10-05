@@ -11,11 +11,15 @@ private class AndroidAppHapticFeedback(
     private val view: View,
 ) : AppHapticFeedback {
     override fun perform(event: AppHapticEvent) {
-        if (event != AppHapticEvent.RefreshThreshold) return
+        val constant = when (event) {
+            AppHapticEvent.RefreshThreshold -> refreshThresholdHapticConstant(Build.VERSION.SDK_INT)
+            AppHapticEvent.PreferenceEnabled -> preferenceToggleHapticConstant(true, Build.VERSION.SDK_INT)
+            AppHapticEvent.PreferenceDisabled -> preferenceToggleHapticConstant(false, Build.VERSION.SDK_INT)
+        }
 
         // システムの触覚設定に従い、VIBRATE権限を必要としない。
         runCatching {
-            view.performHapticFeedback(refreshThresholdHapticConstant(Build.VERSION.SDK_INT))
+            view.performHapticFeedback(constant)
         }
     }
 }
@@ -25,6 +29,12 @@ private class AndroidAppHapticFeedback(
 internal fun refreshThresholdHapticConstant(sdkInt: Int): Int =
     if (sdkInt >= 34) HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE
     else HapticFeedbackConstants.VIRTUAL_KEY
+
+// Android 14以降はスイッチ専用、旧OSでは軽い単発の触覚を使う。
+internal fun preferenceToggleHapticConstant(enabled: Boolean, sdkInt: Int): Int =
+    if (sdkInt >= 34) {
+        if (enabled) HapticFeedbackConstants.TOGGLE_ON else HapticFeedbackConstants.TOGGLE_OFF
+    } else HapticFeedbackConstants.CLOCK_TICK
 
 @Composable
 actual fun rememberPlatformHapticFeedback(): AppHapticFeedback {

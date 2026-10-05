@@ -55,6 +55,8 @@ import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.core.haptics.LocalHapticPreference
+import com.rectime.mobile.core.haptics.AppHapticEvent
+import com.rectime.mobile.core.haptics.rememberPlatformHapticFeedback
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.core.platform.openInAppBrowser
@@ -92,6 +94,7 @@ class SettingsScreen(
         }
         val scope = rememberCoroutineScope()
         val hapticPreference = LocalHapticPreference.current
+        val hapticFeedback = rememberPlatformHapticFeedback()
         val hapticEnabled by hapticPreference.enabled.collectAsState()
         val lifecycleOwner = LocalLifecycleOwner.current
         val refreshNotificationPermission = {
@@ -180,6 +183,11 @@ class SettingsScreen(
                                             uncheckedThumbColor = AppTheme.colors.textMuted,
                                         ),
                                         onCheckedChange = { enabled ->
+                                            // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
+                                            hapticFeedback.perform(
+                                                if (enabled) AppHapticEvent.PreferenceEnabled
+                                                else AppHapticEvent.PreferenceDisabled,
+                                            )
                                             scope.launch {
                                                 hapticPreference.setEnabled(enabled)
                                             }
