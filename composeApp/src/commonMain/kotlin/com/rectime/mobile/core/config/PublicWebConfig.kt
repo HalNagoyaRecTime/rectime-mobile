@@ -8,14 +8,13 @@ package com.rectime.mobile.core.config
  */
 const val productionWebOrigin: String = "https://recwatch.pages.dev"
 
-/** Public entry point for starting the RecTime account deletion process. */
-
 /**
  * Public develop origin used only by debug builds so that pages deployed to the
  * develop environment (e.g. account deletion) can be verified from the app.
  */
 const val developWebOrigin: String = "https://develop.recwatch.pages.dev"
 
+/** Public entry point for starting the RecTime account deletion process. */
 const val accountDeletionPath: String = "/account-deletion"
 
 /** Web origin for the current build type: develop for debug, production for release. */
@@ -32,8 +31,9 @@ private val httpsOriginPattern = Regex(
 /**
  * Resolves a path against the public web origin.
  *
- * Every build accepts only the single approved production origin, preventing
- * preview, staging, localhost, example and placeholder origins from being used.
+ * Release builds accept only the approved production origin. Debug builds accept
+ * only the develop origin. Preview, staging, localhost, example and placeholder
+ * origins are rejected in every build.
  */
 fun resolvePublicWebUrl(
     path: String,
@@ -54,7 +54,7 @@ fun resolvePublicWebUrl(
         host.endsWith(".example.com") ||
         host.startsWith("pr-") ||
         host.startsWith("preview.") ||
-            (!isDebug && host.startsWith("develop.")) ||
+        (!isDebug && host.startsWith("develop.")) ||
         host.startsWith("development.") ||
         host.startsWith("staging.")
     if (forbiddenHost || normalizedOrigin != allowedWebOrigin(isDebug)) return null
