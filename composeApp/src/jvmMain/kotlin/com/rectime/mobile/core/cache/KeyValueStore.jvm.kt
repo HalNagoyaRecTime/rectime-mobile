@@ -13,5 +13,7 @@ actual class PlatformKeyValueStore : KeyValueStore {
 
     override suspend fun clear() {
         preferences.clear()
+        // 旧版の専用領域に保存したアバター設定も削除する。
+        Preferences.userRoot().node("com/rectime/mobile/avatars").clear()
     }
 }
