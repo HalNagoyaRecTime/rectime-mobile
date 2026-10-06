@@ -9,6 +9,13 @@ package com.rectime.mobile.core.config
 const val productionWebOrigin: String = "https://recwatch.pages.dev"
 
 /** Public entry point for starting the RecTime account deletion process. */
+
+/**
+ * Public develop origin used only by debug builds so that pages deployed to the
+ * develop environment (e.g. account deletion) can be verified from the app.
+ */
+const val developWebOrigin: String = "https://develop.recwatch.pages.dev"
+
 const val accountDeletionPath: String = "/account-deletion"
 
 private val httpsOriginPattern = Regex(
@@ -24,6 +31,7 @@ private val httpsOriginPattern = Regex(
 fun resolvePublicWebUrl(
     path: String,
     origin: String = productionWebOrigin,
+    isDebug: Boolean = isDebugBuild,
 ): String? {
     if (!path.startsWith('/') || path.startsWith("//")) return null
     if ('?' in path || '#' in path || '\\' in path) return null
