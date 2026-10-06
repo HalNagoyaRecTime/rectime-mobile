@@ -18,6 +18,13 @@ const val developWebOrigin: String = "https://develop.recwatch.pages.dev"
 
 const val accountDeletionPath: String = "/account-deletion"
 
+/** Web origin for the current build type: develop for debug, production for release. */
+val publicWebOrigin: String
+    get() = allowedWebOrigin(isDebugBuild)
+
+internal fun allowedWebOrigin(isDebug: Boolean): String =
+    if (isDebug) developWebOrigin else productionWebOrigin
+
 private val httpsOriginPattern = Regex(
     pattern = "^https://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[1-9][0-9]{0,4})?/?$",
 )
