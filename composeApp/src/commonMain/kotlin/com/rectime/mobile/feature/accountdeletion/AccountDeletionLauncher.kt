@@ -1,13 +1,13 @@
 package com.rectime.mobile.feature.accountdeletion
 
 import com.rectime.mobile.core.config.accountDeletionPath
-import com.rectime.mobile.core.config.productionWebOrigin
+import com.rectime.mobile.core.config.publicWebOrigin
 import com.rectime.mobile.core.config.resolvePublicWebUrl
 import com.rectime.mobile.core.platform.openExternalUrl
 import kotlinx.coroutines.CancellationException
 
 class AccountDeletionLauncher(
-    private val origin: String = productionWebOrigin,
+    private val origin: String = publicWebOrigin,
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
 ) {
     suspend fun open(): Boolean {
