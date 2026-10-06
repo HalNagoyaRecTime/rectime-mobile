@@ -37,7 +37,7 @@ private val httpsOriginPattern = Regex(
  */
 fun resolvePublicWebUrl(
     path: String,
-    origin: String = productionWebOrigin,
+    origin: String = publicWebOrigin,
     isDebug: Boolean = isDebugBuild,
 ): String? {
     if (!path.startsWith('/') || path.startsWith("//")) return null
@@ -54,10 +54,10 @@ fun resolvePublicWebUrl(
         host.endsWith(".example.com") ||
         host.startsWith("pr-") ||
         host.startsWith("preview.") ||
-        host.startsWith("develop.") ||
+            (!isDebug && host.startsWith("develop.")) ||
         host.startsWith("development.") ||
         host.startsWith("staging.")
-    if (forbiddenHost || normalizedOrigin != productionWebOrigin) return null
+    if (forbiddenHost || normalizedOrigin != allowedWebOrigin(isDebug)) return null
 
     return normalizedOrigin + path
 }
