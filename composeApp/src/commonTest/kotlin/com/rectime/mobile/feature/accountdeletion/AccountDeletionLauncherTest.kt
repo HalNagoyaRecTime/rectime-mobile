@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.accountdeletion
 
+import com.rectime.mobile.core.config.publicWebOrigin
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
@@ -17,7 +18,7 @@ class AccountDeletionLauncherTest {
     }
 
     @Test
-    fun opensAccountDeletionAtProductionUrl() = runTest {
+    fun opensAccountDeletionAtBuildTypeUrl() = runTest {
         var openedUrl: String? = null
         val launcher = AccountDeletionLauncher(
             openUrl = { url ->
@@ -27,7 +28,7 @@ class AccountDeletionLauncherTest {
         )
 
         assertTrue(launcher.open())
-        assertEquals("https://recwatch.pages.dev/account-deletion", openedUrl)
+        assertEquals("$publicWebOrigin/account-deletion", openedUrl)
     }
 
     @Test

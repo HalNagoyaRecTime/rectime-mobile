@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.legal
 
+import com.rectime.mobile.core.config.publicWebOrigin
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -8,7 +9,7 @@ import kotlin.test.assertTrue
 
 class LegalDocumentLauncherTest {
     @Test
-    fun opensTermsAtProductionUrl() = runTest {
+    fun opensTermsAtBuildTypeUrl() = runTest {
         var openedUrl: String? = null
         val launcher = LegalDocumentLauncher(
             openUrl = { url ->
@@ -18,11 +19,11 @@ class LegalDocumentLauncherTest {
         )
 
         assertTrue(launcher.open(LegalDocument.Terms))
-        assertEquals("https://recwatch.pages.dev/legal/terms.html", openedUrl)
+        assertEquals("$publicWebOrigin/legal/terms.html", openedUrl)
     }
 
     @Test
-    fun opensPrivacyPolicyAtProductionUrl() = runTest {
+    fun opensPrivacyPolicyAtBuildTypeUrl() = runTest {
         var openedUrl: String? = null
         val launcher = LegalDocumentLauncher(
             openUrl = { url ->
@@ -32,7 +33,7 @@ class LegalDocumentLauncherTest {
         )
 
         assertTrue(launcher.open(LegalDocument.PrivacyPolicy))
-        assertEquals("https://recwatch.pages.dev/legal/privacy.html", openedUrl)
+        assertEquals("$publicWebOrigin/legal/privacy.html", openedUrl)
     }
 
     @Test
