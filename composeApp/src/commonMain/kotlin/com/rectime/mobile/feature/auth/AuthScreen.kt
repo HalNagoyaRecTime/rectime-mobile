@@ -59,7 +59,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
-import com.rectime.mobile.ui.component.AppBrandLogo
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.rectime.mobile.ui.component.AppLogoMark
+import com.rectime.mobile.ui.component.AppBrandTitle
+import com.rectime.mobile.ui.component.rememberBrandTitleJump
 import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.ProductionCredits
 import com.rectime.mobile.ui.theme.AppTheme
@@ -101,7 +104,7 @@ private fun AuthLoginScreen(
         Layout(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             content = {
-                AppBrandLogo(iconSize = iconSize, titleSize = titleSize)
+                AppLogoSection(iconSize = iconSize, titleSize = titleSize)
                 SignInSection(isLoading = state.isLoading, error = state.error, onLogin = onLogin)
                 AuthFooter()
             },
@@ -126,6 +129,24 @@ private fun AuthLoginScreen(
                 footer.placeRelative((constraints.maxWidth - footer.width) / 2, footerY)
             }
         }
+    }
+}
+
+@Composable
+private fun AppLogoSection(iconSize: Dp, titleSize: TextUnit) {
+    val jump = rememberBrandTitleJump()
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        AppLogoMark(
+            size = iconSize,
+            modifier = Modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClickLabel = "タイトルを跳ねさせる",
+                onClick = jump.onTap,
+            ),
+        )
+        Spacer(Modifier.height(8.dp))
+        AppBrandTitle(fontSize = titleSize, jumpOffset = jump.offset)
     }
 }
 
