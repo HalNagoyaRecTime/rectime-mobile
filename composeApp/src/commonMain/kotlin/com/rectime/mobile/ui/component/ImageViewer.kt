@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -143,7 +144,15 @@ internal fun ImageViewerContent(
     onMore: () -> Unit = {},
     status: @Composable () -> Unit = {},
 ) {
-    val dismiss by rememberUpdatedState(onDismiss)
+    val latestDismiss by rememberUpdatedState(onDismiss)
+    var dismissed by remember { mutableStateOf(false) }
+    // OS・ボタン・スワイプの終了要求が重なっても呼び出し元へは一度だけ通知する。
+    val dismiss = {
+        if (!dismissed) {
+            dismissed = true
+            latestDismiss()
+        }
+    }
     val transform = remember(painter) { ImageViewerTransform() }
     val scope = rememberCoroutineScope()
     var zoomAnimation by remember(transform) { mutableStateOf<Job?>(null) }
@@ -163,7 +172,9 @@ internal fun ImageViewerContent(
     val flingDistance = with(density) { 24.dp.toPx() }
     val flingVelocity = with(density) { 900.dp.toPx() }
     // 画像は即時表示し、背景だけを塗る。閉じる下スワイプは画面外まで継続する。
-    val exitDistance = maxOf(viewport.height, dragDistance) + dismissThreshold
+    val exitDistance by remember(dismissThreshold) {
+        derivedStateOf { maxOf(viewport.height, dragDistance) + dismissThreshold }
+    }
     val drag by animateFloatAsState(
         targetValue = if (swipeClosing) exitDistance else dragDistance,
         animationSpec = when {
@@ -173,7 +184,8 @@ internal fun ImageViewerContent(
         },
         finishedListener = { if (swipeClosing && it >= exitDistance) dismiss() },
     )
-    val dragProgress = if (viewport.height > 0) (drag / viewport.height).coerceIn(0f, 1f) else 0f
+    // 透明度の読み取りは描画段階で行い、背景のフェードで本文を再構成しない。
+    fun dragProgress(): Float = if (viewport.height > 0) (drag / viewport.height).coerceIn(0f, 1f) else 0f
     LaunchedEffect(viewport, painter.intrinsicSize) {
         transform.updateGeometry(viewport, painter.intrinsicSize)
     }
@@ -182,7 +194,9 @@ internal fun ImageViewerContent(
         backgroundOpacity.animateTo(if (closing) 0f else 1f, tween(180))
         if (closing && !swipeClosing) dismiss()
     }
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .8f * backgroundOpacity.value * (1 - dragProgress)))) {
+    Box(Modifier.fillMaxSize().drawBehind {
+        drawRect(Color.Black.copy(alpha = .8f * backgroundOpacity.value * (1 - dragProgress())))
+    }) {
         // 画像は画面端まで移動できる。操作ヘッダーだけをセーフエリア内に置く。
         Box(Modifier.fillMaxSize().graphicsLayer {
             alpha = if (closing && !swipeClosing) backgroundOpacity.value else 1f
@@ -264,7 +278,7 @@ internal fun ImageViewerContent(
                         translationY = transform.offset.y + drag
                     },
                 )
-                Box(Modifier.graphicsLayer { alpha = 1 - dragProgress }) { status() }
+                Box(Modifier.graphicsLayer { alpha = 1 - dragProgress() }) { status() }
             }
             AnimatedVisibility(
                 visible = showControls,
@@ -276,7 +290,7 @@ internal fun ImageViewerContent(
                     Modifier.fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                         .height(64.dp)
-                        .padding(horizontal = 12.dp).graphicsLayer { alpha = 1 - dragProgress },
+                        .padding(horizontal = 12.dp).graphicsLayer { alpha = 1 - dragProgress() },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ViewerHeaderButton({ if (showControls) buttonClosing = true }, !closing) {
