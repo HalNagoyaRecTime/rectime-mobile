@@ -2,40 +2,32 @@ package com.rectime.mobile.app.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
-/**
- * Represents a self-contained Screen in the navigation system.
- */
+/** 呼び出して表示できるアプリの画面。 */
 interface Screen {
-    /**
-     * A unique identifier for this specific screen instance.
-     * Used for stack management and lifecycle tracking.
-     */
+    /** 同じ画面の二重表示を判定するキー。履歴の各エントリーには別のキーを付ける。 */
     val key: String
 
-    /**
-     * The UI content of the screen.
-     */
+    /** 画面の表示内容。 */
     @Composable
     fun Content(navigationController: NavigationController)
 
-    /**
-     * Lifecycle hook called when the screen is removed from the navigation stack.
-     */
+    /** 履歴から取り除かれた時の後処理。 */
     fun onDispose() {}
-
-    /**
-     * UI Property: Whether this screen should occupy full height when shown as a sheet.
-     */
-    val isFullHeight: Boolean get() = false
 }
 
-/**
- * A wrapper to handle the lifecycle hooks of a [Screen].
- */
+/** 状態を保持したまま、表示中かどうかを親のLifecycleと組み合わせる。 */
 @Composable
 fun ScreenLifecycleWrapper(
     screen: Screen,
+    visible: Boolean,
     content: @Composable () -> Unit
 ) {
     DisposableEffect(screen.key) {
@@ -43,5 +35,27 @@ fun ScreenLifecycleWrapper(
             screen.onDispose()
         }
     }
-    content()
+    val parentLifecycle = LocalLifecycleOwner.current.lifecycle
+    val owner = remember(screen, parentLifecycle) { NavigationScreenLifecycleOwner() }
+    DisposableEffect(owner, parentLifecycle, visible) {
+        fun updateLifecycle() {
+            // 画面は保持するが、背面では表示用のLifecycle収集を休止する。
+            // アプリがバックグラウンドなら、親より先に進めない。
+            val maximum = if (visible) Lifecycle.State.RESUMED else Lifecycle.State.CREATED
+            owner.registry.currentState = minOf(parentLifecycle.currentState, maximum)
+        }
+        val observer = LifecycleEventObserver { _, _ -> updateLifecycle() }
+        parentLifecycle.addObserver(observer)
+        updateLifecycle()
+        onDispose { parentLifecycle.removeObserver(observer) }
+    }
+    DisposableEffect(owner) {
+        onDispose { owner.registry.currentState = Lifecycle.State.DESTROYED }
+    }
+    CompositionLocalProvider(LocalLifecycleOwner provides owner) { content() }
+}
+
+private class NavigationScreenLifecycleOwner : LifecycleOwner {
+    val registry = LifecycleRegistry(this)
+    override val lifecycle: Lifecycle get() = registry
 }

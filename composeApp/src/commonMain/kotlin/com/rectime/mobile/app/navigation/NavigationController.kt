@@ -12,7 +12,7 @@ class NavigationController(
         private set
 
     fun setRoot(screen: Screen) {
-        if (interactionLocked || state.pushStack.isNotEmpty() || state.sheet != null) return
+        if (state.interactionLocked || state.pushStack.isNotEmpty()) return
         state = state.copy(rootScreen = screen)
     }
 
@@ -20,12 +20,8 @@ class NavigationController(
         state = NavigationState(rootScreen = screen)
     }
 
-    private val interactionLocked: Boolean
-        get() = state.isTransitioning || state.activeGesture != ActiveGesture.None ||
-            state.pushTransition.mode != PushTransitionMode.Idle
-
     fun push(screen: Screen) {
-        if (interactionLocked || state.sheet != null || state.pushStack.lastOrNull()?.screen?.key == screen.key) return
+        if (state.interactionLocked || state.pushStack.lastOrNull()?.screen?.key == screen.key) return
         val entry = PushEntry(
             key = "${screen.key}_${Clock.nextId()}",
             screen = screen
@@ -41,15 +37,8 @@ class NavigationController(
     }
 
     fun requestPop() {
-        if (state.pushStack.isEmpty() || state.sheet != null || state.isTransitioning ||
-            state.pushTransition.mode != PushTransitionMode.Idle) return
+        if (state.pushStack.isEmpty() || state.interactionLocked) return
         startBackTransition(PushTransitionMode.Exit)
-    }
-
-    /** キャンセルも明示的な遷移として扱い、元の位置に戻るまで次の操作を止める。 */
-    fun returnFromBackGesture() {
-        if (state.activeGesture != ActiveGesture.Back || state.isTransitioning) return
-        startBackTransition(PushTransitionMode.Return)
     }
 
     private fun startBackTransition(mode: PushTransitionMode) {
@@ -77,41 +66,21 @@ class NavigationController(
         state = state.copy(backDragOffsetPx = 0f, pushTransition = PushTransitionState(), isTransitioning = false)
     }
 
-    fun presentSheet(screen: Screen) {
-        if (state.sheet != null || interactionLocked) return
-        val entry = SheetEntry(
-            key = "${screen.key}_${Clock.nextId()}",
-            screen = screen
-        )
-        state = state.copy(sheet = entry, isTransitioning = true)
+    /** 開始できた画面のキーを返し、終了時も同じ画面か確認する。 */
+    fun beginBackGesture(): String? {
+        if (state.interactionLocked) return null
+        val key = state.pushStack.lastOrNull()?.key ?: return null
+        state = state.copy(activeGesture = ActiveGesture.Back)
+        return key
     }
 
-    fun requestDismissSheet() {
-        if (state.sheet == null || state.isTransitioning) return
-        state = state.copy(sheetDismissRequestId = state.sheetDismissRequestId + 1)
+    fun finishBackGesture(key: String, dismiss: Boolean) {
+        if (state.pushStack.lastOrNull()?.key != key || state.activeGesture != ActiveGesture.Back) return
+        startBackTransition(if (dismiss) PushTransitionMode.Exit else PushTransitionMode.Return)
     }
 
-    fun clearSheet(key: String) {
-        if (state.sheet?.key == key) {
-            state = state.copy(sheet = null, isTransitioning = false, activeGesture = ActiveGesture.None)
-        }
-    }
-
-    fun resolveHorizontalGesture(): ActiveGesture = when {
-        state.isTransitioning -> ActiveGesture.None
-        state.sheet != null -> ActiveGesture.None
-        state.pushStack.isNotEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Back
-        else -> ActiveGesture.None
-    }
-
-    fun setSheetTransitioning(key: String, value: Boolean) {
-        // ログアウトなどで画面が変わった後の古いシート処理は、新しい遷移に触らない。
-        if (state.sheet?.key != key || state.pushTransition.mode != PushTransitionMode.Idle) return
-        state = state.copy(isTransitioning = value)
-    }
-
-    fun setBackDragOffset(px: Float) {
-        if (state.activeGesture != ActiveGesture.Back) return
+    fun setBackDragOffset(key: String, px: Float) {
+        if (state.pushStack.lastOrNull()?.key != key || state.activeGesture != ActiveGesture.Back) return
         state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
     }
 
@@ -119,16 +88,6 @@ class NavigationController(
         if (state.pushStack.lastOrNull()?.key != key || state.pushTransition.routeKey != key ||
             state.pushTransition.mode != mode) return
         state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
-    }
-
-    // ジェスチャーはアニメーション終了後にだけ開始できる。
-    fun beginGesture(gesture: ActiveGesture) {
-        if (interactionLocked) return
-        state = state.copy(activeGesture = gesture)
-    }
-
-    fun endGesture() {
-        state = state.copy(activeGesture = ActiveGesture.None)
     }
 
     fun setPushEnterProgress(key: String, progress: Float) {

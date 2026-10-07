@@ -19,3 +19,7 @@ internal fun NavigationInputBlocker() {
         }
     })
 }
+
+/** 背面と遷移中の画面は、タップだけでなく読み上げからも除外する。 */
+internal fun Modifier.navigationAccessibility(interactive: Boolean): Modifier =
+    if (interactive) this else clearAndSetSemantics { }

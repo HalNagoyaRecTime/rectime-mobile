@@ -28,13 +28,9 @@ fun PushLayer(
     state: NavigationState,
     navigationController: NavigationController,
     containerWidthPx: Float,
-    filter: (PushEntry) -> Boolean = { true },
 ) {
-    val entries = state.pushStack.filter(filter)
+    val entries = state.pushStack
     if (entries.isEmpty()) return
-
-    val topEntry = state.pushStack.lastOrNull()
-    val topKey = topEntry?.key
 
     // 入場・退場・スワイプの取り消しを一つのアニメーション所有者で処理する。
     LaunchedEffect(state.pushTransition.mode, state.pushTransition.routeKey, containerWidthPx) {
@@ -88,7 +84,8 @@ fun PushLayer(
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset(totalOffsetPx.roundToInt(), 0) }
-                    .background(color = AppTheme.colors.surfacePrimary),
+                    .background(color = AppTheme.colors.surfacePrimary)
+                    .navigationAccessibility(state.isPushInteractive(entry.key)),
             ) {
                 key(entry.key) {
                     val storeOwner = remember {
@@ -101,12 +98,15 @@ fun PushLayer(
                     }
 
                     CompositionLocalProvider(LocalViewModelStoreOwner provides storeOwner) {
-                        ScreenLifecycleWrapper(entry.screen) {
+                        ScreenLifecycleWrapper(entry.screen, visible = isTop) {
                             entry.screen.Content(navigationController)
                         }
                     }
                 }
-                if (!isTop || state.isTransitioning || state.sheet != null) NavigationInputBlocker()
+                // ドラッグ中は親のジェスチャーが入力を所有するため、途中で入力面を追加しない。
+                if (!isTop || (!state.isPushInteractive(entry.key) && state.activeGesture != ActiveGesture.Back)) {
+                    NavigationInputBlocker()
+                }
             }
         }
     }

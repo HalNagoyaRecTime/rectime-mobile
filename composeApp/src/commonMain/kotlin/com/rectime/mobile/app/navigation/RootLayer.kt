@@ -32,8 +32,8 @@ fun RootLayer(
 ) {
     val rootScreen = state.rootScreen ?: return
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        ScreenLifecycleWrapper(rootScreen) {
+    Box(modifier = Modifier.fillMaxSize().navigationAccessibility(state.rootInteractive)) {
+        ScreenLifecycleWrapper(rootScreen, visible = state.pushStack.isEmpty()) {
             rootScreen.Content(navigationController)
         }
 
@@ -66,6 +66,6 @@ fun RootLayer(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),
         )
-        if (state.pushStack.isNotEmpty() || state.sheet != null || state.isTransitioning) NavigationInputBlocker()
+        if (!state.rootInteractive) NavigationInputBlocker()
     }
 }
