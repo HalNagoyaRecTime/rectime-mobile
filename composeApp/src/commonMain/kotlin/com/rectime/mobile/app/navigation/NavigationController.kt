@@ -116,19 +116,16 @@ class NavigationController(
         enterProgress = progress.coerceIn(0f, 1f)
     }
 
+    // 遷移中もOSの戻るを受け取り、アプリ終了へ流さず操作だけを無視する。
     val canHandleSystemBack: Boolean
-        get() = state.sheet != null ||
-                state.pushStack.isNotEmpty() ||
-                state.rootScreen != ScheduleScreen
+        get() = state.pushStack.isNotEmpty() || state.rootScreen != ScheduleScreen
 
     fun handleSystemBack() {
-        // アニメーション中に処理すると開閉アニメーションが競合するため無視する
-        if (state.isTransitioning || state.pushTransition.mode == PushTransitionMode.Enter) return
-
+        if (state.interactionLocked) return
         when {
-            state.sheet != null -> requestDismissSheet()
             state.pushStack.isNotEmpty() -> requestPop()
             state.rootScreen != ScheduleScreen -> setRoot(ScheduleScreen)
         }
+        // ModalBottomSheet / Dialog の戻るは各標準コンポーネントが先に処理する。
     }
 }

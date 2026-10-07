@@ -29,8 +29,8 @@ fun NavigationHost(
     val state = navigationController.state
     val userProfile = session.user.toUserProfile()
     val density = LocalDensity.current.density
-    NavigationBackHandler(enabled = state.pushStack.isNotEmpty()) {
-        navigationController.requestPop()
+    NavigationBackHandler(enabled = navigationController.canHandleSystemBack) {
+        navigationController.handleSystemBack()
     }
 
     // 実際のサイズが変わった時だけ、ジェスチャーとアニメーションの幅を更新する。
