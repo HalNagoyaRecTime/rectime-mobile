@@ -1,6 +1,5 @@
 package com.rectime.mobile.feature.settings
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,14 +17,14 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
-import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.config.appVersion
-import com.rectime.mobile.core.platform.platformAppIconPainter
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.component.AppTeamCredit
+import com.rectime.mobile.ui.component.AppBrandTitle
+import com.rectime.mobile.ui.component.AppLogoMark
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
@@ -168,18 +167,9 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Image(
-                painter = platformAppIconPainter(),
-                contentDescription = "$appDisplayName アプリアイコン",
-                modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
-            )
+            AppLogoMark(size = 88.dp)
             Spacer(Modifier.height(16.dp))
-            Text(
-                text = appDisplayName,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.userInformationBody,
-            )
+            AppBrandTitle(fontSize = 28.sp)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Version $appVersion",
