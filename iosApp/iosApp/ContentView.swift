@@ -15,8 +15,19 @@ struct ComposeView: UIViewControllerRepresentable {
 }
 
 struct ContentView: View {
+    @State private var showSplash = true
+
     var body: some View {
-        ComposeView()
+        ZStack {
+            // 認証情報の復元・キャッシュ表示は演出の裏で通常どおり開始する。
+            ComposeView()
+                .allowsHitTesting(!showSplash)
+                .accessibilityHidden(showSplash)
+            if showSplash {
+                RecreationSplashView() { showSplash = false }
+                    .zIndex(1)
+            }
+        }
             .ignoresSafeArea()
             .onOpenURL { url in
                 AuthDeepLinkHandler.shared.handle(url: url.absoluteString)

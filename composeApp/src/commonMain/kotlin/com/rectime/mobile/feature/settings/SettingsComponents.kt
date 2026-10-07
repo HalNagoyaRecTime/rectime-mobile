@@ -20,12 +20,14 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
+import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.config.appVersion
 import com.rectime.mobile.core.platform.platformAppIconPainter
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rectime.mobile.ui.component.AppTeamCredit
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
@@ -36,6 +38,7 @@ internal val SettingsCornerRadius = 26.dp
 
 internal enum class SettingsIcon(val path: String) {
     Notification(""),
+    Haptic("M9,3 H15 Q17,3 17,5 V19 Q17,21 15,21 H9 Q7,21 7,19 V5 Q7,3 9,3 Z M10,18 H14 M3,7 L1,10 L3,13 L1,16 M21,7 L23,10 L21,13 L23,16"),
     Contact("M3,4 L21,4 L21,20 L3,20 Z M3,5 L12,12 L21,5"),
     Terms("M6,2 L15,2 L20,7 L20,22 L6,22 Z M15,2 L15,7 L20,7 M9,12 L17,12 M9,16 L17,16"),
     Privacy("M12,2 L21,6 L20,14 C19,18 16,21 12,23 C8,21 5,18 4,14 L3,6 Z M9,11 L9,16 L15,16 L15,11 Z M10,11 L10,9 C10,6 14,6 14,9 L14,11"),
@@ -91,6 +94,7 @@ internal fun SettingsRow(
     subtitle: String? = null,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     val color = when {
         !enabled -> AppTheme.colors.textMuted
@@ -100,11 +104,15 @@ internal fun SettingsRow(
         modifier = Modifier.fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier)
             .heightIn(min = 56.dp)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // スイッチのタップ領域に上下余白を足さず、文字側だけに余白を設ける。
+        Column(
+            modifier = Modifier.weight(1f).padding(vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (icon == SettingsIcon.Notification) {
                     Icon(
@@ -132,7 +140,9 @@ internal fun SettingsRow(
         if (detail != null) {
             Text(detail, color = AppTheme.colors.textMuted, fontSize = 13.sp)
         }
-        if (onClick != null) {
+        if (trailingContent != null) {
+            trailingContent()
+        } else if (onClick != null) {
             Icon(
                 SettingsIcon.Chevron.image,
                 contentDescription = null,
@@ -168,12 +178,12 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
         ) {
             Image(
                 painter = platformAppIconPainter(),
-                contentDescription = "RE:CREATION アプリアイコン",
+                contentDescription = "$appDisplayName アプリアイコン",
                 modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "RE:CREATION",
+                text = appDisplayName,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.userInformationBody,
@@ -198,7 +208,7 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                text = "Developed by RE:CREATION App Team",
+                text = AppTeamCredit,
                 fontSize = 13.sp,
                 color = AppTheme.colors.textMuted,
                 textAlign = TextAlign.Center,

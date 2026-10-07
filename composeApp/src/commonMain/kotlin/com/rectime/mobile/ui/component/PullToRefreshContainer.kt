@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +33,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.core.haptics.AppHapticEvent
+import com.rectime.mobile.core.haptics.HapticThresholdDetector
+import com.rectime.mobile.core.haptics.LocalHapticPreference
+import com.rectime.mobile.core.haptics.rememberPlatformHapticFeedback
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -54,12 +59,22 @@ internal fun PullToRefreshContainer(
 ) {
     val holdDistance = with(LocalDensity.current) { PullRefreshHoldDistance.toPx() }
     val indicatorHeight = with(LocalDensity.current) { RefreshIndicatorHeight.toPx() }
-    val state = remember(holdDistance) { PullRefreshGestureState(holdDistance, initiallyRefreshing = isRefreshing) }
     val scope = rememberCoroutineScope()
     val refreshing by rememberUpdatedState(isRefreshing)
     val enabled by rememberUpdatedState(refreshEnabled)
     val refresh by rememberUpdatedState(onRefresh)
     val animation = remember { ReturnAnimation() }
+    val preference = LocalHapticPreference.current
+    val hapticEnabled by preference.enabled.collectAsState()
+    val allowHaptics by rememberUpdatedState(hapticEnabled && refreshEnabled && !isRefreshing)
+    val feedback by rememberUpdatedState(rememberPlatformHapticFeedback())
+    val detector = remember { HapticThresholdDetector(onThresholdReached = { feedback.perform(AppHapticEvent.RefreshThreshold) }) }
+    val state = remember(holdDistance, detector) {
+        PullRefreshGestureState(holdDistance, initiallyRefreshing = isRefreshing) { progress ->
+            detector.onDistanceFractionChanged(progress, enabled = allowHaptics)
+        }
+    }
+
 
     fun settle(target: Float, velocity: Float = 0f) {
         animation.job?.cancel()

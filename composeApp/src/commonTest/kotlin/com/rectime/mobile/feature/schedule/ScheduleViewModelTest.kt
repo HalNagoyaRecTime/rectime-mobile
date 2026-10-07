@@ -1,8 +1,12 @@
 package com.rectime.mobile.feature.schedule
 
+import com.rectime.mobile.core.network.MyEventsGateway
+import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
+import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.core.model.EventVenue
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.feature.event.EventCache
@@ -41,7 +45,6 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 private const val LOAD_FAILED_MESSAGE = "通信に失敗しました"
-private const val SESSION_EXPIRED_MESSAGE = "ログイン情報の有効期限が切れました"
 private fun skippedEventsMessage(count: Int) = "一部の予定を表示できませんでした（${count}件）"
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
@@ -60,6 +63,60 @@ class ScheduleViewModelTest {
     @AfterTest
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun failedManualUpdateDoesNotReplaceMemoryEventsWithOlderDiskCache() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson) else respondJson("{}", HttpStatusCode.Unauthorized)
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+    }
+
+    @Test
+    fun foregroundUnauthorizedKeepsMemoryEventsWithoutDiskCache() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson)
+            else respondJson("{}", HttpStatusCode.Unauthorized)
+        }, cache = LocalCache(NeverPersistingKeyValueStore()))
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val displayed = viewModel.events.value
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(displayed, viewModel.events.value)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
+        assertFalse(viewModel.isLoading)
+    }
+
+    @Test
+    fun newSessionFailedRequestCannotKeepPreviousMemoryEvents() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson) else error("通信失敗")
+        }, cache = LocalCache(NeverPersistingKeyValueStore()))
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, viewModel.events.value.size)
+        CacheGeneration.bump()
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.isEmpty())
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
     }
 
     @Test
@@ -807,6 +864,24 @@ class ScheduleViewModelTest {
         assertTrue(viewModel.isOffline)
     }
 
+    @Test
+    fun sessionSwitchCannotReconcileThePreviousUsersDisplayedResponse() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var calls = 0
+        val viewModel = buildViewModel(mockClient {
+            if (++calls == 1) respondJson(eventsJson) else throw RuntimeException("offline")
+        }, cache = cache)
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        CacheGeneration.bump()
+        cache.clearAll()
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "別ユーザーの予定")))
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.any { it.title == "別ユーザーの予定" })
+        assertFalse(viewModel.events.value.any { it.title == "綱引き" })
+    }
+
     // ---- fetchEvents 異常系(キャッシュなし) ----
 
     @Test
@@ -829,7 +904,7 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun fetchEventsReportsSessionExpiredOnUnauthorized() = runTest(testDispatcher) {
+    fun fetchEventsReportsFetchFailureWithoutDeclaringSessionExpired() = runTest(testDispatcher) {
         val viewModel = buildViewModel(
             mockClient {
                 respondJson("""{"error":{"code":"UNAUTHORIZED","message":"unauthorized"}}""", HttpStatusCode.Unauthorized)
@@ -839,9 +914,9 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // キャッシュが無い場合はCachedFetchResult.Failedになり、401は専用メッセージになる
+        // キャッシュがなければ取得失敗。画面側ではログイン失効と断定しない。
         // (他画面のセッション切れ判定と同じ基準)。
-        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
+        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         assertFalse(viewModel.isLoading)
     }
 
@@ -1009,7 +1084,50 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun fetchEventsClearsEventsAndReportsSessionExpiredWhenReloadReturnsUnauthorized() = runTest(testDispatcher) {
+    fun actualAuthRetryFailureKeepsCachedScheduleAndCurrentToken() = runTest(testDispatcher) {
+        var calls = 0
+        var refreshes = 0
+        val refreshGate = CompletableDeferred<Unit>()
+        SessionTokenHolder.accessToken = "stored-token"
+        val client = mockClient {
+            calls++
+            if (calls == 1) respondJson(eventsJson)
+            else respondJson("""{"error":{"code":"UNAUTHORIZED"}}""", HttpStatusCode.Unauthorized)
+        }.config {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = "https://api.example.com"
+                refreshToken = {
+                    refreshes++
+                    refreshGate.await()
+                    // 認証側がタイムアウト等で更新を確認できなかった場合。
+                    null
+                }
+            }
+        }
+        try {
+            val viewModel = buildViewModel(client)
+            viewModel.fetchEvents()
+            testDispatcher.scheduler.advanceUntilIdle()
+            viewModel.refresh()
+            testDispatcher.scheduler.runCurrent()
+            assertEquals(2, viewModel.events.value.size)
+            refreshGate.complete(Unit)
+            testDispatcher.scheduler.advanceUntilIdle()
+            assertEquals(1, refreshes)
+            assertEquals(2, calls)
+            assertEquals("stored-token", SessionTokenHolder.accessToken)
+            assertEquals(2, viewModel.events.value.size)
+            assertNull(viewModel.error)
+            assertTrue(viewModel.isOffline)
+            assertFalse(viewModel.isRefreshing)
+        } finally {
+            client.close()
+            SessionTokenHolder.accessToken = null
+        }
+    }
+
+    @Test
+    fun fetchEventsKeepsCachedEventsWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -1029,17 +1147,15 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // 401はキャッシュがあっても隠さない。errorはスナックバーで一瞬しか表示され
-        // ないため、未検証の古いイベントが表示され続けないようeventsもクリアする。
-        assertTrue(viewModel.events.value.isEmpty())
-        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
-        assertFalse(viewModel.isOffline)
+        // 認証更新を確認できない401でも、失効が確定するまではキャッシュを維持する。
+        assertEquals(2, viewModel.events.value.size)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
     }
 
     @Test
-    fun fetchEventsClearsEventsWhenUnauthorizedAndNoCacheIsAvailable() = runTest(testDispatcher) {
-        // CachedFetchResult.Cachedと違い、Failed(キャッシュが無い/読めない)経路でも
-        // 401時に古いeventsが残り続けてはならない。
+    fun fetchEventsKeepsMemoryEventsWhenUnauthorizedAndNoCacheIsAvailable() = runTest(testDispatcher) {
+        // ディスクへ保存できなくても、同じログイン中の表示内容は401で消さない。
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -1060,16 +1176,14 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertTrue(viewModel.events.value.isEmpty())
-        assertEquals(SESSION_EXPIRED_MESSAGE, viewModel.error)
-        assertFalse(viewModel.isOffline)
+        assertEquals(2, viewModel.events.value.size)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
     }
 
     @Test
-    fun fetchEventsClearsEventsWhenFailedForANonUnauthorizedReasonAndNoCacheIsAvailable() = runTest(testDispatcher) {
-        // 401以外(ログアウト・新規ログイン中のStaleCacheGenerationException等を含む)
-        // でも、有効なキャッシュが無いFailedでは前回のeventsを残してはならない
-        // (前ユーザー/前セッションのデータである可能性があるため)。
+    fun fetchEventsKeepsMemoryEventsWhenServerFailsAndNoCacheIsAvailable() = runTest(testDispatcher) {
+        // 通信失敗とセッション切替を分け、同じログイン中の表示内容は維持する。
         var callCount = 0
         val viewModel = buildViewModel(
             mockClient {
@@ -1093,9 +1207,9 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertTrue(viewModel.events.value.isEmpty())
-        assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
-        assertFalse(viewModel.isOffline)
+        assertEquals(2, viewModel.events.value.size)
+        assertNull(viewModel.error)
+        assertTrue(viewModel.isOffline)
     }
 
     // ---- nowMinute ----
@@ -1180,18 +1294,118 @@ class ScheduleViewModelTest {
         collectJob.cancel()
     }
 
+    @Test
+    fun participationApiMarksOnlyMyEventsAndPersistsIds() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(
+            Triple(1, "0900", "1000"), Triple(2, "1000", "1100"),
+        )) }, cache = cache, myEventsGateway = participationGateway { setOf(2) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value.first { it.eventId == 1 }.isParticipating)
+        assertTrue(viewModel.events.value.first { it.eventId == 2 }.isParticipating)
+        assertEquals(setOf(2), cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+    }
+
+    @Test
+    fun cachedParticipationIsVisibleBeforeEitherRequestCompletes() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJsonOf(Triple(1, "0900", "1000"))))
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { gate.await(); error("offline") }, cache = cache,
+            myEventsGateway = participationGateway { gate.await(); error("offline") })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.events.value.single().isParticipating)
+        assertFalse(viewModel.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+    }
+
+    @Test
+    fun slowParticipationDoesNotBlockScheduleAndUpdatesOverflowEvents() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(
+            *Array(6) { Triple(it + 1, "0900", "1000") },
+        )) }, myEventsGateway = participationGateway { gate.await(); setOf(6) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.events.value.isNotEmpty())
+        assertFalse(viewModel.isLoading)
+        assertTrue(viewModel.isUpdating)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.flatMap { it.overflowEvents }.first { it.eventId == 6 }.isParticipating)
+        assertFalse(viewModel.isUpdating)
+    }
+
+    @Test
+    fun failedParticipationRefreshRetainsMemoryAndEmptySuccessClearsIt() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(Triple(1, "0900", "1000"))) },
+            cache = LocalCache(NeverPersistingKeyValueStore()), myEventsGateway = participationGateway {
+                when (++calls) { 1 -> setOf(1); 2 -> error("offline"); else -> emptySet() }
+            })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value.single().isParticipating)
+    }
+
+    @Test
+    fun logoutDuringParticipationFetchDoesNotRestoreIdsOrColors() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(Triple(1, "0900", "1000"))) },
+            cache = cache, myEventsGateway = participationGateway { gate.await(); setOf(1) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value.any { it.isParticipating })
+        assertNull(cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+    }
+
+    @Test
+    fun cachedScheduleStillGetsFreshParticipationWhenEventsRequestFails() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJsonOf(Triple(1, "0900", "1000"))))
+        val viewModel = buildViewModel(mockClient { error("offline") }, cache = cache,
+            myEventsGateway = participationGateway { setOf(1) })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+        assertTrue(viewModel.isOffline)
+    }
+
     private fun buildViewModel(
         client: HttpClient,
         clock: Clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z")),
         timeZone: TimeZone = TimeZone.UTC,
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
+        myEventsGateway: MyEventsGateway = participationGateway { emptySet() },
     ) = ScheduleViewModel(
         client = client,
         baseUrl = "https://api.example.com",
         clock = clock,
         timeZone = timeZone,
         cache = cache,
+        myEventsGateway = myEventsGateway,
     )
+
+    private fun participationGateway(fetch: suspend () -> Set<Int>) = object : MyEventsGateway {
+        override suspend fun getMyEventIds(): Set<Int> = fetch()
+    }
 
     private fun mockClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,

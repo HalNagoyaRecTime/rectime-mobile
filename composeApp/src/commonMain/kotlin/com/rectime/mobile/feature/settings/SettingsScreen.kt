@@ -1,7 +1,13 @@
 package com.rectime.mobile.feature.settings
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.ripple
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
@@ -19,10 +25,15 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import org.jetbrains.compose.resources.painterResource
+import rectime_mobile.composeapp.generated.resources.Res
+import rectime_mobile.composeapp.generated.resources.ic_avatar_edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -37,8 +48,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +61,11 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
+import com.rectime.mobile.core.haptics.LocalHapticPreference
+import com.rectime.mobile.core.haptics.AppHapticEvent
+import com.rectime.mobile.core.haptics.rememberPlatformHapticFeedback
 import com.rectime.mobile.feature.legal.LegalDocument
+import com.rectime.mobile.ui.component.UserAvatar
 import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.core.platform.openInAppBrowser
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
@@ -61,10 +74,6 @@ import com.rectime.mobile.feature.notifications.NotificationPermissionStatus
 import com.rectime.mobile.ui.component.LogoutConfirmationModal
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.theme.AppTheme
-import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
 import kotlinx.coroutines.launch
 
 // 画面全体の横幅を絞るための追加マージン。
@@ -88,6 +97,9 @@ class SettingsScreen(
             mutableStateOf(NotificationPermissionStatus.Unavailable)
         }
         val scope = rememberCoroutineScope()
+        val hapticPreference = LocalHapticPreference.current
+        val hapticFeedback = rememberPlatformHapticFeedback()
+        val hapticEnabled by hapticPreference.enabled.collectAsState()
         val lifecycleOwner = LocalLifecycleOwner.current
         val refreshNotificationPermission = {
             notificationPermissionStartup?.let { startup ->
@@ -158,6 +170,34 @@ class SettingsScreen(
                                 enabled = notificationPermissionStartup != null &&
                                     notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
                                 onClick = { notificationPermissionStartup?.openSystemSettings() },
+                            )
+                            SettingsSeparator()
+                            SettingsRow(
+                                title = "振動",
+                                icon = SettingsIcon.Haptic,
+                                trailingContent = {
+                                    Switch(
+                                        checked = hapticEnabled,
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = AppTheme.colors.themeColorSecond,
+                                            checkedBorderColor = AppTheme.colors.themeColorSecond,
+                                            checkedThumbColor = AppTheme.colors.textThemeColorSecond,
+                                            uncheckedTrackColor = AppTheme.colors.borderSubtle,
+                                            uncheckedBorderColor = AppTheme.colors.borderStrong,
+                                            uncheckedThumbColor = AppTheme.colors.textMuted,
+                                        ),
+                                        onCheckedChange = { enabled ->
+                                            // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
+                                            hapticFeedback.perform(
+                                                if (enabled) AppHapticEvent.PreferenceEnabled
+                                                else AppHapticEvent.PreferenceDisabled,
+                                            )
+                                            scope.launch {
+                                                hapticPreference.setEnabled(enabled)
+                                            }
+                                        },
+                                    )
+                                },
                             )
                         }
                     }
@@ -273,7 +313,7 @@ class SettingsScreen(
 
 /**
  * 画面上端から続くユーザー情報ヘッダー。
- * 写真を取得できない場合は名前の頭文字を表示する。
+ * 写真またはユーザーが選んだ競技を表示する。
  */
 @Composable
 private fun UserInfoHeader(
@@ -284,6 +324,29 @@ private fun UserInfoHeader(
     classCode: String?,
     modifier: Modifier = Modifier,
 ) {
+    val preference = remember(userId) { AvatarPreference(userId) }
+    val avatarInteraction = remember { MutableInteractionSource() }
+    var selection by remember(userId) { mutableStateOf(AvatarSelection()) }
+    var selectionLoaded by remember(userId) { mutableStateOf(false) }
+    var showAvatarSelection by remember(userId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val photoBytes = LocalProfilePhotoRepository.current?.photoBytes?.collectAsState()?.value
+    LaunchedEffect(preference) {
+        selection = preference.load()
+        selectionLoaded = true
+    }
+    if (showAvatarSelection) {
+        AvatarSelectionSheet(
+            userId = userId,
+            photoBytes = photoBytes,
+            selection = if (selection.photo && photoBytes == null) AvatarSelection() else selection,
+            onSelect = { choice ->
+                selection = choice
+                scope.launch { preference.save(choice) }
+            },
+            onDismiss = { showAvatarSelection = false },
+        )
+    }
     val avatarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
         AppTheme.layout.headerSpacing + AppTheme.layout.headerAction +
         AppTheme.layout.headerSpacing + AppTheme.spacing.lg
@@ -359,11 +422,38 @@ private fun UserInfoHeader(
                 }
             }
         }
-        ProfileAvatar(
-            userId = userId,
-            displayName = displayName,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = avatarTop),
-        )
+        // タップの意味は外側のボタンが持ち、装飾画像のセマンティクスと分離する。
+        Box(
+            Modifier.align(Alignment.TopCenter).offset(y = avatarTop).size(ProfileAvatarSize)
+                .semantics { contentDescription = "プロフィールアイコン" }
+                .clickable(enabled = selectionLoaded, role = Role.Button,
+                    interactionSource = avatarInteraction, indication = null,
+                    onClickLabel = "プロフィールアイコンを選ぶ", onClick = { showAvatarSelection = true }),
+        ) {
+            UserAvatar(
+                userId = userId,
+                photoBytes = photoBytes,
+                modifier = Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape)
+                    .indication(avatarInteraction, ripple()),
+                sportOverride = selection.sport,
+                usePhoto = selection.sport == null,
+                colorIndex = selection.colorIndex,
+            )
+            Box(
+                modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(AppTheme.colors.themeColorSecond)
+                    .indication(avatarInteraction, ripple()),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_avatar_edit),
+                    contentDescription = null,
+                    tint = AppTheme.colors.textThemeColorSecond,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
     }
 }
 
@@ -391,50 +481,6 @@ private fun ProfileDetailRow(label: String, value: String, modifier: Modifier = 
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-}
-
-@Composable
-private fun ProfileAvatar(
-    userId: String,
-    displayName: String,
-    modifier: Modifier = Modifier,
-) {
-    val platformContext = LocalPlatformContext.current
-    val photoBytes = LocalProfilePhotoRepository.current?.photoBytes?.collectAsState()?.value
-    val request = remember(platformContext, userId, photoBytes) {
-        photoBytes?.let { bytes ->
-            ImageRequest.Builder(platformContext)
-                .data(bytes)
-                // 画像の保存とユーザー切替時の削除は専用Repositoryで管理する。
-                .memoryCachePolicy(CachePolicy.DISABLED)
-                .diskCachePolicy(CachePolicy.DISABLED)
-                .build()
-        }
-    }
-    Box(
-        modifier = modifier
-            .size(ProfileAvatarSize)
-            .clip(CircleShape)
-            .background(AppTheme.colors.settingBackground)
-            .border(3.dp, AppTheme.colors.settingBackground, CircleShape)
-            .clearAndSetSemantics { },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = displayName.trim().take(1).uppercase().ifEmpty { "?" },
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = AppTheme.colors.themeColorSecond,
-        )
-        if (request != null) {
-            AsyncImage(
-                model = request,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().padding(2.dp).clip(CircleShape),
-            )
-        }
     }
 }
 

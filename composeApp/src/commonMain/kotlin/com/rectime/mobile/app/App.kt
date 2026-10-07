@@ -24,13 +24,14 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
+import com.rectime.mobile.core.haptics.HapticPreference
+import com.rectime.mobile.core.haptics.LocalHapticPreference
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
-import com.rectime.mobile.feature.auth.SessionTokenHolder
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
 import com.rectime.mobile.feature.schedule.scheduleViewModelFactory
@@ -94,6 +95,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     }
 
     val navigationController = remember { NavigationController() }
+    val hapticPreference = remember { HapticPreference() }
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
@@ -114,9 +116,11 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     LaunchedEffect(notificationPermissionStartup) {
         notificationPermissionStartup?.requestIfNeeded()
     }
+    LaunchedEffect(hapticPreference) {
+        hapticPreference.load()
+    }
     var hadSession by remember { mutableStateOf(false) }
     LaunchedEffect(authState.session) {
-        SessionTokenHolder.accessToken = authState.session?.accessToken
         if (authState.session == null && hadSession) {
             NotificationFeedStore.shared.reset()
             navigationController.reset(ScheduleScreen)
@@ -134,7 +138,6 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
 
     AppTheme(themeStateHolder = themeStateHolder) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
-            SessionTokenHolder.accessToken = session.accessToken
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
             val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
             val foregroundScope = rememberCoroutineScope()
@@ -150,6 +153,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             var hasResumed by remember(session.user.id) { mutableStateOf(false) }
             key(session.user.id) {
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+                    authViewModel.onForeground()
                     // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
                     if (hasResumed) badgeViewModel.onForeground(session.user.id)
                     else badgeViewModel.onSession(session.user.id)
@@ -188,7 +192,10 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     .background(AppTheme.colors.surfacePrimary)
                     .fillMaxSize(),
             ) {
-                CompositionLocalProvider(LocalProfilePhotoRepository provides authViewModel.photoRepository) {
+                CompositionLocalProvider(
+                    LocalProfilePhotoRepository provides authViewModel.photoRepository,
+                    LocalHapticPreference provides hapticPreference,
+                ) {
                     NavigationHost(
                         navigationController = navigationController,
                         session = session,

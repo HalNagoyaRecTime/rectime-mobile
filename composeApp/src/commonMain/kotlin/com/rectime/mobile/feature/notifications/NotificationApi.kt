@@ -14,8 +14,6 @@ import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 
 interface NotificationGateway {
     suspend fun getNotifications(limit: Int = NotificationPageSize, offset: Int = 0): NotificationPage
@@ -76,48 +74,3 @@ class NotificationApi(
         client.close()
     }
 }
-
-interface MyEventsGateway {
-    suspend fun getMyEventIds(): Set<Int>
-    fun close() = Unit
-}
-
-class MyEventsApi(
-    private val client: HttpClient = createAppHttpClient(),
-    baseUrl: String = apiBaseUrl,
-    private val accessTokenProvider: () -> String? = { SessionTokenHolder.accessToken },
-) : MyEventsGateway {
-    private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/me/events"
-
-    override suspend fun getMyEventIds(): Set<Int> {
-        val response = client.get(endpoint) {
-            header("X-Client-Type", "mobile")
-            val accessToken = accessTokenProvider()?.takeIf(String::isNotBlank)
-                ?: throw HttpStatusException(
-                    status = HttpStatusCode.Unauthorized,
-                    code = "UNAUTHORIZED",
-                    detail = "Authentication required",
-                )
-            header(HttpHeaders.Authorization, "Bearer $accessToken")
-        }
-        if (response.status.value !in 200..299) {
-            throw apiErrorException(response.status, response.bodyAsText())
-        }
-        return response.body<MyEventsResponse>().events.map { it.eventId }.toSet()
-    }
-
-    override fun close() {
-        client.close()
-    }
-}
-
-@Serializable
-private data class MyEventsResponse(
-    val events: List<MyEventResponse>,
-)
-
-@Serializable
-private data class MyEventResponse(
-    @SerialName("event_id")
-    val eventId: Int,
-)
