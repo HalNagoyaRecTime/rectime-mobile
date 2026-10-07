@@ -136,6 +136,7 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.navigationevent.compose)
         }
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)
@@ -170,7 +171,7 @@ android {
         buildConfig = true
     }
     defaultConfig {
-        applicationId = "com.rectime.mobile"
+        applicationId = "io.github.halnagoyarectime"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = resolveBuildProperty("VERSION_CODE")?.toIntOrNull() ?: 1

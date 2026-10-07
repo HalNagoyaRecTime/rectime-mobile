@@ -99,6 +99,22 @@ class NavigationController(
             state = state.copy(pushTransition = PushTransitionState(mode = PushTransitionMode.Idle))
         }
     }
+
+    val canHandleSystemBack: Boolean
+        get() = state.sheet != null ||
+                state.pushStack.isNotEmpty() ||
+                state.rootScreen != ScheduleScreen
+
+    fun handleSystemBack() {
+        // アニメーション中に処理すると開閉アニメーションが競合するため無視する
+        if (state.isTransitioning || state.pushTransition.mode == PushTransitionMode.Enter) return
+
+        when {
+            state.sheet != null -> requestDismissSheet()
+            state.pushStack.isNotEmpty() -> requestPop()
+            state.rootScreen != ScheduleScreen -> setRoot(ScheduleScreen)
+        }
+    }
 }
 
 private object Clock {

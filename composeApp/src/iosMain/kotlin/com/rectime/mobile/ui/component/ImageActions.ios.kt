@@ -2,6 +2,7 @@
 
 package com.rectime.mobile.ui.component
 
+import com.rectime.mobile.core.config.appDisplayName
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.window.DialogProperties
@@ -92,7 +93,7 @@ private class ImageShareItem(private val image: UIImage, title: String?) : NSObj
         // プレビューの画像・アイコンは指定せず、OSの既定表示を使う。
         // 補足欄の専用APIはない。プレビューだけにアプリ名をファイル名情報として渡す。
         // 実際の共有項目はUIImageのままで、この表示用URLは共有・通信しない。
-        originalURL = NSURL.fileURLWithPath("RE:CREATION")
+        originalURL = NSURL.fileURLWithPath(appDisplayName)
     }
 
     override fun activityViewControllerPlaceholderItem(activityViewController: UIActivityViewController): Any = image

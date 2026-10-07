@@ -1,0 +1,12 @@
+<!-- AndroidのRecreationSplashViewの既存ピクトグラムから抽出。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="40.9180dp" android:height="48dp" android:viewportWidth="52" android:viewportHeight="61">
+    <group android:translateX="21" android:translateY="31">
+        <path android:fillColor="#FF000000" android:pathData="M-16,-21a5,5 0,1 0,10,0a5,5 0,1 0,-10,0z" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M-7,-10L1,4L-9,16L-14,26" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M1,4L14,16L17,26" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M-6,-10L5,-9L17,-17" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M-6,-10L-17,1L-12,9" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M16,-21.5a5.5,5.5 0,1 0,11,0a5.5,5.5 0,1 0,-11,0" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M20,-16L17,-11" />
+    </group>
+</vector>

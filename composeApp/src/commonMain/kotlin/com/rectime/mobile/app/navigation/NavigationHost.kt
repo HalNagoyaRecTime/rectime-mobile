@@ -25,6 +25,9 @@ import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 
 @Composable
 fun NavigationHost(
@@ -43,6 +46,14 @@ fun NavigationHost(
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
 
     CompositionLocalProvider(LocalUserProfile provides userProfile) {
+        // Androidの戻るボタン／戻るジェスチャー
+        val backEventState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+        NavigationBackHandler(
+            state = backEventState,
+            isBackEnabled = navigationController.canHandleSystemBack,
+            onBackCompleted = { navigationController.handleSystemBack() },
+        )
+
         BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()

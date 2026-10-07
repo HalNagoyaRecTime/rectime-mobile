@@ -23,3 +23,9 @@ actual val apiBaseUrlResult: ApiBaseUrlResult = resolveApiBaseUrl(
 
 actual val appVersion: String
     get() = NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleShortVersionString") as? String ?: "不明"
+
+actual val appDisplayName: String
+    get() = (NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleDisplayName") as? String)
+        ?.takeIf { it.isNotBlank() }
+        ?: (NSBundle.mainBundle.objectForInfoDictionaryKey("CFBundleName") as? String)?.takeIf { it.isNotBlank() }
+        ?: DefaultAppDisplayName

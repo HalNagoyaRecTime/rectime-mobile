@@ -4,7 +4,8 @@ import ComposeApp
 
 // 確定したスポーツ集合の起動演出。通信の完了には依存させない。
 private enum SplashTiming {
-    static let letters = Array("RE:CREATION")
+    static let letters = Array(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "")
     static let letterStart = 0.7
     static let letterInterval = 0.075
     static let turnStart = 2.0

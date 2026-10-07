@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
+import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.config.appVersion
 import com.rectime.mobile.core.platform.platformAppIconPainter
 import androidx.compose.ui.text.style.TextAlign
@@ -177,12 +178,12 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
         ) {
             Image(
                 painter = platformAppIconPainter(),
-                contentDescription = "RE:CREATION アプリアイコン",
+                contentDescription = "$appDisplayName アプリアイコン",
                 modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
             )
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "RE:CREATION",
+                text = appDisplayName,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppTheme.colors.userInformationBody,

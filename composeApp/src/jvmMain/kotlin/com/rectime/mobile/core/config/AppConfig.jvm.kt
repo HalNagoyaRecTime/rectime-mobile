@@ -10,3 +10,5 @@ actual val apiBaseUrlResult: ApiBaseUrlResult = resolveApiBaseUrl(
 
 actual val appVersion: String
     get() = System.getProperty("jpackage.app-version") ?: "開発版"
+
+actual val appDisplayName: String = DefaultAppDisplayName
