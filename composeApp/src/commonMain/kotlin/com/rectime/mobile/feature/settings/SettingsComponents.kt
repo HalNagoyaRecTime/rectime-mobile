@@ -23,8 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.component.AppTeamCredit
-import com.rectime.mobile.ui.component.AppBrandTitle
-import com.rectime.mobile.ui.component.AppLogoMark
+import com.rectime.mobile.ui.component.AppBrandLogo
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
@@ -167,9 +166,7 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AppLogoMark(size = 88.dp)
-            Spacer(Modifier.height(16.dp))
-            AppBrandTitle(fontSize = 28.sp)
+            AppBrandLogo(iconSize = 88.dp, titleSize = 28.sp, titleSpacing = 16.dp)
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Version $appVersion",
