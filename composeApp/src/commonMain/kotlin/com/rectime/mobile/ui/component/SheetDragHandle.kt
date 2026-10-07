@@ -15,7 +15,7 @@ import com.rectime.mobile.ui.theme.AppTheme
 /** シートの持ち手。装飾なので独立したボタンにはしない。 */
 @Composable
 fun SheetDragHandle() {
-    Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp), contentAlignment = Alignment.Center) {
         Box(Modifier.size(width = 40.dp, height = 5.dp)
             .background(AppTheme.colors.sheetHandle, RoundedCornerShape(percent = 50)))
     }
