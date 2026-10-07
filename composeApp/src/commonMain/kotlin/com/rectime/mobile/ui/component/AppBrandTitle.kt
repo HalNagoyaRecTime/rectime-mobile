@@ -25,8 +25,7 @@ import com.rectime.mobile.ui.theme.AppTheme
 fun AppBrandTitle(
     modifier: Modifier = Modifier,
     fontSize: TextUnit = 28.sp,
-    jumpingLetterIndex: Int = -1,
-    jumpOffset: () -> Dp = { 0.dp },
+    jumpOffset: (Int) -> Dp = { 0.dp },
 ) {
     val measurer = rememberTextMeasurer()
     val foreground = AppTheme.colors.textAppLogo
@@ -43,7 +42,7 @@ fun AppBrandTitle(
         var x = (size.width - width) / 2f
         layouts.forEachIndexed { index, layout ->
             // 動かす文字だけ描画位置を変え、字間や周囲のレイアウトは保つ。
-            val offsetY = if (index == jumpingLetterIndex) jumpOffset().toPx() else 0f
+            val offsetY = jumpOffset(index).toPx()
             val y = (size.height - layout.size.height) / 2f + offsetY
             if (appDisplayName[index] == ':') {
                 val unit = fittedFontSize.toPx() / 24f

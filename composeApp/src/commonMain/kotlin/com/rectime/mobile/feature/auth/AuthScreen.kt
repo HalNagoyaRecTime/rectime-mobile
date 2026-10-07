@@ -31,8 +31,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -44,6 +47,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -57,7 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.random.Random
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.haptics.AppHapticEvent
@@ -68,6 +73,7 @@ import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.component.AppBrandTitle
 import com.rectime.mobile.ui.component.AppLogoMark
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.ProductionCredits
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -121,7 +127,7 @@ private fun AuthLoginScreen(
             val gap = 24.dp.roundToPx()
             val top = topInset + 16.dp.roundToPx()
             // エラーの高さに関係なくロゴ・ボタンの位置を保つ。
-            val preferredLogoY = (viewportHeight * 0.36f).toInt() - iconSize.roundToPx() / 2
+            val preferredLogoY = (viewportHeight * 0.36f).toInt() - iconSize.roundToPx() / 2 + 24.dp.roundToPx()
             val logoY = max(top, preferredLogoY)
             val signInY = logoY + logo.height + gap
             // 長いエラーは下方向へ伸ばし、画面に収まらない場合は画面全体をスクロールする。
@@ -143,16 +149,14 @@ private fun AppLogoSection(
 ) {
     val hapticFeedback = rememberPlatformHapticFeedback()
     val vibrationEnabled by LocalHapticPreference.current.enabled.collectAsStateWithLifecycle()
-    val jump = remember { Animatable(0f) }
-    var tapCount by remember { mutableIntStateOf(0) }
-    var jumpingLetterIndex by remember { mutableIntStateOf(-1) }
-    LaunchedEffect(tapCount) {
-        if (tapCount == 0) return@LaunchedEffect
-        // 再タップでは進行中のジャンプをキャンセルし、最初から跳ね直す。
-        jump.snapTo(0f)
-        jump.animateTo(-14f, tween(durationMillis = 110))
-        jump.animateTo(0f, spring(dampingRatio = 0.5f, stiffness = 550f))
+    val scope = rememberCoroutineScope()
+    val jumps = remember { List(appDisplayName.length) { Animatable(0f) } }
+    val faceIndex = appDisplayName.indexOf(":C")
+    val letterGroups = remember {
+        appDisplayName.indices.filter { faceIndex < 0 || it != faceIndex + 1 }
     }
+    val activeLetters = remember { mutableStateListOf<Int>() }
+    var lastLetter by remember { mutableIntStateOf(-1) }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         AppLogoMark(
             size = iconSize,
@@ -162,15 +166,29 @@ private fun AppLogoSection(
                 onClickLabel = "タイトルを跳ねさせる",
             ) {
                 if (vibrationEnabled) hapticFeedback.perform(AppHapticEvent.LogoTap)
-                jumpingLetterIndex = Random.nextInt(appDisplayName.length)
-                tapCount++
+                // 動いている文字と直前の文字を除き、連打でも各ジャンプを最後まで続ける。
+                val available = letterGroups.filter { it !in activeLetters && it != lastLetter }
+                val index = available.randomOrNull() ?: return@clickable
+                activeLetters.add(index)
+                lastLetter = index
+                scope.launch {
+                    try {
+                        jumps[index].animateTo(-14f, tween(durationMillis = 110))
+                        jumps[index].animateTo(0f, spring(dampingRatio = 0.5f, stiffness = 550f))
+                    } finally {
+                        activeLetters.remove(index)
+                    }
+                }
             },
         )
         Spacer(Modifier.height(8.dp))
         AppBrandTitle(
             fontSize = titleSize,
-            jumpingLetterIndex = jumpingLetterIndex,
-            jumpOffset = { jump.value.dp },
+            jumpOffset = { index ->
+                // 顔の「:C」は同じアニメーションで一緒に跳ねる。
+                val group = if (faceIndex >= 0 && index == faceIndex + 1) faceIndex else index
+                jumps[group].value.dp
+            },
         )
     }
 }
@@ -255,38 +273,43 @@ private fun MicrosoftSignInButton(
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(AppTheme.radius.xs)
+    // 短い通信ではリングを出さず、完了・再試行時には表示待ちを取り消す。
+    val showLoading by produceState(initialValue = false, key1 = isLoading) {
+        value = false
+        if (isLoading) {
+            delay(150)
+            value = true
+        }
+    }
 
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .alpha(if (isLoading) 0.72f else 1f)
             .clip(shape)
             .background(AppTheme.colors.loginButtonBackground)
             .clickable(enabled = !isLoading, onClick = onClick)
-            .padding(horizontal = AppTheme.spacing.xl, vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
+            .semantics { if (isLoading) stateDescription = "サインイン中" },
+        contentAlignment = Alignment.Center,
     ) {
-        MicrosoftLogo(modifier = Modifier.size(MicrosoftSignInIconSize))
-        Spacer(modifier = Modifier.size(AppTheme.spacing.md))
-        Box(contentAlignment = Alignment.Center) {
-            // 「サインイン中...」に切り替わってもボタン幅が変わらないよう、既定の文言で幅を確保しておく。
+        // 内容の配置と高さを維持し、通信中は中央の共通ローディングを重ねる。
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .padding(horizontal = AppTheme.spacing.xl, vertical = 8.dp)
+                .alpha(if (isLoading) 0.25f else 1f),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MicrosoftLogo(modifier = Modifier.size(MicrosoftSignInIconSize))
+            Spacer(modifier = Modifier.size(AppTheme.spacing.md))
             Text(
                 text = MicrosoftSignInLabel,
                 style = textStyle,
                 textAlign = TextAlign.Center,
                 color = AppTheme.colors.textLoginButton,
-                modifier = Modifier.alpha(if (isLoading) 0f else 1f),
             )
-            if (isLoading) {
-                Text(
-                    text = "サインイン中...",
-                    style = textStyle,
-                    textAlign = TextAlign.Center,
-                    color = AppTheme.colors.textLoginButton,
-                )
-            }
+        }
+        if (isLoading && showLoading) {
+            AppLoadingIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = Color.White)
         }
     }
 }
