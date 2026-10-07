@@ -47,6 +47,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -201,28 +203,55 @@ private fun SignInSection(
     onLogin: () -> Unit,
 ) {
     val shape = RoundedCornerShape(AppTheme.radius.xs)
-    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        MicrosoftSignInButton(isLoading = isLoading, onClick = onLogin)
-        Spacer(Modifier.height(8.dp))
-        // 内容全体を表示し、上下に同じ余白を取る。ロゴとボタンの位置は親で固定する。
-        Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-            if (!error.isNullOrBlank()) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(shape).background(Color(0xFFB51F32))
-                        .padding(16.dp)
-                        .semantics { liveRegion = LiveRegionMode.Polite },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(text = error, fontSize = 13.sp, lineHeight = 18.sp, color = Color.White, textAlign = TextAlign.Center)
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val baseStyle = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // ボタン内のアイコンと余白を除いた幅で決め、エラーにも同じ文字サイズを使う。
+        val textWidth = with(density) {
+            (maxWidth.roundToPx() - AppTheme.spacing.xl.roundToPx() * 2 -
+                MicrosoftSignInIconSize.roundToPx() - AppTheme.spacing.md.roundToPx()).coerceAtLeast(0)
+        }
+        val fontSize = (28 downTo 24).firstOrNull { halfSp ->
+            textMeasurer.measure(
+                text = MicrosoftSignInLabel,
+                style = baseStyle.copy(fontSize = (halfSp / 2f).sp),
+                softWrap = false,
+            ).size.width <= textWidth
+        }?.let { (it / 2f).sp } ?: 12.sp
+        val textStyle = baseStyle.copy(fontSize = fontSize, lineHeight = (20f * fontSize.value / 14f).sp)
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            MicrosoftSignInButton(isLoading = isLoading, textStyle = textStyle, onClick = onLogin)
+            Spacer(Modifier.height(8.dp))
+            // 内容全体を表示し、上下に同じ余白を取る。ロゴとボタンの位置は親で固定する。
+            Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                if (!error.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(shape).background(Color(0xFFB51F32))
+                            .padding(16.dp)
+                            .semantics { liveRegion = LiveRegionMode.Polite },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = error,
+                            style = textStyle.copy(fontWeight = FontWeight.Normal),
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+private const val MicrosoftSignInLabel = "Microsoft アカウントでサインイン"
+private val MicrosoftSignInIconSize = 18.dp
+
 @Composable
 private fun MicrosoftSignInButton(
     isLoading: Boolean,
+    textStyle: TextStyle,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(AppTheme.radius.xs)
@@ -235,26 +264,26 @@ private fun MicrosoftSignInButton(
             .clip(shape)
             .background(AppTheme.colors.loginButtonBackground)
             .clickable(enabled = !isLoading, onClick = onClick)
-            .padding(horizontal = AppTheme.spacing.xl),
+            .padding(horizontal = AppTheme.spacing.xl, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MicrosoftLogo(modifier = Modifier.size(18.dp))
+        MicrosoftLogo(modifier = Modifier.size(MicrosoftSignInIconSize))
         Spacer(modifier = Modifier.size(AppTheme.spacing.md))
         Box(contentAlignment = Alignment.Center) {
             // 「サインイン中...」に切り替わってもボタン幅が変わらないよう、既定の文言で幅を確保しておく。
             Text(
-                text = "Microsoft アカウントでサインイン",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                text = MicrosoftSignInLabel,
+                style = textStyle,
+                textAlign = TextAlign.Center,
                 color = AppTheme.colors.textLoginButton,
                 modifier = Modifier.alpha(if (isLoading) 0f else 1f),
             )
             if (isLoading) {
                 Text(
                     text = "サインイン中...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
+                    style = textStyle,
+                    textAlign = TextAlign.Center,
                     color = AppTheme.colors.textLoginButton,
                 )
             }
