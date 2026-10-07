@@ -11,7 +11,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 /** 背面や移動中の画面にタップが届かないようにする透明な入力面。 */
 @Composable
 internal fun NavigationInputBlocker() {
-    Box(Modifier.fillMaxSize().clearAndSetSemantics { }.pointerInput(Unit) {
+    Box(Modifier.fillMaxSize().pointerInput(Unit) {
         awaitPointerEventScope {
             while (true) {
                 awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }

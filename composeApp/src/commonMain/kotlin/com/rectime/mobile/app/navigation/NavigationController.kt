@@ -2,6 +2,8 @@ package com.rectime.mobile.app.navigation
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.setValue
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 
@@ -11,29 +13,43 @@ class NavigationController(
     var state by mutableStateOf(NavigationState(rootScreen = initialRoot))
         private set
 
+    private var lastEntryId = 0L
+
+    // 毎フレーム変わる値は履歴と分け、配置処理だけが監視する。
+    internal var backDragOffsetPx by mutableFloatStateOf(0f)
+        private set
+    internal var enterProgress by mutableFloatStateOf(0f)
+        private set
+
     fun setRoot(screen: Screen) {
         if (state.interactionLocked || state.pushStack.isNotEmpty()) return
         state = state.copy(rootScreen = screen)
     }
 
     fun reset(screen: Screen) {
-        state = NavigationState(rootScreen = screen)
+        Snapshot.withMutableSnapshot {
+            backDragOffsetPx = 0f
+            enterProgress = 0f
+            state = NavigationState(rootScreen = screen)
+        }
     }
 
     fun push(screen: Screen) {
         if (state.interactionLocked || state.pushStack.lastOrNull()?.screen?.key == screen.key) return
         val entry = PushEntry(
-            key = "${screen.key}_${Clock.nextId()}",
+            key = "${screen.key}_${++lastEntryId}",
             screen = screen
         )
-        state = state.copy(
-            pushStack = state.pushStack + entry,
-            isTransitioning = true,
-            pushTransition = PushTransitionState(
-                mode = PushTransitionMode.Enter,
-                routeKey = entry.key
+        Snapshot.withMutableSnapshot {
+            enterProgress = 0f
+            state = state.copy(
+                pushStack = state.pushStack + entry,
+                pushTransition = PushTransitionState(
+                    mode = PushTransitionMode.Enter,
+                    routeKey = entry.key,
+                ),
             )
-        )
+        }
     }
 
     fun requestPop() {
@@ -41,30 +57,36 @@ class NavigationController(
         startBackTransition(PushTransitionMode.Exit)
     }
 
-    private fun startBackTransition(mode: PushTransitionMode) {
+    private fun startBackTransition(mode: PushTransitionMode, velocityPxPerSecond: Float = 0f) {
         val key = state.pushStack.lastOrNull()?.key ?: return
         state = state.copy(
             activeGesture = ActiveGesture.None,
-            isTransitioning = true,
-            pushTransition = PushTransitionState(mode = mode, routeKey = key),
+            pushTransition = PushTransitionState(mode = mode, routeKey = key, releaseVelocityPxPerSecond = velocityPxPerSecond),
         )
     }
 
-    fun completePop(key: String) {
-        if (state.pushStack.lastOrNull()?.key != key || state.pushTransition.routeKey != key ||
-            state.pushTransition.mode != PushTransitionMode.Exit) return
-        state = state.copy(
-            pushStack = state.pushStack.dropLast(1),
-            backDragOffsetPx = 0f,
-            pushTransition = PushTransitionState(),
-            isTransitioning = false,
-        )
+    fun completePop(key: String) = finishTransition(key, PushTransitionMode.Exit, removeTop = true)
+
+    fun finishBackReturn(key: String) = finishTransition(key, PushTransitionMode.Return)
+
+    fun finishPushEnter(key: String) = finishTransition(key, PushTransitionMode.Enter)
+
+    private fun finishTransition(key: String, mode: PushTransitionMode, removeTop: Boolean = false) {
+        if (!isCurrentTransition(key, mode)) return
+        // 履歴と位置を同時に確定し、前の画面が一瞬だけ移動する状態を作らない。
+        Snapshot.withMutableSnapshot {
+            backDragOffsetPx = 0f
+            enterProgress = 1f
+            state = state.copy(
+                pushStack = if (removeTop) state.pushStack.dropLast(1) else state.pushStack,
+                pushTransition = PushTransitionState(),
+            )
+        }
     }
 
-    fun finishBackReturn(key: String) {
-        if (state.pushTransition.routeKey != key || state.pushTransition.mode != PushTransitionMode.Return) return
-        state = state.copy(backDragOffsetPx = 0f, pushTransition = PushTransitionState(), isTransitioning = false)
-    }
+    private fun isCurrentTransition(key: String, mode: PushTransitionMode): Boolean =
+        state.pushStack.lastOrNull()?.key == key && state.pushTransition.routeKey == key &&
+            state.pushTransition.mode == mode
 
     /** 開始できた画面のキーを返し、終了時も同じ画面か確認する。 */
     fun beginBackGesture(): String? {
@@ -74,31 +96,24 @@ class NavigationController(
         return key
     }
 
-    fun finishBackGesture(key: String, dismiss: Boolean) {
+    fun finishBackGesture(key: String, dismiss: Boolean, velocityPxPerSecond: Float = 0f) {
         if (state.pushStack.lastOrNull()?.key != key || state.activeGesture != ActiveGesture.Back) return
-        startBackTransition(if (dismiss) PushTransitionMode.Exit else PushTransitionMode.Return)
+        startBackTransition(if (dismiss) PushTransitionMode.Exit else PushTransitionMode.Return, velocityPxPerSecond)
     }
 
     fun setBackDragOffset(key: String, px: Float) {
         if (state.pushStack.lastOrNull()?.key != key || state.activeGesture != ActiveGesture.Back) return
-        state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
+        backDragOffsetPx = px.coerceAtLeast(0f)
     }
 
     fun setBackTransitionOffset(key: String, mode: PushTransitionMode, px: Float) {
-        if (state.pushStack.lastOrNull()?.key != key || state.pushTransition.routeKey != key ||
-            state.pushTransition.mode != mode) return
-        state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
+        if (!isCurrentTransition(key, mode)) return
+        backDragOffsetPx = px.coerceAtLeast(0f)
     }
 
     fun setPushEnterProgress(key: String, progress: Float) {
-        if (state.pushTransition.routeKey != key || state.pushTransition.mode != PushTransitionMode.Enter) return
-        state = state.copy(pushTransition = state.pushTransition.copy(progress = progress))
-    }
-
-    fun finishPushEnter(key: String) {
-        if (state.pushTransition.routeKey == key && state.pushTransition.mode == PushTransitionMode.Enter) {
-            state = state.copy(pushTransition = PushTransitionState(), isTransitioning = false)
-        }
+        if (!isCurrentTransition(key, PushTransitionMode.Enter)) return
+        enterProgress = progress.coerceIn(0f, 1f)
     }
 
     val canHandleSystemBack: Boolean
@@ -116,9 +131,4 @@ class NavigationController(
             state.rootScreen != ScheduleScreen -> setRoot(ScheduleScreen)
         }
     }
-}
-
-private object Clock {
-    private var lastId = 0L
-    fun nextId(): Long = ++lastId
 }

@@ -20,7 +20,7 @@ data class PushEntry(
 data class PushTransitionState(
     val mode: PushTransitionMode = PushTransitionMode.Idle,
     val routeKey: String? = null,
-    val progress: Float = 0f,
+    val releaseVelocityPxPerSecond: Float = 0f,
 )
 
 data class NavigationState(
@@ -28,13 +28,13 @@ data class NavigationState(
     val pushStack: List<PushEntry> = emptyList(),
     val activeGesture: ActiveGesture = ActiveGesture.None,
     val pushTransition: PushTransitionState = PushTransitionState(),
-    val backDragOffsetPx: Float = 0f,
-    val isTransitioning: Boolean = false,
 ) {
+    val isTransitioning: Boolean
+        get() = pushTransition.mode != PushTransitionMode.Idle
+
     // 表示、入力、戻る操作で同じ判断を使う。
     val interactionLocked: Boolean
-        get() = isTransitioning || activeGesture != ActiveGesture.None ||
-            pushTransition.mode != PushTransitionMode.Idle
+        get() = isTransitioning || activeGesture != ActiveGesture.None
 
     val rootInteractive: Boolean
         get() = pushStack.isEmpty() && !interactionLocked

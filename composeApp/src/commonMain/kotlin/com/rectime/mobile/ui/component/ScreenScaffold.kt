@@ -1,5 +1,7 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -25,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +39,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.app.navigation.LocalNavigationInputEnabled
 import com.rectime.mobile.ui.theme.AppTheme
 
 private val SnackbarBottomOffset = (-60).dp // ボトムナビゲーションとの重なりを避けるためのオフセット
@@ -58,6 +62,7 @@ fun RootScreenScaffold(
     contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
+    val inputEnabled = navigationScrollEnabled(lazyListState)
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
     var headerHeightPx by remember { mutableIntStateOf(0) }
@@ -84,6 +89,7 @@ fun RootScreenScaffold(
             Box(Modifier.fillMaxSize()) {
                 contentBackground()
                 LazyColumn(
+                    userScrollEnabled = inputEnabled,
                     state = lazyListState,
                     modifier = Modifier.fillMaxSize(),
                     overscrollEffect = if (onRefresh == null) rememberOverscrollEffect() else null,
@@ -102,7 +108,7 @@ fun RootScreenScaffold(
         } else {
             PullToRefreshContainer(
                 isRefreshing = isRefreshing,
-                refreshEnabled = refreshEnabled,
+                refreshEnabled = refreshEnabled && inputEnabled,
                 onRefresh = onRefresh,
                 indicatorTopInset = headerBottom,
                 modifier = Modifier.fillMaxSize(),
@@ -157,6 +163,8 @@ fun PushScreenScaffold(
     contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
+    val lazyListState = rememberLazyListState()
+    val inputEnabled = navigationScrollEnabled(lazyListState)
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
 
@@ -172,6 +180,8 @@ fun PushScreenScaffold(
     ) {
         contentBackground()
         LazyColumn(
+            state = lazyListState,
+            userScrollEnabled = inputEnabled,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = topInset,
@@ -241,4 +251,14 @@ fun SheetScaffold(
                 .padding(top = spacing),
         )
     }
+}
+
+/** 画面の種類によらず、横操作中は縦ドラッグと直前の慣性を同じ方法で止める。 */
+@Composable
+private fun navigationScrollEnabled(listState: LazyListState): Boolean {
+    val enabled = LocalNavigationInputEnabled.current
+    LaunchedEffect(listState, enabled) {
+        if (!enabled) listState.stopScroll(MutatePriority.PreventUserInput)
+    }
+    return enabled
 }

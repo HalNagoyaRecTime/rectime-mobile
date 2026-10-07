@@ -136,7 +136,7 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
 
 internal fun isNotificationDetailFullyVisible(state: NavigationState, screen: NotificationDetailScreen): Boolean {
     val entry = state.pushStack.lastOrNull() ?: return false
-    return entry.screen == screen && state.isPushInteractive(entry.key) && state.backDragOffsetPx == 0f
+    return entry.screen == screen && state.isPushInteractive(entry.key)
 }
 
 @Composable

@@ -1,16 +1,16 @@
 package com.rectime.mobile.app.navigation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalUserProfile
@@ -28,29 +28,24 @@ fun NavigationHost(
 ) {
     val state = navigationController.state
     val userProfile = session.user.toUserProfile()
+    val density = LocalDensity.current.density
     NavigationBackHandler(enabled = state.pushStack.isNotEmpty()) {
         navigationController.requestPop()
     }
 
-    // BoxWithConstraints 内で計算したサイズをジェスチャーハンドラーと共有する
+    // 実際のサイズが変わった時だけ、ジェスチャーとアニメーションの幅を更新する。
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
 
     CompositionLocalProvider(LocalUserProfile provides userProfile) {
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(AppTheme.colors.surfacePrimary)
-                .navigationBackGesture(navigationController, state.pushStack.lastOrNull()?.key) {
+                .onSizeChanged { containerWidthPx = it.width.toFloat() }
+                .navigationBackGesture(navigationController, state.pushStack.lastOrNull()?.key, density) {
                     containerWidthPx
                 },
         ) {
-            val density = LocalDensity.current
-
-            // コンポジションごとにサイズを更新してジェスチャーハンドラーと共有する
-            SideEffect {
-                containerWidthPx = maxWidth.value * density.density
-            }
-
             // タブ画面とボトムバー。
             RootLayer(
                 state = state,
@@ -65,7 +60,7 @@ fun NavigationHost(
             PushLayer(
                 state = state,
                 navigationController = navigationController,
-                containerWidthPx = containerWidthPx,
+                widthPx = { containerWidthPx },
             )
         }
     }
