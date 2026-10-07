@@ -18,4 +18,4 @@ expect val appDisplayName: String
 
 // フォームの転送先はAPI側で管理する。ブラウザで開く公開エンドポイント。
 internal val contactFormUrl: String
-    get() = "${apiBaseUrl.trimEnd('/')}/contact"
+    get() = "${apiBaseUrl.trimEnd('/')}/app/contact"
