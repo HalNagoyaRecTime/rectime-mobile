@@ -217,7 +217,13 @@ private fun EventDetailContent(
 
             event.ruleText?.takeIf { it.isNotBlank() }?.let { ruleText ->
                 AppDivider()
-                AppMarkdown(content = ruleText, imageTitle = event.eventName)
+                AppMarkdown(
+                    content = ruleText,
+                    imageTitle = event.eventName,
+                    bodyStyle = androidx.compose.material3.LocalTextStyle.current.copy(
+                        fontSize = BodyFontSize, lineHeight = BodyFontSize * 1.6f,
+                    ),
+                )
             }
         }
 

@@ -19,6 +19,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mikepenz.markdown.model.State
+import com.mikepenz.markdown.model.rememberMarkdownState
 import com.mikepenz.markdown.model.ImageData
 import com.mikepenz.markdown.model.ImageTransformer
 import com.mikepenz.markdown.m3.Markdown
@@ -29,9 +31,24 @@ import io.ktor.http.Url
 
 /** APIの本文をそのまま解釈する。保存形式は変更せず、画像は共通キャッシュ・ビューアを使う。 */
 @Composable
-fun AppMarkdown(content: String, modifier: Modifier = Modifier, imageTitle: String? = null) {
+fun AppMarkdown(
+    content: String,
+    modifier: Modifier = Modifier,
+    imageTitle: String? = null,
+    bodyStyle: TextStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+) {
     var selectedImage by remember(content) { mutableStateOf<Pair<String, String?>?>(null) }
-    val body = TextStyle(fontSize = 16.sp, lineHeight = 24.sp)
+    val body = bodyStyle
+    val markdownState = rememberMarkdownState(content)
+    val state by markdownState.state.collectAsState()
+    val parsed = (state as? State.Success)?.takeIf { it.content == content }
+    val hasFormatting = remember(parsed) { parsed?.node?.hasMarkdownFormatting() == true }
+    // 普通の文章はMarkdownの段落に変換せず、改行や余白を従来のTextのまま保つ。
+    // 解析中・失敗時も本文を先に表示する。
+    if (!hasFormatting) {
+        Text(content, modifier = modifier, color = AppTheme.colors.textDetailsScreenBody, style = body)
+        return
+    }
     val imageTransformer = object : ImageTransformer {
         @Composable
         override fun transform(link: String): ImageData? {
@@ -56,7 +73,7 @@ fun AppMarkdown(content: String, modifier: Modifier = Modifier, imageTitle: Stri
         }
     }
     Markdown(
-        content = content,
+        markdownState = markdownState,
         modifier = modifier.fillMaxWidth(),
         colors = markdownColor(text = AppTheme.colors.textDetailsScreenBody),
         typography = markdownTypography(
