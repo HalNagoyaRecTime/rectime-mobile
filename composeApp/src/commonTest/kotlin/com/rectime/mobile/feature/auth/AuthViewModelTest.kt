@@ -689,8 +689,13 @@ class AuthViewModelTest {
         val viewModel = buildViewModel(
             api = AuthApi(mockClient { request ->
                 if (request.url.encodedPath.endsWith("/auth/me")) {
-                    finishMe.await()
-                    respond("""{"user":{"id":"6","display_name":"古い取得結果"}}""", HttpStatusCode.OK, jsonHeaders)
+                    if (request.headers[HttpHeaders.Authorization] == "Bearer new-token") {
+                        // develop-v2側はrefresh後にも所属情報を取得するため、新旧の応答を分ける。
+                        respond("""{"user":{"id":"6","display_name":"更新後"}}""", HttpStatusCode.OK, jsonHeaders)
+                    } else {
+                        finishMe.await()
+                        respond("""{"user":{"id":"6","display_name":"古い取得結果"}}""", HttpStatusCode.OK, jsonHeaders)
+                    }
                 } else {
                     respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
                 }
@@ -704,7 +709,8 @@ class AuthViewModelTest {
 
         assertEquals("new-token", store.session?.accessToken)
         assertEquals("new-token", SessionTokenHolder.accessToken)
-        assertEquals(storedSession.user.displayName, viewModel.uiState.value.session?.user?.displayName)
+        assertEquals("更新後", viewModel.uiState.value.session?.user?.displayName)
+        assertEquals("更新後", store.session?.user?.displayName)
     }
 
     @Test
