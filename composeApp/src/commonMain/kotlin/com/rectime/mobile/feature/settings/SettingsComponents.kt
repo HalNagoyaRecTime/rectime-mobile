@@ -23,23 +23,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.component.AppTeamCredit
+import androidx.compose.material3.LocalTextStyle
+import com.rectime.mobile.ui.component.AppBrandTitle
 import com.rectime.mobile.ui.component.rememberBrandTitleJump
 import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.platform.platformAppIconPainter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.withStyle
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
@@ -194,7 +185,10 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
                 ),
             )
             Spacer(Modifier.height(16.dp))
-            AppInformationTitle(jumpOffset = jump.offset)
+            AppBrandTitle(
+                textStyle = LocalTextStyle.current.copy(fontSize = 28.sp, fontWeight = FontWeight.Bold),
+                jumpOffset = jump.offset,
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 text = "Version $appVersion",
@@ -223,57 +217,4 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
             Spacer(Modifier.height(24.dp))
         }
     }
-}
-
-/** 元のTextの字間・太さ・高さを保ち、色と描画位置だけ変更する。 */
-@Composable
-private fun AppInformationTitle(jumpOffset: (Int) -> androidx.compose.ui.unit.Dp) {
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val faceIndex = appDisplayName.indexOf(":C")
-    val title = buildAnnotatedString {
-        appDisplayName.forEachIndexed { index, char ->
-            val color = when (index) {
-                faceIndex -> Color(0xFF2AB3BF)
-                faceIndex + 1 -> if (faceIndex >= 0) Color(0xFFFF4000) else AppTheme.colors.textAppLogo
-                else -> AppTheme.colors.textAppLogo
-            }
-            withStyle(SpanStyle(color = color)) { append(char) }
-        }
-    }
-    Text(
-        text = title,
-        fontSize = 28.sp,
-        fontWeight = FontWeight.Bold,
-        onTextLayout = { layout = it },
-        modifier = Modifier.drawWithContent {
-            val measured = layout
-            if (measured == null) {
-                drawContent()
-            } else {
-                appDisplayName.indices.forEach { index ->
-                    val bounds = measured.getBoundingBox(index)
-                    val offset = jumpOffset(index).toPx()
-                    // 全体を同じTextLayoutで描き、文字ごとの範囲だけ切り取る。
-                    // 別々に文字を測定しないため、元のカーニングと折り返しも維持する。
-                    clipRect(
-                        left = bounds.left, right = bounds.right,
-                        top = bounds.top + offset, bottom = bounds.bottom + offset,
-                    ) {
-                        translate(top = offset) {
-                            drawText(measured)
-                            if (index == faceIndex) {
-                                clipRect(
-                                    left = bounds.left, right = bounds.right,
-                                    top = (bounds.top + bounds.bottom) / 2f,
-                                    bottom = bounds.bottom,
-                                ) {
-                                    drawText(measured, color = Color(0xFFFCB100))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-    )
 }
