@@ -34,6 +34,8 @@ import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
+import com.rectime.mobile.feature.ranking.RankingViewModel
+import com.rectime.mobile.feature.ranking.rankingViewModelFactory
 import com.rectime.mobile.feature.schedule.scheduleViewModelFactory
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationFeedStore
@@ -140,6 +142,10 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
             val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
+            val rankingViewModel: RankingViewModel = viewModel(factory = rankingViewModelFactory())
+            LaunchedEffect(session.user.id, session.user.teamId) {
+                rankingViewModel.onSession(session.user.teamId)
+            }
             val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {
@@ -155,8 +161,10 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                     authViewModel.onForeground()
                     // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
-                    if (hasResumed) badgeViewModel.onForeground(session.user.id)
-                    else badgeViewModel.onSession(session.user.id)
+                    if (hasResumed) {
+                        badgeViewModel.onForeground(session.user.id)
+                        rankingViewModel.onForeground()
+                    } else badgeViewModel.onSession(session.user.id)
                     hasResumed = true
                     foregroundScope.launch { scheduleViewModel.onForeground() }
                 }
