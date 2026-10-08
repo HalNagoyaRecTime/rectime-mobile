@@ -73,7 +73,7 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
         }
 
         PushScreenScaffold(
-            title = "通知詳細",
+            title = "通知",
             onBack = { navigationController.requestPop() },
         ) {
             item {
