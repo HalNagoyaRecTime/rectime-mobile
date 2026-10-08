@@ -21,9 +21,13 @@ import androidx.compose.ui.platform.LocalDensity
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.feature.auth.toUserProfile
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.token.GestureTokens
 import kotlinx.coroutines.launch
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 
 @Composable
 fun NavigationHost(
@@ -31,6 +35,7 @@ fun NavigationHost(
     session: AuthSession,
     onLogout: () -> Unit,
     hasUnreadNotifications: Boolean,
+    notificationPermissionStartup: NotificationPermissionStartup?,
 ) {
     val state = navigationController.state
     val coroutineScope = rememberCoroutineScope()
@@ -41,6 +46,14 @@ fun NavigationHost(
     var containerHeightPx by remember { mutableFloatStateOf(0f) }
 
     CompositionLocalProvider(LocalUserProfile provides userProfile) {
+        // Androidの戻るボタン／戻るジェスチャー
+        val backEventState = rememberNavigationEventState(currentInfo = NavigationEventInfo.None)
+        NavigationBackHandler(
+            state = backEventState,
+            isBackEnabled = navigationController.canHandleSystemBack,
+            onBackCompleted = { navigationController.handleSystemBack() },
+        )
+
         BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -117,6 +130,7 @@ fun NavigationHost(
             session = session,
             onLogout = onLogout,
             hasUnreadNotifications = hasUnreadNotifications,
+            notificationPermissionStartup = notificationPermissionStartup,
         )
 
         // Layer 2: Push Layer (above Root+BottomNav, all sources)

@@ -101,6 +101,7 @@ kotlin {
 
     sourceSets {
         androidMain.dependencies {
+            implementation(libs.androidx.browser)
             implementation(libs.androidx.compose.ui.tooling.preview)
             implementation(libs.androidx.activity.compose)
             // 直接は使わないが、play-services-basement が引き込む fragment 1.1.0 では
@@ -135,6 +136,7 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.navigationevent.compose)
         }
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)
@@ -149,6 +151,9 @@ kotlin {
             implementation(libs.ktor.client.mock)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.kotlin.test)
+        }
+        jvmTest.dependencies {
+            implementation("org.jetbrains.compose.ui:ui-test-junit4:${libs.versions.composeMultiplatform.get()}")
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
@@ -166,7 +171,7 @@ android {
         buildConfig = true
     }
     defaultConfig {
-        applicationId = "com.rectime.mobile"
+        applicationId = "io.github.halnagoyarectime"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = resolveBuildProperty("VERSION_CODE")?.toIntOrNull() ?: 1

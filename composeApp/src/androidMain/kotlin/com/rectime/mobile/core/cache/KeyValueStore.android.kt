@@ -22,6 +22,9 @@ actual class PlatformKeyValueStore : KeyValueStore {
 
     override suspend fun clear() {
         val context = getPlatformContext() ?: return
+        // 旧版の専用領域に保存したアバター設定も削除する。
+        context.getSharedPreferences("rectime_avatar_preferences", Context.MODE_PRIVATE)
+            .edit().clear().apply()
         context
             .getSharedPreferences("rectime_cache", Context.MODE_PRIVATE)
             .edit()

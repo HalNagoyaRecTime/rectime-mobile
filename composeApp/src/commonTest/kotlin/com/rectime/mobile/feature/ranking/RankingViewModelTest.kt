@@ -49,6 +49,135 @@ class RankingViewModelTest {
     }
 
     @Test
+    fun newSessionFailureDoesNotKeepPreviousMemoryRankings() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(cache = LocalCache(NeverPersistingKeyValueStore()), client = mockClient {
+            calls++
+            if (calls == 1) respondJson(rankingsJsonOf(RankingFixture(1, 42, "以前のチーム", 321)))
+            else respondJson("{}", HttpStatusCode.Unauthorized)
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+        CacheGeneration.bump()
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun forbiddenRefetchDoesNotKeepMemoryRankingsWithoutDiskCache() = runTest(testDispatcher) {
+        var calls = 0
+        val viewModel = buildViewModel(cache = LocalCache(NeverPersistingKeyValueStore()), client = mockClient {
+            calls++
+            if (calls == 1) respondJson(rankingsJsonOf(RankingFixture(1, 42, "以前のチーム", 321)))
+            else respondJson("{}", HttpStatusCode.Forbidden)
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertEquals("ランキングを表示する権限がありません", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun initialStateHasNoPlaceholderRankingsWhileRequestIsPending() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(client = mockClient {
+            gate.await()
+            respondJson(rankingsJsonOf(RankingFixture(7, 42, "APIのチーム", 321)))
+        })
+        assertTrue(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(listOf(RankingItem(7, 42, "APIのチーム", 321)), viewModel.uiState.value.rankingItems)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun initialFailureShowsErrorWithoutPlaceholderRankingsAndCanRetry() = runTest(testDispatcher) {
+        var requests = 0
+        val viewModel = buildViewModel(client = mockClient { request ->
+            assertEquals("/api/v1/ranking", request.url.encodedPath)
+            assertEquals("100", request.url.parameters["limit"])
+            requests++
+            if (requests == 1) {
+                respondJson("{}", HttpStatusCode.InternalServerError)
+            } else {
+                respondJson(rankingsJsonOf(RankingFixture(1, 42, "復旧したチーム", 321)))
+            }
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertEquals("ランキング情報の取得に失敗しました", viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.isLoading)
+
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.error)
+        assertEquals("復旧したチーム", viewModel.uiState.value.rankingItems.single().teamName)
+    }
+
+    @Test
+    fun successfulEmptyResponseReplacesPreviouslyCachedRankings() = runTest(testDispatcher) {
+        var requests = 0
+        val viewModel = buildViewModel(client = mockClient {
+            requests++
+            respondJson(if (requests == 1) rankingsJsonOf(RankingFixture(1, 42, "以前のチーム", 321)) else rankingsJsonOf())
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isOffline)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun forbiddenResponseDoesNotDisplayCachedRankings() = runTest(testDispatcher) {
+        var requests = 0
+        val viewModel = buildViewModel(client = mockClient {
+            requests++
+            if (requests == 1) respondJson(rankingsJsonOf(RankingFixture(1, 42, "以前のチーム", 321)))
+            else respondJson("{}", HttpStatusCode.Forbidden)
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isOffline)
+        assertEquals("ランキングを表示する権限がありません", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun sessionChangeDuringRefreshDiscardsPreviousAndIncomingRankings() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            requests++
+            if (requests > 1) gate.await()
+            respondJson(rankingsJsonOf(RankingFixture(1, 42, "前のセッションのチーム", 321)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isOffline)
+    }
+
+    @Test
     fun fetchRankingsMarksIsMyTeamOnlyForMatchingTeamId() = runTest(testDispatcher) {
         val viewModel = buildViewModel(
             initialMyTeamId = 20,
@@ -227,7 +356,7 @@ class RankingViewModelTest {
     }
 
     @Test
-    fun fetchRankingsClearsListAndShowsErrorWhenCachedResultIs401() = runTest(testDispatcher) {
+    fun fetchRankingsKeepsCachedListWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
         var requestCount = 0
         val viewModel = buildViewModel(
             client = mockClient {
@@ -245,9 +374,10 @@ class RankingViewModelTest {
         viewModel.fetchRankings()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // セッション切れ(401)は、キャッシュに残っていた一覧を誤表示せず消す。
-        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
-        assertEquals("ログイン情報の有効期限が切れました", viewModel.uiState.value.error)
+        // 認証更新を確認できない401では、失効が確定するまで保存済み一覧を維持する。
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+        assertNull(viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.isOffline)
     }
 
     @Test
@@ -276,7 +406,7 @@ class RankingViewModelTest {
     }
 
     @Test
-    fun fetchRankingsPreservesListWhenRefetchFailsWithNoUsableCache() = runTest(testDispatcher) {
+    fun fetchRankingsKeepsMemoryItemsWhenRefetchFailsWithNoUsableCache() = runTest(testDispatcher) {
         var requestCount = 0
         val viewModel = buildViewModel(
             cache = LocalCache(NeverPersistingKeyValueStore()),
@@ -295,9 +425,68 @@ class RankingViewModelTest {
         viewModel.fetchRankings()
         testDispatcher.scheduler.advanceUntilIdle()
 
-        // キャッシュも使えない完全な失敗では、直前まで表示していた一覧を消さない。
+        // 同じセッションの表示内容は、端末へ保存できていなくても維持する。
         assertEquals(1, viewModel.uiState.value.rankingItems.size)
-        assertEquals("ランキング情報の取得に失敗しました", viewModel.uiState.value.error)
+        assertNull(viewModel.uiState.value.error)
+        assertTrue(viewModel.uiState.value.isOffline)
+    }
+
+    @Test
+    fun sessionChangeDuringFailedRefreshDoesNotKeepPreviousRankings() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            if (++requests == 1) {
+                respondJson(rankingsJsonOf(RankingFixture(1, 42, "前ユーザーのチーム", 321)))
+            } else {
+                gate.await()
+                respond(content = "", status = HttpStatusCode.InternalServerError, headers = jsonHeaders)
+            }
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun refreshStartedAfterSessionChangeClearsPreviouslyDisplayedRankings() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            if (++requests == 1) {
+                respondJson(rankingsJsonOf(RankingFixture(1, 42, "前ユーザーのチーム", 321)))
+            } else {
+                respond(content = "", status = HttpStatusCode.InternalServerError, headers = jsonHeaders)
+            }
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        cache.clearAll()
+        viewModel.fetchRankings()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+    }
+
+    @Test
+    fun sessionChangeBeforeScheduledRequestPreventsFetch() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            requests++
+            respondJson(rankingsJsonOf(RankingFixture(1, 42, "古い要求のチーム", 321)))
+        })
+        // viewModelScopeのlaunchが実行される前にセッションが切り替わる。
+        cache.clearAll()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, requests)
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 
     private fun buildViewModel(

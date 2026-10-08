@@ -1,8 +1,5 @@
 package com.rectime.mobile.feature.auth
 
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.json.JsonElement
 
 class AuthApiException(
@@ -12,28 +9,70 @@ class AuthApiException(
     val details: JsonElement? = null,
 ) : IllegalStateException(message)
 
+/** 認証付き通信から、現在の認証管理へ更新完了を待つ窓口。 */
 internal object AuthSessionInvalidationHandler {
-    private val mutableEvents = MutableSharedFlow<String>(
-        replay = 0,
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
-    val events = mutableEvents.asSharedFlow()
+    private var owner: Any? = null
+    private var refresh: (suspend (String) -> String?)? = null
+    private var deleted: (suspend (String) -> Unit)? = null
+    private var deactivate: (suspend (String) -> Unit)? = null
 
-    fun notifyUnauthorized(accessToken: String) {
-        mutableEvents.tryEmit(accessToken)
+    fun register(
+        owner: Any,
+        refresh: suspend (String) -> String?,
+        deactivate: suspend (String) -> Unit,
+        deleted: suspend (String) -> Unit,
+    ) {
+        this.owner = owner
+        this.refresh = refresh
+        this.deactivate = deactivate
+        this.deleted = deleted
+    }
+
+    fun unregister(owner: Any) {
+        if (this.owner !== owner) return
+        this.owner = null
+        refresh = null
+        deactivate = null
+        deleted = null
+    }
+
+    suspend fun accountDeactivated(accessToken: String) {
+        deactivate?.invoke(accessToken)
+    }
+
+    suspend fun accountDeleted(accessToken: String) {
+        deleted?.invoke(accessToken)
+    }
+
+    suspend fun refreshToken(accessToken: String): String? {
+        val currentOwner = owner
+        val handler = refresh ?: return null
+        val token = handler(accessToken)
+        return token.takeIf { owner === currentOwner }
     }
 }
 
 internal const val AUTH_FAILED_MESSAGE = "認証できませんでした。"
 internal const val AUTH_NETWORK_ERROR_MESSAGE =
     "通信に失敗しました。ネットワーク接続を確認して、もう一度お試しください。"
+internal const val ACCOUNT_DELETION_PENDING_CODE = "ACCOUNT_DELETION_PENDING"
+internal const val AUTH_DELETED_MESSAGE = "アカウントが削除されたため、もう一度ログインしてください。"
+
+/** 現在のログインを終了できる、APIの明示的な拒否だけを判定する。 */
+internal fun accountRejectionMessage(statusCode: Int, errorCode: String?): String? = when {
+    statusCode == 401 && errorCode == USER_DEACTIVATED_CODE -> AUTH_DEACTIVATED_MESSAGE
+    statusCode == 410 && errorCode == ACCOUNT_DELETION_PENDING_CODE -> AUTH_DELETED_MESSAGE
+    else -> null
+}
+
+internal const val USER_DEACTIVATED_CODE = "USER_DEACTIVATED"
+internal const val AUTH_DEACTIVATED_MESSAGE = "このアカウントは無効化されています。管理者にお問い合わせください。"
 internal const val AUTH_EXPIRED_MESSAGE =
     "ログイン情報の有効期限が切れました。もう一度ログインしてください。"
 internal const val AUTH_CANCELED_MESSAGE = "ログインをキャンセルしました。"
 
 internal fun authErrorMessage(error: Throwable, debugDetailsEnabled: Boolean): String = when {
-    error is AuthApiException -> debugAuthMessage(
+    error is AuthApiException -> accountRejectionMessage(error.statusCode, error.errorCode) ?: debugAuthMessage(
         detail = "HTTP ${error.statusCode}${error.errorCode?.let { " / $it" }.orEmpty()}",
         debugDetailsEnabled = debugDetailsEnabled,
     )

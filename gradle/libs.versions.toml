@@ -7,27 +7,30 @@ android-targetSdk = "36"
 androidx-activity = "1.13.0"
 androidx-appcompat = "1.7.1"
 androidx-core = "1.18.0"
+androidx-browser = "1.10.0"
 androidx-fragment = "1.9.0"
 androidx-splashscreen = "1.0.1"
 androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.10.0"
 androidx-testExt = "1.3.0"
 androidx-testRunner = "1.7.0"
-androidx-compose = "1.11.0"
+androidx-compose = "1.11.2"
 composeHotReload = "1.2.0"
-composeMultiplatform = "1.10.3"
+composeMultiplatform = "1.11.1"
 junit = "4.13.2"
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 kotlinx-coroutines = "1.11.0"
 kotlinx-datetime = "0.8.0"
 kotlinx-serialization-json = "1.11.0"
-material3 = "1.10.0-alpha05"
-coil = "3.4.0"
+material3 = "1.11.0-alpha07"
+coil = "3.5.0"
 firebaseBom = "34.14.0"
 googleServices = "4.4.4"
 ktor = "3.5.2"
+navigationevent = "1.1.0"
 
 [libraries]
+androidx-browser = { module = "androidx.browser:browser", version.ref = "androidx-browser" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }
@@ -67,6 +70,7 @@ ktor-client-java = { module = "io.ktor:ktor-client-java", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigationevent" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

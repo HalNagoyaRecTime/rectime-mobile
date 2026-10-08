@@ -7,3 +7,8 @@ actual val apiBaseUrlResult: ApiBaseUrlResult = resolveApiBaseUrl(
     System.getenv("API_BASE_URL") ?: System.getProperty("API_BASE_URL"),
     isDebugBuild,
 )
+
+actual val appVersion: String
+    get() = System.getProperty("jpackage.app-version") ?: "開発版"
+
+actual val appDisplayName: String = DefaultAppDisplayName

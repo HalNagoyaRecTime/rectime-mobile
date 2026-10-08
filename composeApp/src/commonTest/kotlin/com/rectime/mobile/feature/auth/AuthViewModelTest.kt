@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.auth
 
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.feature.notifications.PushTokenLifecycle
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -11,9 +12,11 @@ import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -42,6 +45,520 @@ class AuthViewModelTest {
         Dispatchers.resetMain()
     }
 
+    @Test
+    fun startupSaveCompletingAfterLogoutCannotRestoreUiSession() = runTest(testDispatcher) {
+        val saveGate = CompletableDeferred<Unit>()
+        val logoutGate = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        store.beforeSave = { saveGate.await() }
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/auth/logout")) {
+                logoutGate.await()
+                respond("", HttpStatusCode.NoContent)
+            } else respond(meBody, HttpStatusCode.OK, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.runCurrent()
+        assertNotNull(viewModel.uiState.value.session)
+        viewModel.logout()
+        saveGate.complete(Unit)
+        testDispatcher.scheduler.runCurrent()
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+        logoutGate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(store.session)
+    }
+
+    @Test
+    fun refreshSaveCompletingAfterLogoutCannotRestoreUiSession() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            when {
+                request.url.encodedPath.endsWith("/auth/refresh") -> respond(
+                    """{"access_token":"new-token","expires_in":3600}""", HttpStatusCode.OK, jsonHeaders,
+                )
+                request.url.encodedPath.endsWith("/auth/logout") -> respond("", HttpStatusCode.NoContent)
+                else -> respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            }
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val saveGate = CompletableDeferred<Unit>()
+        store.beforeSave = { saveGate.await() }
+        val refreshing = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        viewModel.logout()
+        saveGate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(refreshing.await())
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(store.session)
+    }
+
+    @Test
+    fun logoutCacheDeletionExceptionStillClearsSessionPendingAuthAndUi() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) = Unit
+            override suspend fun clear(): Unit = error("キャッシュを削除できません")
+        })
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        store.pendingAuth = PendingAuth("state", "verifier")
+        viewModel.logout()
+        assertNull(viewModel.uiState.value.session)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(store.session)
+        assertNull(store.pendingAuth)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals("ログアウトに失敗しました", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun logoutSessionDeletionExceptionDoesNotStopOtherCleanup() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        store.pendingAuth = PendingAuth("state", "verifier")
+        store.beforeClear = { error("認証情報を削除できません") }
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(store.pendingAuth)
+        assertNull(cache.load<String>("saved"))
+        assertEquals("ログアウトに失敗しました", viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun logoutStorageReadFailureStillAttemptsAllCleanup() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        store.pendingAuth = PendingAuth("state", "verifier")
+        store.beforeLoad = { error("認証情報を読み込めません") }
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.session)
+        assertNull(store.session)
+        assertNull(store.pendingAuth)
+        assertNull(cache.load<String>("saved"))
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun deactivationStorageReadFailureCannotKeepUserLoggedIn() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        store.beforeLoad = { error("認証情報を読み込めません") }
+        viewModel.handleAccountDeactivated(storedSession.accessToken)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(store.session)
+        assertNull(cache.load<String>("saved"))
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun foregroundPendingAuthReadFailureKeepsSession() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(okApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val current = viewModel.uiState.value.session
+        store.beforePendingLoad = { error("認証途中の情報を読み込めません") }
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(current, viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun refreshPendingAuthReadFailureKeepsSession() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(okApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val current = viewModel.uiState.value.session
+        store.beforePendingLoad = { error("認証途中の情報を読み込めません") }
+        assertNull(viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+        assertEquals(current, viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun cacheDeletionFailureCannotKeepDeactivatedUserLoggedIn() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) = Unit
+            override suspend fun clear(): Unit = error("cache storage failed")
+        })
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleAccountDeactivated(storedSession.accessToken)
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun cancelingDeactivatedRequestDoesNotCancelSessionCleanup() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val started = CompletableDeferred<Unit>()
+        val allowClear = CompletableDeferred<Unit>()
+        var cleared = false
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) = Unit
+            override suspend fun clear() {
+                started.complete(Unit)
+                allowClear.await()
+                cleared = true
+            }
+        })
+        val viewModel = buildViewModel(okApi(), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val request = async { viewModel.handleAccountDeactivated(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        started.await()
+        assertNull(viewModel.uiState.value.session)
+        request.cancel()
+        allowClear.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(cleared)
+        assertNull(store.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun startupDeactivationReturnsToLoginWithoutRefreshingAndClearsCache() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val gate = CompletableDeferred<Unit>()
+        val paths = mutableListOf<String>()
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            paths += request.url.encodedPath
+            gate.await()
+            respond(deactivatedBody, HttpStatusCode.Unauthorized, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.runCurrent()
+        assertNotNull(viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        viewModel.onForeground()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf("/api/v1/auth/me"), paths)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(cache.load<String>("saved"))
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun foregroundCheckKeepsContentVisibleAndDoesNotDuplicateRequestsOnFailure() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val gate = CompletableDeferred<Unit>()
+        var calls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            calls++
+            if (calls > 1) {
+                gate.await()
+                respond("server error", HttpStatusCode.InternalServerError)
+            } else respond(meBody, HttpStatusCode.OK, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val session = store.session
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(2, calls)
+        assertEquals(session, viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(session, store.session)
+        assertEquals(session, viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun foregroundDeactivationReturnsToLoginWithSpecificError() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        var calls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            calls++
+            if (calls == 1) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deactivatedBody, HttpStatusCode.Unauthorized, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun refreshDeactivationUsesSpecificErrorInsteadOfExpiredMessage() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/me")) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deactivatedBody, HttpStatusCode.Unauthorized, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+        assertNull(store.session)
+        assertEquals(AUTH_DEACTIVATED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun unrelatedOldTokenCannotDeactivateCurrentSession() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(okApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleAccountDeactivated("different-session-token")
+        assertNotNull(store.session)
+        assertNotNull(viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun startupDeletionReturnsToLoginWithoutRefreshingAndClearsCache() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val gate = CompletableDeferred<Unit>()
+        val paths = mutableListOf<String>()
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            paths += request.url.encodedPath
+            gate.await()
+            respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.runCurrent()
+        assertNotNull(viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        viewModel.onForeground()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf("/api/v1/auth/me"), paths)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(cache.load<String>("saved"))
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun foregroundDeletionReturnsToLoginWithSpecificError() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        var calls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            calls++
+            if (calls == 1) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun refreshDeletionUsesSpecificErrorInsteadOfExpiredMessage() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/me")) respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            else respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+        assertNull(store.session)
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun unrelatedOldTokenCannotDeleteCurrentSession() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(okApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleAccountDeleted("different-session-token")
+        assertNotNull(store.session)
+        assertNotNull(viewModel.uiState.value.session)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun deletionStillClearsUiAndCacheWhenSessionStorageFails() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession, clearFails = true)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("saved", "cached")
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(cache.load<String>("saved"))
+        assertEquals(AUTH_DELETED_MESSAGE, viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun deletedAccountCanLogInAgainAndOldTokenCannotEndNewLogin() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val newSessionBody = sessionJson.replace("access-token", "new-access-token")
+            .replace("refresh-token-id", "new-refresh-token-id")
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            when {
+                request.url.encodedPath.endsWith("/microsoft/token") -> respond(newSessionBody, HttpStatusCode.OK, jsonHeaders)
+                request.url.encodedPath.endsWith("/microsoft/login") -> respond("""{"auth_url":"https://login.example.com"}""", HttpStatusCode.OK, jsonHeaders)
+                else -> respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
+            }
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.session)
+        viewModel.startLogin()
+        testDispatcher.scheduler.advanceUntilIdle()
+        val pending = store.pendingAuth!!
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=${pending.state}")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("new-access-token", viewModel.uiState.value.session?.accessToken)
+        assertNull(viewModel.uiState.value.error)
+        viewModel.handleAccountDeleted(storedSession.accessToken)
+        assertEquals("new-access-token", store.session?.accessToken)
+        assertEquals("new-access-token", viewModel.uiState.value.session?.accessToken)
+    }
+
+    @Test
+    fun startupRefreshLoadsTeamWithNewToken() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val tokens = mutableListOf<String?>()
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                respond("""{"access_token":"new-token","refresh_token_id":"new-refresh","expires_in":7200}""", HttpStatusCode.OK, jsonHeaders)
+            } else {
+                tokens += request.headers[HttpHeaders.Authorization]
+                if (tokens.size == 1) respond("expired", HttpStatusCode.Unauthorized)
+                else respond("""{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎","team_id":12,"class_code":"IH11"}}""", HttpStatusCode.OK, jsonHeaders)
+            }
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf<String?>("Bearer access-token", "Bearer new-token"), tokens)
+        assertEquals(12, store.session?.user?.teamId)
+        assertEquals("IH11", store.session?.user?.classCode)
+        assertEquals(12, viewModel.uiState.value.session?.user?.teamId)
+    }
+
+    @Test
+    fun resourceRefreshUpdatesTeamAndKeepsRotatedTokenOnUserLookupFailure() = runTest(testDispatcher) {
+        for (fails in listOf(false, true)) {
+            val store = FakeAuthSessionStorage(session = storedSession)
+            var userCalls = 0
+            val viewModel = buildViewModel(AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                    respond("""{"access_token":"new-token","refresh_token_id":"new-refresh","expires_in":7200}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    userCalls++
+                    if (userCalls > 1 && fails) respond("unavailable", HttpStatusCode.ServiceUnavailable)
+                    else respond("""{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎","team_id":12}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }), store)
+            testDispatcher.scheduler.advanceUntilIdle()
+            viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+            testDispatcher.scheduler.advanceUntilIdle()
+            assertEquals(2, userCalls)
+            assertEquals("new-token", store.session?.accessToken)
+            assertEquals("new-refresh", store.session?.refreshTokenId)
+            assertEquals(12, viewModel.uiState.value.session?.user?.teamId)
+        }
+    }
+
+    @Test
+    fun delayedTeamLookupCannotRestoreSessionAfterLogout() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        var userCalls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            when {
+                request.url.encodedPath.endsWith("/auth/refresh") -> respond("""{"access_token":"new-token","expires_in":7200}""", HttpStatusCode.OK, jsonHeaders)
+                request.url.encodedPath.endsWith("/auth/logout") -> respond("", HttpStatusCode.NoContent)
+                else -> {
+                    userCalls++
+                    if (userCalls > 1) gate.await()
+                    respond("""{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎","team_id":12}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+        testDispatcher.scheduler.runCurrent()
+        viewModel.logout()
+        testDispatcher.scheduler.runCurrent()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+    }
+
+    // ---- restoreSession 正常系 ----
+
+    private val deletedBody = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"削除済み"}}"""
+
+    private val meBody = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}"""
+    private val deactivatedBody = """{"error":{"code":"USER_DEACTIVATED","message":"このアカウントは無効化されています"}}"""
+
+    @Test
+    fun sessionRestorationWaitsForLocalStorageButNotForNetwork() = runTest(testDispatcher) {
+        val storageGate = CompletableDeferred<Unit>()
+        val networkGate = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession).apply {
+            beforeLoad = { storageGate.await() }
+        }
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient {
+                networkGate.await()
+                respond("""{"user":{"id":"6","display_name":"更新後"}}""", HttpStatusCode.OK, jsonHeaders)
+            }),
+            store = store,
+        )
+        assertTrue(viewModel.uiState.value.isRestoringSession)
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.uiState.value.isRestoringSession)
+        assertNull(viewModel.uiState.value.session)
+        storageGate.complete(Unit)
+        testDispatcher.scheduler.runCurrent()
+        assertFalse(viewModel.uiState.value.isRestoringSession)
+        assertEquals(storedSession, viewModel.uiState.value.session)
+        networkGate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun storageFailureDoesNotLeaveTheStartupScreenStuck() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage().apply { beforeLoad = { error("storage failed") } }
+        val viewModel = buildViewModel(okApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isRestoringSession)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(AUTH_FAILED_MESSAGE, viewModel.uiState.value.error)
+    }
+
     // ---- restoreSession 正常系 ----
 
     @Test
@@ -56,6 +573,7 @@ class AuthViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(false, state.isLoading)
+        assertFalse(state.isRestoringSession)
         assertNull(state.session)
         assertNull(state.pendingAuth)
         assertNull(state.error)
@@ -140,6 +658,175 @@ class AuthViewModelTest {
         assertEquals("Logged in", state.message)
         assertEquals("new-access-token", store.session?.accessToken)
         assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun showsStoredSessionBeforeTheStartupRequestCompletes() = runTest(testDispatcher) {
+        val finishMe = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient {
+                finishMe.await()
+                respond("""{"user":{"id":"6","display_name":"更新後"}}""", HttpStatusCode.OK, jsonHeaders)
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.runCurrent()
+
+        assertEquals(storedSession, viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(storedSession.accessToken, SessionTokenHolder.accessToken)
+
+        finishMe.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.uiState.value.session?.user?.displayName)
+    }
+
+    @Test
+    fun startupResponseDoesNotRestoreTheOldTokenAfterResourceRefresh() = runTest(testDispatcher) {
+        val finishMe = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/me")) {
+                    if (request.headers[HttpHeaders.Authorization] == "Bearer new-token") {
+                        // develop-v2側はrefresh後にも所属情報を取得するため、新旧の応答を分ける。
+                        respond("""{"user":{"id":"6","display_name":"更新後"}}""", HttpStatusCode.OK, jsonHeaders)
+                    } else {
+                        finishMe.await()
+                        respond("""{"user":{"id":"6","display_name":"古い取得結果"}}""", HttpStatusCode.OK, jsonHeaders)
+                    }
+                } else {
+                    respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("new-token", viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+        finishMe.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("new-token", store.session?.accessToken)
+        assertEquals("new-token", SessionTokenHolder.accessToken)
+        assertEquals("更新後", viewModel.uiState.value.session?.user?.displayName)
+        assertEquals("更新後", store.session?.user?.displayName)
+    }
+
+    @Test
+    fun concurrentUnauthorizedRequestsShareOneRefreshResult() = runTest(testDispatcher) {
+        var refreshCount = 0
+        val finishRefresh = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                    refreshCount++
+                    finishRefresh.await()
+                    respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = FakeAuthSessionStorage(session = storedSession),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        val first = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        val second = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        finishRefresh.complete(Unit)
+
+        assertEquals("new-token", first.await())
+        assertEquals("new-token", second.await())
+        assertEquals(1, refreshCount)
+        assertNull(viewModel.refreshAfterUnauthorized("other-account-token"))
+    }
+
+    @Test
+    fun logoutDuringStartupDoesNotRestoreTheSession() = runTest(testDispatcher) {
+        val finishMe = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/me")) {
+                    finishMe.await()
+                    respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("{}", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.runCurrent()
+        viewModel.logout()
+        assertNull(SessionTokenHolder.accessToken)
+        testDispatcher.scheduler.runCurrent()
+        finishMe.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+    }
+
+    @Test
+    fun cancelingTheRequestDoesNotCancelTheSharedRefresh() = runTest(testDispatcher) {
+        val finishRefresh = CompletableDeferred<Unit>()
+        var refreshCount = 0
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                    refreshCount++
+                    finishRefresh.await()
+                    respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        val closedScreen = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        closedScreen.cancel()
+        val otherScreen = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        finishRefresh.complete(Unit)
+
+        assertEquals("new-token", otherScreen.await())
+        assertEquals(1, refreshCount)
+        assertEquals("new-token", store.session?.accessToken)
+    }
+
+    @Test
+    fun logoutDuringRefreshDoesNotSaveOrReturnTheNewToken() = runTest(testDispatcher) {
+        val finishRefresh = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(mockClient { request ->
+                when {
+                    request.url.encodedPath.endsWith("/auth/refresh") -> {
+                        finishRefresh.await()
+                        respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
+                    }
+                    request.url.encodedPath.endsWith("/auth/me") ->
+                        respond("""{"user":{"id":"6"}}""", HttpStatusCode.OK, jsonHeaders)
+                    else -> respond("{}", HttpStatusCode.OK, jsonHeaders)
+                }
+            }),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        val request = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        viewModel.logout()
+        testDispatcher.scheduler.runCurrent()
+        finishRefresh.complete(Unit)
+
+        assertNull(request.await())
+        assertNull(store.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNull(viewModel.uiState.value.session)
     }
 
     // ---- restoreSession 異常系 ----
@@ -435,6 +1122,28 @@ class AuthViewModelTest {
     // ---- handleCallbackUrl 正常系 ----
 
     @Test
+    fun loginDoesNotPersistNewSessionWhenPreviousUsersCacheCannotBeDeleted() = runTest(testDispatcher) {
+        val pending = PendingAuth("state-abc", "verifier-123")
+        val store = FakeAuthSessionStorage(pendingAuth = pending)
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String) = Unit
+            override suspend fun clear(): Unit = error("前ユーザーのキャッシュを削除できません")
+        })
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            respond(content = sessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertNotNull(viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
     fun handleCallbackUrlExchangesCodeAndStoresSession() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
         val viewModel = buildViewModel(
@@ -644,6 +1353,34 @@ class AuthViewModelTest {
     }
 
     @Test
+    fun resourceRefreshFailureKeepsSessionAndCacheUntilExpirationIsConfirmed() = runTest(testDispatcher) {
+        for (serverError in listOf(false, true)) {
+            val store = FakeAuthSessionStorage(session = storedSession)
+            val cache = LocalCache(InMemoryKeyValueStore())
+            cache.save("some_cached_key", "cached-value")
+            val viewModel = buildViewModel(
+                api = AuthApi(mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/me")) {
+                        respond("""{"user":{"id":"6","display_name":"テスト太郎"}}""", HttpStatusCode.OK, jsonHeaders)
+                    } else {
+                        if (!serverError) error("通信のタイムアウト")
+                        respond("""{"error":{"code":"AUTH_REFRESH_UNAVAILABLE"}}""", HttpStatusCode.ServiceUnavailable, jsonHeaders)
+                    }
+                }),
+                store = store,
+                cache = cache,
+            )
+            testDispatcher.scheduler.advanceUntilIdle()
+            assertNull(viewModel.refreshAfterUnauthorized(storedSession.accessToken))
+            assertNotNull(viewModel.uiState.value.session)
+            assertNotNull(store.session)
+            assertEquals(storedSession.accessToken, SessionTokenHolder.accessToken)
+            assertEquals("cached-value", cache.load<String>("some_cached_key"))
+            assertNull(viewModel.uiState.value.error)
+        }
+    }
+
+    @Test
     fun resourceUnauthorizedClearsSessionOnlyWhenRefreshIsRejected() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage(session = storedSession)
         val cache = LocalCache(InMemoryKeyValueStore())
@@ -670,6 +1407,8 @@ class AuthViewModelTest {
             cache = cache,
         )
         testDispatcher.scheduler.advanceUntilIdle()
+        val pending = PendingAuth("state-abc", "verifier-123")
+        store.pendingAuth = pending
 
         viewModel.refreshAfterUnauthorized(storedSession.accessToken)
         testDispatcher.scheduler.advanceUntilIdle()
@@ -677,7 +1416,53 @@ class AuthViewModelTest {
         assertNull(viewModel.uiState.value.session)
         assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
         assertNull(store.session)
+        assertNull(store.pendingAuth)
         assertNull(cache.load<String>("some_cached_key"))
+    }
+
+    @Test
+    fun staleRefreshDoesNotClearPendingAuthCreatedAfterRefreshStarted() = runTest(testDispatcher) {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val finishRefresh = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val pendingAtRefreshStart = PendingAuth("state-old", "verifier-old")
+        val pendingAfterRefreshStart = PendingAuth("state-new", "verifier-new")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                        refreshStarted.complete(Unit)
+                        finishRefresh.await()
+                        respond(
+                            content = """{"error":{"message":"refresh token revoked"}}""",
+                            status = HttpStatusCode.Unauthorized,
+                            headers = jsonHeaders,
+                        )
+                    } else {
+                        respond(
+                            content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        store.pendingAuth = pendingAtRefreshStart
+
+        val refresh = async { viewModel.refreshAfterUnauthorized(storedSession.accessToken) }
+        testDispatcher.scheduler.runCurrent()
+        refreshStarted.await()
+
+        store.pendingAuth = pendingAfterRefreshStart
+        finishRefresh.complete(Unit)
+        refresh.await()
+
+        assertNull(store.session)
+        assertEquals(pendingAfterRefreshStart, store.pendingAuth)
+        assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
     }
 
     @Test
@@ -709,14 +1494,17 @@ class AuthViewModelTest {
             nowMillis = { 1_000L },
         )
         testDispatcher.scheduler.advanceUntilIdle()
+        val pending = PendingAuth("state-abc", "verifier-123")
+        store.pendingAuth = pending
 
         viewModel.refreshAfterUnauthorized(storedSession.accessToken)
         viewModel.refreshAfterUnauthorized("refreshed-1")
         viewModel.refreshAfterUnauthorized("refreshed-2")
 
         assertEquals(2, refreshCount)
-        assertNull(viewModel.uiState.value.session)
-        assertEquals(AUTH_EXPIRED_MESSAGE, viewModel.uiState.value.error)
+        assertEquals("refreshed-2", viewModel.uiState.value.session?.accessToken)
+        assertNull(viewModel.uiState.value.error)
+        assertNull(store.pendingAuth)
     }
 
     // ---- logout ----
@@ -795,6 +1583,59 @@ class AuthViewModelTest {
         assertEquals("Logged out", state.message)
         assertNull(store.session)
         assertNull(cache.load<String>("some_cached_key"))
+    }
+
+    @Test
+    fun staleLogoutKeepsNewerSessionAndCache() = runTest(testDispatcher) {
+        var meRequests = 0
+        val remoteLogoutStarted = CompletableDeferred<Unit>()
+        val finishRemoteLogout = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("account_cache", "user-a-data")
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient { request ->
+                    if (request.url.encodedPath.endsWith("/auth/logout")) {
+                        remoteLogoutStarted.complete(Unit)
+                        finishRemoteLogout.await()
+                        respond(content = "", status = HttpStatusCode.NoContent)
+                    } else {
+                        meRequests++
+                        respond(
+                            content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                            status = HttpStatusCode.OK,
+                            headers = jsonHeaders,
+                        )
+                    }
+                },
+            ),
+            store = store,
+            cache = cache,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(remoteLogoutStarted.isCompleted)
+
+        val userB = storedSession.copy(
+            accessToken = "access-b",
+            refreshTokenId = "refresh-b",
+            user = storedSession.user.copy(id = "user-b", email = "user-b@example.com"),
+        )
+        store.session = userB
+        cache.save("account_cache", "user-b-data")
+        finishRemoteLogout.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(userB, store.session)
+        assertEquals(userB, viewModel.uiState.value.session)
+        assertEquals("user-b-data", cache.load<String>("account_cache"))
+        val previousChecks = meRequests
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(previousChecks + 1, meRequests)
     }
 
     @Test
@@ -889,6 +1730,74 @@ class AuthViewModelTest {
         assertEquals("Logged out", state.message)
     }
 
+    @Test
+    fun logoutWithoutSessionDoesNotTouchPushLifecycle() = runTest(testDispatcher) {
+        val events = mutableListOf<String>()
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(
+            api = failingApi(),
+            store = store,
+            pushTokenLifecycle = RecordingPushTokenLifecycle(events),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(events.isEmpty())
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+    }
+
+    @Test
+    fun logoutStopsAndUnregistersPushBeforeServerLogoutAndKeepsLocalCleanupOnFailure() =
+        runTest(testDispatcher) {
+            val events = mutableListOf<String>()
+            val store = FakeAuthSessionStorage(session = storedSession)
+            val cache = LocalCache(InMemoryKeyValueStore())
+            val pushHandler = RecordingPushTokenLifecycle(
+                events = events,
+                logoutFailure = IllegalStateException("backend unavailable"),
+                onComplete = {
+                    events += if (store.session == null && store.pendingAuth == null) {
+                        "complete-after-auth-cleanup"
+                    } else {
+                        "complete-before-auth-cleanup"
+                    }
+                },
+            )
+            cache.save("some_cached_key", "cached-value")
+            val viewModel = buildViewModel(
+                api = AuthApi(
+                    mockClient { request ->
+                        if (request.url.encodedPath.endsWith("/auth/logout")) {
+                            events += "server-logout"
+                            respond(content = "", status = HttpStatusCode.NoContent)
+                        } else {
+                            respond(
+                                content = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}""",
+                                status = HttpStatusCode.OK,
+                                headers = jsonHeaders,
+                            )
+                        }
+                    },
+                ),
+                store = store,
+                cache = cache,
+                pushTokenLifecycle = pushHandler,
+            )
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            viewModel.logout()
+            assertEquals(listOf("stop"), events)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(listOf("stop", "push-cleanup", "server-logout", "complete", "complete-after-auth-cleanup"), events)
+            assertNull(viewModel.uiState.value.session)
+            assertEquals("Logged out", viewModel.uiState.value.message)
+            assertNull(store.session)
+            assertNull(cache.load<String>("some_cached_key"))
+        }
     private fun buildViewModel(
         api: AuthApi,
         store: FakeAuthSessionStorage,
@@ -896,6 +1805,8 @@ class AuthViewModelTest {
         devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
         nowMillis: () -> Long = { 1_000L },
+        // 単体テストではOSの共有状態や別Dispatcherの通知処理を呼び出さない。
+        pushTokenLifecycle: PushTokenLifecycle = RecordingPushTokenLifecycle(mutableListOf()),
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
@@ -903,6 +1814,7 @@ class AuthViewModelTest {
         devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
         nowMillis = nowMillis,
+        pushTokenLifecycle = pushTokenLifecycle,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })
@@ -927,6 +1839,37 @@ class AuthViewModelTest {
         }
     }
 
+    private class RecordingPushTokenLifecycle(
+        private val events: MutableList<String>,
+        private val logoutFailure: Throwable? = null,
+        private val onComplete: () -> Unit = {},
+    ) : PushTokenLifecycle {
+        override fun updateSession(session: AuthSession?) = Unit
+
+        override fun onTokenRefreshed(fcmToken: String) = Unit
+
+        override fun completeLogout(session: AuthSession) {
+            events += "complete"
+            onComplete()
+        }
+
+        override fun beginLogout(session: AuthSession) {
+            events += "stop"
+        }
+
+        override suspend fun logout(
+            session: AuthSession,
+            remoteLogout: suspend (String?) -> Unit,
+        ) {
+            events += "push-cleanup"
+            try {
+                logoutFailure?.let { throw it }
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+            }
+            remoteLogout("fcm-token")
+        }
+    }
     private class FakeAuthSessionStorage(
         var session: AuthSession? = null,
         var pendingAuth: PendingAuth? = null,
@@ -937,19 +1880,30 @@ class AuthViewModelTest {
         var clearPendingAuthCalls = 0
             private set
 
-        override suspend fun load(): AuthSession? = session
+        var beforeLoad: suspend () -> Unit = {}
+        var beforeSave: suspend () -> Unit = {}
+        var beforeClear: suspend () -> Unit = {}
+        var beforePendingLoad: suspend () -> Unit = {}
+
+        override suspend fun load(): AuthSession? {
+            beforeLoad()
+            return session
+        }
 
         override suspend fun save(session: AuthSession) {
+            beforeSave()
             this.session = session
         }
 
         override suspend fun clear(): Boolean {
+            beforeClear()
             if (clearFails) return false
             session = null
             return true
         }
 
         override suspend fun loadPendingAuth(): PendingAuth? {
+            beforePendingLoad()
             if (emptyPendingLoads > 0) {
                 emptyPendingLoads--
                 return null

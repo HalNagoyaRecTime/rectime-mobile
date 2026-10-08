@@ -1,6 +1,10 @@
 package com.rectime.mobile.core.cache
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -9,12 +13,96 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.fail
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CachedFetchTest {
     @BeforeTest
     fun resetSharedState() {
         // CacheGenerationはプロセス全体で共有されるため、テスト間で値が
         // 漏れないようリセットする。
         CacheGeneration.resetForTest()
+    }
+
+    @Test
+    fun cacheFirstPublishesSavedValueBeforeNetworkCompletes() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val previews = mutableListOf<String>()
+        var saved: String? = null
+        val fetch = async {
+            fetchWithCacheFirst(
+                fetchLive = {
+                    gate.await()
+                    "new"
+                },
+                loadCache = { "saved" },
+                saveCache = { saved = it },
+                onCached = { previews += it },
+            )
+        }
+        runCurrent()
+        assertEquals(listOf("saved"), previews)
+        assertFalse(fetch.isCompleted)
+        gate.complete(Unit)
+        assertEquals(CachedFetchResult.Fresh("new"), fetch.await())
+        assertEquals("new", saved)
+    }
+
+    @Test
+    fun cacheFirstPreservesSavedValueOnTimeout() = runTest {
+        val error = IllegalStateException("timeout")
+        val result = fetchWithCacheFirst(
+            fetchLive = { throw error },
+            loadCache = { emptyList<String>() },
+            saveCache = { fail("Should not save failed fetch") },
+            onCached = { assertEquals(emptyList(), it) },
+        )
+        assertEquals(CachedFetchResult.Cached(emptyList(), error), result)
+    }
+
+    @Test
+    fun cacheFirstDoesNotPublishOrFetchAfterGenerationChangesDuringCacheRead() = runTest {
+        val result = fetchWithCacheFirst(
+            fetchLive = { fail("Old session must not fetch") },
+            loadCache = {
+                CacheGeneration.bump()
+                "old"
+            },
+            saveCache = { fail("Old session must not save") },
+            onCached = { fail("Old session must not display") },
+        )
+        assertIs<CachedFetchResult.Failed>(result)
+    }
+
+    @Test
+    fun cacheFirstDoesNotSaveLateResponseAfterLogout() = runTest {
+        val result = fetchWithCacheFirst(
+            fetchLive = {
+                CacheGeneration.bump()
+                "old"
+            },
+            loadCache = { "saved" },
+            saveCache = { fail("Old session must not save") },
+            onCached = {},
+        )
+        assertIs<CachedFetchResult.Failed>(result)
+    }
+
+    @Test
+    fun publicationGuardRejectsResponseAfterAdditionalWait() = runTest {
+        val request = CacheRequestGeneration()
+        val response = CachedFetchResult.Fresh("old")
+        CacheGeneration.bump()
+        assertIs<CachedFetchResult.Failed>(request.validate(response))
+    }
+
+    @Test
+    fun cacheReadFailureStillAllowsLiveFetch() = runTest {
+        val result = fetchWithCacheFirst(
+            fetchLive = { "new" },
+            loadCache = { error("disk unavailable") },
+            saveCache = {},
+            onCached = { fail("There is no preview") },
+        )
+        assertEquals(CachedFetchResult.Fresh("new"), result)
     }
 
     @Test

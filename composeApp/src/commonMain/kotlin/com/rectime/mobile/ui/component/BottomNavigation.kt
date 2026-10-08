@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,7 @@ import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.feature.ranking.RankingScreen
+import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.DrawableResource
@@ -77,8 +80,11 @@ private val NavItemContentMinWidth = 88.dp
 private val NavItemContentMaxWidth = 160.dp
 
 private val BarOuterMarginHorizontal = 16.dp
-private val BarOuterMarginVertical = 12.dp
+private val BarOuterMarginTop = 12.dp
 private val BarShadowElevation = 6.dp
+
+internal val LocalBottomNavigationBottomMargin = staticCompositionLocalOf { 12.dp }
+internal val LocalBottomNavigationSafeAreaOverlap = staticCompositionLocalOf { 0.dp }
 
 private const val IndicatorSpringDampingRatio = 0.8f
 private const val IndicatorSpringStiffness = 380f
@@ -112,6 +118,7 @@ fun BottomNavigationBar(
     session: AuthSession,
     onLogout: () -> Unit,
     hasUnreadNotifications: Boolean,
+    notificationPermissionStartup: NotificationPermissionStartup?,
     modifier: Modifier = Modifier,
 ) {
     val items = listOf(
@@ -135,7 +142,11 @@ fun BottomNavigationBar(
         showBadge = hasUnreadNotifications,
     ),
     NavigationItemConfig(
-        SettingsScreen(session = session, onLogout = onLogout),
+        SettingsScreen(
+            session = session,
+            onLogout = onLogout,
+            notificationPermissionStartup = notificationPermissionStartup,
+        ),
         "設定",
         Res.drawable.ic_settings_outline,
         Res.drawable.ic_settings_fill,
@@ -149,10 +160,13 @@ fun BottomNavigationBar(
     val isCompact = containerSize.width > 0 &&
         containerSize.height.toFloat() / containerSize.width < CompactAspectRatioThreshold
     val scale = if (isCompact) CompactScale else 1f
+    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val safeAreaOverlap = minOf(LocalBottomNavigationSafeAreaOverlap.current, navigationBarInset / 2)
 
     BoxWithConstraints(
         modifier = modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
+            .offset(y = safeAreaOverlap)
             .fillMaxWidth(),
     ) {
         val outerMarginHorizontal = BarOuterMarginHorizontal * scale
@@ -163,7 +177,12 @@ fun BottomNavigationBar(
 
         Box(
             modifier = Modifier
-                .padding(horizontal = outerMarginHorizontal, vertical = BarOuterMarginVertical * scale)
+                .padding(
+                    start = outerMarginHorizontal,
+                    top = BarOuterMarginTop * scale,
+                    end = outerMarginHorizontal,
+                    bottom = LocalBottomNavigationBottomMargin.current * scale,
+                )
                 .fillMaxWidth(),
         ) {
             // 半透明背景の内側に影が透けて二重に暗く見えるのを防ぎたい

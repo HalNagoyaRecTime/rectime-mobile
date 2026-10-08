@@ -1,5 +1,7 @@
 package com.rectime.mobile.core.cache
 
+import com.rectime.mobile.core.network.HttpStatusException
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 
 sealed class CachedFetchResult<out T> {
@@ -16,6 +18,49 @@ sealed class CachedFetchResult<out T> {
 // 呼び出し元(ViewModel)に渡してしまうと、書き込みだけ止めても画面に表示され
 // てしまうため、この関数自体の結果としてFailed扱いにする。
 private class StaleCacheGenerationException : Exception("キャッシュ世代が変化したため、この結果は破棄します")
+
+// 通信後にアニメーションや関連情報の取得を待つ場合も、画面への反映直前にセッションを確認する。
+internal class CacheRequestGeneration {
+    private val generation = CacheGeneration.value
+    val isCurrent: Boolean get() = generation == CacheGeneration.value
+
+    fun <T> validate(result: CachedFetchResult<T>): CachedFetchResult<T> =
+        if (isCurrent) result else CachedFetchResult.Failed(StaleCacheGenerationException())
+}
+
+/** 同じログイン中の通信失敗では表示を維持する。失効の判断は共通の認証管理に任せる。 */
+internal fun CacheRequestGeneration.canRetainDisplayedContent(
+    error: Exception,
+    contentSession: CacheRequestGeneration,
+): Boolean = isCurrent && contentSession.isCurrent && !error.invalidatesDisplayedContent()
+
+/** 閲覧拒否・削除が確認できた内容は、通信失敗時の代替表示に使わない。 */
+internal fun Exception.invalidatesDisplayedContent(): Boolean =
+    this is HttpStatusException && (
+        status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
+            code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND")
+        )
+
+// 保存済みの内容を先に表示し、既存の通信失敗・セッション変更のガードを使って更新する。
+suspend fun <T> fetchWithCacheFirst(
+    fetchLive: suspend () -> T,
+    loadCache: suspend () -> T?,
+    saveCache: suspend (T) -> Unit,
+    onCached: suspend (T) -> Unit,
+): CachedFetchResult<T> {
+    val request = CacheRequestGeneration()
+    val cached = try {
+        loadCache()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+    if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
+    if (cached != null) onCached(cached)
+    if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
+    return request.validate(fetchWithCacheFallback(fetchLive, { cached }, saveCache))
+}
 
 suspend fun <T> fetchWithCacheFallback(
     fetchLive: suspend () -> T,

@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.network.MyEventsApi
 import com.rectime.mobile.core.network.HttpStatusException
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -142,7 +143,7 @@ class NotificationApiTest {
         val page = api.getNotifications()
 
         assertEquals(
-            "https://api.example.com/api/v1/me/notifications?limit=100&offset=0",
+            "https://api.example.com/api/v1/me/notifications?limit=20&offset=0",
             requireNotNull(capturedRequest).url.toString(),
         )
         assertTrue(page.notifications.isEmpty())
@@ -239,7 +240,9 @@ class NotificationApiTest {
                   "related_event": {
                     "event_id": 7,
                     "event_name": "玉入れ",
-                    "venue": "体育館",
+                    "venues": [
+                      {"venue_id": 1, "venue_name": "体育館"}
+                    ],
                     "start_time": "0915",
                     "end_time": "0945"
                   }

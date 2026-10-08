@@ -5,7 +5,6 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarHostState
@@ -28,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.LocalUserProfile
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.theme.AppTheme
@@ -77,14 +77,15 @@ object RankingScreen : Screen {
             }
         }
 
-        LaunchedEffect(uiState.rankingItems) {
+        LaunchedEffect(uiState.rankingItems, uiState.isOffline) {
             if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
                 val myTeamIndex = uiState.rankingItems.indexOfFirst { it.isMyTeam }
                 if (myTeamIndex >= 0) {
                     lazyListState.scrollToItem(index = 0)
                     delay(300.milliseconds)
 
-                    lazyListState.animateScrollToItem(index = (myTeamIndex - 4).coerceAtLeast(0))
+                    val bannerCount = if (uiState.isOffline) 1 else 0
+                    lazyListState.animateScrollToItem(index = (myTeamIndex - 4).coerceAtLeast(0) + bannerCount)
                     // 所属チーム情報がランキングより遅れて届いた場合に備え、対象行が
                     // 見つかった時だけ完了扱いにする。見つからない間は次回の更新で
                     // 再度スクロールを試みる。
@@ -95,6 +96,7 @@ object RankingScreen : Screen {
 
         RootScreenScaffold(
             title = "ランキング",
+            horizontalPadding = false,
             lazyListState = lazyListState,
             snackbarHostState = snackbarHostState,
             onTrailingClick = {
@@ -102,9 +104,7 @@ object RankingScreen : Screen {
             },
             trailing = {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        color = AppTheme.colors.textPrimary,
-                        strokeWidth = 2.dp,
+                    AppLoadingIndicator(
                         modifier = Modifier.size(18.dp),
                     )
                 } else {
@@ -118,6 +118,15 @@ object RankingScreen : Screen {
             },
         ) {
             when {
+                uiState.isLoading && !hasRankingItems -> item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        AppLoadingIndicator()
+                    }
+                }
+
                 uiState.error != null && !hasRankingItems -> item {
                     StatusMessage(
                         message = uiState.error.orEmpty(),

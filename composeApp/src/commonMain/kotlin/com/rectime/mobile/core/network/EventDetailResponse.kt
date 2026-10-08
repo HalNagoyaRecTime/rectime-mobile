@@ -10,21 +10,23 @@ data class EventDetailResponse(
     val eventId: Int,
     @SerialName("event_name")
     val eventName: String,
-    @SerialName("venue")
-    val venue: String,
+    @SerialName("venues")
+    val venues: List<EventVenueResponse>,
     @SerialName("start_time")
     val startTime: String,
     @SerialName("end_time")
     val endTime: String,
     @SerialName("rule_text")
     val ruleText: String?,
+    @SerialName("updated_at")
+    val updatedAt: String? = null,
 )
 
 fun EventDetailResponse.toModel(): EventDetail {
     return EventDetail(
         eventId = eventId,
         eventName = eventName,
-        venue = venue,
+        venues = venues.map { it.toModel() },
         startTime = startTime,
         endTime = endTime,
         ruleText = ruleText,

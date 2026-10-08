@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rectime.mobile.core.config.appDisplayName
+import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.ui.component.AppLogoMark
 import com.rectime.mobile.ui.component.ProductionCredits
@@ -46,7 +48,10 @@ fun AuthGate(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val session = state.session
 
-    if (session == null) {
+    if (state.isRestoringSession) {
+        // 端末内の復元が終わるまでログイン画面を出さない。通信の完了は待たない。
+        Box(Modifier.fillMaxSize().background(AppTheme.colors.commonBackground))
+    } else if (session == null) {
         AuthLoginScreen(
             state = state,
             onLogin = viewModel::startLogin,
@@ -91,7 +96,7 @@ private fun AuthLoginScreen(
             }
         }
 
-        LegalDocumentLinks()
+        LegalDocumentLinks(openUrl = ::openExternalUrl)
 
         Spacer(modifier = Modifier.height(AppTheme.spacing.md))
 
@@ -111,7 +116,7 @@ private fun AppLogoSection(modifier: Modifier = Modifier) {
         AppLogoMark()
 
         Text(
-            text = "RE:CREATION",
+            text = appDisplayName,
             modifier = Modifier.offset(y=(-20).dp),
             fontSize = 34.sp,
             fontWeight = FontWeight.Black,

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -25,11 +24,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,8 +45,10 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.EventDetail
 import com.rectime.mobile.core.model.Gathering
+import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.auth.LocalUserProfile
+import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.MapModal
 import com.rectime.mobile.ui.component.PushScreenScaffold
@@ -85,6 +90,9 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         }
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
+        var titleBandHeightPx by remember { mutableIntStateOf(0) }
+        val titleBandColor = AppTheme.colors.themeColorSecond
+        val bodyBackgroundColor = AppTheme.colors.commonBackground
 
         Box(modifier = Modifier.fillMaxSize()) {
             PushScreenScaffold(
@@ -93,6 +101,21 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                 horizontalPadding = false,
                 contentTopPadding = false,
                 headerEdgeFade = false,
+                contentBackground = {
+                    if (uiState.eventDetail != null && uiState.error == null) {
+                        // 画面の割合ではなく、実際のタイトル帯の高さで背面の色を分ける。
+                        Box(
+                            Modifier.fillMaxSize()
+                                .background(bodyBackgroundColor)
+                                .drawBehind {
+                                    drawRect(
+                                        color = titleBandColor,
+                                        size = Size(size.width, titleBandHeightPx.toFloat().coerceAtMost(size.height)),
+                                    )
+                                },
+                        )
+                    }
+                },
             ) {
                 item {
                     val error = uiState.error
@@ -106,7 +129,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                     .padding(top = headerTitleBarHeight() + 32.dp, bottom = 32.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                CircularProgressIndicator()
+                                AppLoadingIndicator()
                             }
                         }
 
@@ -129,6 +152,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                 gatherings = uiState.gatherings,
                                 attendingGatheringId = uiState.attendingGatheringId,
                                 onOpenMap = { isMapVisible = true },
+                                onTitleBandHeightChanged = { titleBandHeightPx = it },
                             )
                         }
                     }
@@ -148,9 +172,12 @@ private fun EventDetailContent(
     gatherings: List<Gathering>,
     attendingGatheringId: Int?,
     onOpenMap: () -> Unit,
+    onTitleBandHeightChanged: (Int) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        EventTitleBand(title = event.eventName)
+    // 高さを固定せず、本文全体をLazyColumnのスクロール範囲に含める。
+    // 短い本文の下側はScaffoldのcontentBackgroundが描画する。
+    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.commonBackground)) {
+        EventTitleBand(title = event.eventName, onHeightChanged = onTitleBandHeightChanged)
 
         Column(
             modifier = Modifier
@@ -163,7 +190,7 @@ private fun EventDetailContent(
         ) {
             DetailSection(heading = "実施場所", onInfoClick = onOpenMap) {
                 DetailBodyText(
-                    text = event.venue,
+                    text = venueDisplayText(event.venues),
                     modifier = Modifier.padding(start = BodyIndent),
                 )
             }
@@ -198,10 +225,11 @@ private fun EventDetailContent(
 }
 
 @Composable
-private fun EventTitleBand(title: String) {
+private fun EventTitleBand(title: String, onHeightChanged: (Int) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .onSizeChanged { onHeightChanged(it.height) }
             .background(AppTheme.colors.themeColorSecond)
             .padding(
                 start = AppTheme.layout.screenHorizontalPadding,

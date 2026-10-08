@@ -2,7 +2,11 @@ package com.rectime.mobile.feature.ranking
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.canRetainDisplayedContent
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFallback
 import com.rectime.mobile.core.config.apiBaseUrl
@@ -33,6 +37,7 @@ class RankingViewModel(
     initialMyTeamId: Int? = null,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
+    private val baseUrl: String = apiBaseUrl,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         RankingUiState(
@@ -47,7 +52,9 @@ class RankingViewModel(
     // updateMyTeamIdで差し替え可能にしている。
     private var myTeamId: Int? = initialMyTeamId
 
+    private var contentSession = CacheRequestGeneration()
     private var fetchJob: Job? = null
+    private var displayedGeneration = CacheGeneration.value
 
     init {
         fetchRankings()
@@ -72,7 +79,22 @@ class RankingViewModel(
         // 更新ボタンの連打で複数の取得が同時に走ると、後から届いた新しい結果を
         // 古い結果が上書きしてしまうため、前回分をキャンセルしてから開始する。
         fetchJob?.cancel()
+        val generationAtStart = CacheGeneration.value
+        if (displayedGeneration != generationAtStart) {
+            _uiState.value = RankingUiState(isLoading = true)
+            displayedGeneration = generationAtStart
+        }
         fetchJob = viewModelScope.launch {
+            // キュー待ち中にログアウトした要求を開始しない。
+            if (generationAtStart != CacheGeneration.value) {
+                _uiState.value = RankingUiState()
+                return@launch
+            }
+            val request = CacheRequestGeneration()
+            if (!contentSession.isCurrent) {
+                _uiState.value = RankingUiState()
+                contentSession = request
+            }
             // 手動更新時に一覧が一瞬空にならないよう、既存のrankingItemsは
             // 保持したままローディング状態にする。isOfflineは今回の結果が
             // 出るまで意味を持たないため、古い表示を引きずらないようリセットする。
@@ -81,7 +103,7 @@ class RankingViewModel(
             try {
                 when (
                     val result = fetchWithCacheFallback(
-                        fetchLive = { fetchAllRankings(httpClient) },
+                        fetchLive = { fetchAllRankings(httpClient, baseUrl) },
                         loadCache = { cache.load<RankingsResponse>(RANKING_CACHE_KEY) },
                         saveCache = { cache.save(RANKING_CACHE_KEY, it) },
                     )
@@ -95,10 +117,10 @@ class RankingViewModel(
                     }
 
                     is CachedFetchResult.Cached -> {
-                        // 削除済み(404)・セッション切れ(401)の古いキャッシュを誤表示しないよう、
+                        // 削除済み(404)・閲覧拒否(403)の古いキャッシュを誤表示しないよう、
                         // オフライン表示では隠さずエラーを優先する。
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status.clearsStaleRankingData()) {
+                        if (result.error.invalidatesDisplayedContent()) {
                             _uiState.value = RankingUiState(
                                 isLoading = false,
                                 error = rankingErrorMessage(status),
@@ -106,10 +128,11 @@ class RankingViewModel(
                         } else {
                             _uiState.value = RankingUiState(
                                 isLoading = false,
-                                rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
+                                rankingItems = _uiState.value.rankingItems.takeIf { it.isNotEmpty() }
+                                    ?: result.value.items.toModelList().toRankingItems(myTeamId),
                                 isOffline = true,
                             )
-                            // 401/404以外の理由でのフォールバックは「オフライン」として
+                            // 通信失敗時のフォールバックは「オフライン」として
                             // 静かに隠れてしまうため、原因を追えるようログには残す。
                             result.error.printStackTrace()
                         }
@@ -118,21 +141,15 @@ class RankingViewModel(
                     is CachedFetchResult.Failed -> {
                         result.error.printStackTrace()
                         val status = (result.error as? HttpStatusException)?.status
-                        if (status.clearsStaleRankingData()) {
-                            // 削除済み・セッション切れは、直前まで表示していた一覧が
-                            // あっても誤表示しないよう明示的に消す。
-                            _uiState.value = RankingUiState(
-                                isLoading = false,
-                                error = rankingErrorMessage(status),
-                            )
-                        } else {
-                            // キャッシュも使えない一時的な通信障害等では、直前まで表示
-                            // していた一覧を消さずに残し、エラーは上位(画面側)で
-                            // 一時的に知らせる。
-                            _uiState.update {
-                                it.copy(isLoading = false, error = rankingErrorMessage(status))
-                            }
+                        if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(result.error, contentSession)) {
+                            _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                            return@launch
                         }
+                        // キャッシュ世代の変更（ログアウト等）もFailedになるため、
+                        // 有効なキャッシュがなければ前セッションの一覧を残さない。
+                        _uiState.value = RankingUiState(
+                            error = rankingErrorMessage(status),
+                        )
                     }
                 }
 
@@ -140,8 +157,10 @@ class RankingViewModel(
                 throw e
             } catch (e: Exception) {
                 e.printStackTrace()
-                _uiState.update {
-                    it.copy(isLoading = false, error = rankingErrorMessage(null))
+                if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(e, contentSession)) {
+                    _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                } else {
+                    _uiState.value = RankingUiState(error = rankingErrorMessage(null))
                 }
             }
         }
@@ -155,12 +174,12 @@ class RankingViewModel(
 
 // バックエンドはlimit/offset省略時、既定件数(50件)しか返さない。チーム数が
 // それを超えても取りこぼさないよう、totalに達するまでページングして全件集める。
-private suspend fun fetchAllRankings(httpClient: HttpClient): RankingsResponse {
+private suspend fun fetchAllRankings(httpClient: HttpClient, baseUrl: String): RankingsResponse {
     val items = mutableListOf<RankingsResponse.Ranking>()
     var offset = 0
 
     do {
-        val response = httpClient.get("$apiBaseUrl/api/v1/ranking") {
+        val response = httpClient.get("${baseUrl.trimEnd('/')}/api/v1/ranking") {
             parameter("limit", RANKING_PAGE_SIZE)
             parameter("offset", offset)
         }
@@ -177,11 +196,9 @@ private suspend fun fetchAllRankings(httpClient: HttpClient): RankingsResponse {
 
 private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status) {
     HttpStatusCode.NotFound -> "ランキング一覧が見つかりません"
-    HttpStatusCode.Unauthorized -> "ログイン情報の有効期限が切れました"
+    HttpStatusCode.Forbidden -> "ランキングを表示する権限がありません"
     else -> "ランキング情報の取得に失敗しました"
 }
 
-// 削除済み(404)・セッション切れ(401)は、キャッシュや直前の表示内容が
+// 削除済み(404)・閲覧拒否(403)は、キャッシュや直前の表示内容が
 // あっても誤表示しないよう一覧を消してエラーを優先する対象。
-private fun HttpStatusCode?.clearsStaleRankingData(): Boolean =
-    this == HttpStatusCode.NotFound || this == HttpStatusCode.Unauthorized

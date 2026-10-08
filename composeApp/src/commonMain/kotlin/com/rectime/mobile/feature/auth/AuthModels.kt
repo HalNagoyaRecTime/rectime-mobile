@@ -10,6 +10,7 @@ data class AuthUser(
     val classRoomName: String? = null,
     val teamId: Int? = null,
     val role: Role? = null,
+    val classCode: String? = null,
 )
 
 data class AuthSession(
@@ -25,6 +26,7 @@ data class PendingAuth(
 )
 
 data class AuthUiState(
+    val isRestoringSession: Boolean = false,
     val isLoading: Boolean = false,
     val session: AuthSession? = null,
     val pendingAuth: PendingAuth? = null,

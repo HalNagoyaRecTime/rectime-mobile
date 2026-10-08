@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.model.EventVenue
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -96,7 +97,7 @@ class NotificationModelsTest {
                 relatedEvent = NotificationRelatedEvent(
                     id = 7,
                     name = "玉入れ",
-                    venue = "体育館",
+                    venues = listOf(EventVenue(venueId = 1, venueName = "体育館")),
                     startTime = "0915",
                     endTime = "0945",
                 ),
@@ -104,6 +105,8 @@ class NotificationModelsTest {
             notification,
         )
     }
+
+
 
     @Test
     fun emptyListResponseIsMappedToEmptyPage() {
@@ -130,7 +133,9 @@ class NotificationModelsTest {
                   "related_event": {
                     "event_id": 7,
                     "event_name": "玉入れ",
-                    "venue": "体育館",
+                    "venues": [
+                      {"venue_id": 1, "venue_name": "体育館"}
+                    ],
                     "start_time": "0915",
                     "end_time": "0945"
                   }

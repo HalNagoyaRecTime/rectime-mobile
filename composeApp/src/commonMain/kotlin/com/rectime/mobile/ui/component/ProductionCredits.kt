@@ -6,7 +6,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
+import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.ui.theme.AppTheme
+
+internal val AppTeamCredit: String
+    get() = "Developed by $appDisplayName App Team"
 
 @Composable
 fun ProductionCredits(
@@ -23,7 +27,7 @@ fun ProductionCredits(
             color = AppTheme.colors.textCopyRight,
         )
         Text(
-            text = "Developed by RE:CREATION Development Team",
+            text = AppTeamCredit,
             fontSize = 12.sp,
             color = AppTheme.colors.textCopyRight,
         )

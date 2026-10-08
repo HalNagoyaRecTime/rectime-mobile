@@ -1,6 +1,6 @@
 package com.rectime.mobile.feature.legal
 
-import com.rectime.mobile.core.config.productionWebOrigin
+import com.rectime.mobile.core.config.publicWebOrigin
 import com.rectime.mobile.core.config.resolvePublicWebUrl
 import com.rectime.mobile.core.platform.openExternalUrl
 import kotlinx.coroutines.CancellationException
@@ -11,7 +11,7 @@ enum class LegalDocument(internal val path: String) {
 }
 
 class LegalDocumentLauncher(
-    private val origin: String = productionWebOrigin,
+    private val origin: String = publicWebOrigin,
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
 ) {
     suspend fun open(document: LegalDocument): Boolean {
