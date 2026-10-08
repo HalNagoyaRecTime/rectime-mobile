@@ -528,7 +528,7 @@ class NotificationDetailViewModelTest {
     private class FakeMyEventsGateway(
         private val idsProvider: suspend () -> Set<Int> = { emptySet() },
     ) : MyEventsGateway {
-        override suspend fun getMyEventIds(): Set<Int> = idsProvider()
+        override suspend fun getMyEvents() = idsProvider().map { com.rectime.mobile.core.network.MyEventParticipation(it, emptyList()) }
     }
 
     // ---- 既読 ----

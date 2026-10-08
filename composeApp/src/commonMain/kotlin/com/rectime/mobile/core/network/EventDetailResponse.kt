@@ -20,7 +20,7 @@ data class EventDetailResponse(
     val ruleText: String?,
     @SerialName("updated_at")
     val updatedAt: String? = null,
-    // 旧キャッシュの欠落と、集合がない最新応答を区別する。
+    // 一覧から復元した本文にはラウンド情報がない。通信応答ではStoreが必須を確認する。
     val rounds: List<EventRoundResponse>? = null,
 )
 

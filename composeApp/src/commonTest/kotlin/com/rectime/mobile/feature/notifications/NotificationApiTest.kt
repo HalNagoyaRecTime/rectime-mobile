@@ -395,6 +395,17 @@ class MyEventsApiTest {
         assertEquals("UNAUTHORIZED", error.code)
     }
 
+    @Test
+    fun getMyEventsRequiresGatheringIdsInsteadOfAdaptingOldApi() = runTest {
+        val client = mockClient {
+            respond("""{"events":[{"event_id":5}]}""", HttpStatusCode.OK, jsonHeaders)
+        }
+        val api = MyEventsApi(client, "https://api.example.com", { "access-token" })
+        try {
+            assertFailsWith<io.ktor.serialization.JsonConvertException> { api.getMyEvents() }
+        } finally { api.close() }
+    }
+
     private fun mockClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
     ): HttpClient = HttpClient(MockEngine) {
@@ -412,8 +423,8 @@ class MyEventsApiTest {
         val myEventsJson = """
             {
               "events": [
-                { "event_id": 5 },
-                { "event_id": 7 }
+                { "event_id": 5, "gathering_ids": [10] },
+                { "event_id": 7, "gathering_ids": [] }
               ]
             }
         """.trimIndent()

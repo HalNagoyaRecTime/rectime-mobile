@@ -59,7 +59,6 @@ class EventScheduleStoreTest {
         val gate = CompletableDeferred<Unit>()
         var count = 0
         val gateway = object : MyEventsGateway {
-            override suspend fun getMyEventIds() = setOf(1)
             override suspend fun getMyEvents(): List<MyEventParticipation> {
                 count++; gate.await(); return listOf(MyEventParticipation(1, listOf(10, 30)))
             }
@@ -80,7 +79,7 @@ class EventScheduleStoreTest {
         val gate = CompletableDeferred<Unit>()
         val cache = LocalCache(MemoryStore())
         val store = EventScheduleStore(cache, client { detailBody }, object : MyEventsGateway {
-            override suspend fun getMyEventIds(): Set<Int> { gate.await(); return setOf(1) }
+            override suspend fun getMyEvents(): List<MyEventParticipation> { gate.await(); return listOf(MyEventParticipation(1, listOf(10))) }
         })
         try {
             val pending = async { runCatching { store.refreshParticipation() } }
@@ -98,7 +97,7 @@ class EventScheduleStoreTest {
             override suspend fun clear() = Unit
         })
         val store = EventScheduleStore(cache, client { detailBody }, object : MyEventsGateway {
-            override suspend fun getMyEventIds() = setOf(1)
+            override suspend fun getMyEvents() = listOf(MyEventParticipation(1, listOf(10)))
         })
         try {
             assertEquals(1, store.refreshDetail(1).eventId)
@@ -126,11 +125,10 @@ class EventScheduleStoreTest {
         var count = 0
         val http = client { count++; detailBody }
         val store = EventScheduleStore(cache, http, object : MyEventsGateway {
-            override suspend fun getMyEventIds() = setOf(1)
             override suspend fun getMyEvents() = listOf(MyEventParticipation(1, listOf(10, 30)))
         })
         try {
-            val vm = EventDetailViewModel(1, currentUserId = 5, httpClient = http, cache = cache, scheduleStore = store)
+            val vm = EventDetailViewModel(1, httpClient = http, cache = cache, scheduleStore = store)
             advanceUntilIdle()
             assertEquals(1, count)
             assertEquals(listOf(10, 30), vm.uiState.value.gatherings.map { it.gatheringId })

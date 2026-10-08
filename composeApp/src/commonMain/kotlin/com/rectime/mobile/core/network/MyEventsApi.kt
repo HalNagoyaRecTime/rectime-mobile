@@ -12,13 +12,12 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// 通知詳細の既存キャッシュと互換性を維持して、スケジュールでも共有する。
+// 通知一覧が使う参加イベントIDを、本人予定から保存する。
 internal const val MY_EVENTS_CACHE_KEY = "notification_my_event_ids_v1"
 
 interface MyEventsGateway {
-    suspend fun getMyEventIds(): Set<Int>
-    suspend fun getMyEvents(): List<MyEventParticipation> =
-        getMyEventIds().map { MyEventParticipation(it) }
+    suspend fun getMyEvents(): List<MyEventParticipation>
+    suspend fun getMyEventIds(): Set<Int> = getMyEvents().map { it.eventId }.toSet()
     fun close() = Unit
 }
 
@@ -28,8 +27,6 @@ class MyEventsApi(
     private val accessTokenProvider: () -> String? = { SessionTokenHolder.accessToken },
 ) : MyEventsGateway {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/me/events"
-
-    override suspend fun getMyEventIds(): Set<Int> = getMyEvents().map { it.eventId }.toSet()
 
     override suspend fun getMyEvents(): List<MyEventParticipation> {
         val response = client.get(endpoint) {
@@ -62,7 +59,6 @@ private data class MyEventsResponse(
 data class MyEventParticipation(
     @SerialName("event_id")
     val eventId: Int,
-    // nullは旧APIが集合IDを返していない状態。空配列の「未参加」と区別する。
     @SerialName("gathering_ids")
-    val gatheringIds: List<Int>? = null,
+    val gatheringIds: List<Int>,
 )
