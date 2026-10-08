@@ -16,9 +16,8 @@ class NotificationDetailVisibilityTest {
     @Test
     fun enteringScreenIsNotFullyVisibleEvenIfItsContentIsLoaded() {
         assertFalse(isNotificationDetailFullyVisible(opened.copy(
-            pushTransition = PushTransitionState(PushTransitionMode.Enter, "detail", 0.9f),
+            pushTransition = PushTransitionState(PushTransitionMode.Enter, "detail"),
         ), screen))
-        assertFalse(isNotificationDetailFullyVisible(opened.copy(isTransitioning = true), screen))
         assertTrue(isNotificationDetailFullyVisible(opened, screen))
     }
 
@@ -32,6 +31,6 @@ class NotificationDetailVisibilityTest {
     @Test
     fun returningGestureDoesNotMarkADetailAsFullyVisible() {
         assertFalse(isNotificationDetailFullyVisible(opened.copy(activeGesture = ActiveGesture.Back), screen))
-        assertFalse(isNotificationDetailFullyVisible(opened.copy(backDragOffsetPx = 20f), screen))
+        assertFalse(isNotificationDetailFullyVisible(opened.copy(pushTransition = PushTransitionState(PushTransitionMode.Return, "detail")), screen))
     }
 }

@@ -136,7 +136,6 @@ kotlin {
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.navigationevent.compose)
         }
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)
