@@ -86,7 +86,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
     override fun Content(navigationController: NavigationController) {
         val currentUserId = LocalUserProfile.current?.id?.toIntOrNull()
         val viewModel = viewModel(key = key) {
-            EventDetailViewModel(eventId = eventId, currentUserId = currentUserId)
+            EventDetailViewModel(eventId = eventId, currentUserId = currentUserId, scheduleStore = EventScheduleStore.shared)
         }
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
