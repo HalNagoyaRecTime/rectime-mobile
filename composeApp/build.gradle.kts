@@ -128,6 +128,8 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.compose.icon.collections.fontawesome)
+            implementation(libs.markdown.core)
+            implementation(libs.markdown.material3)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
             implementation(libs.coil.network.cache.control)

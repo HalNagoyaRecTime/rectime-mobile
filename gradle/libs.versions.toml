@@ -28,7 +28,11 @@ firebaseBom = "34.14.0"
 googleServices = "4.4.4"
 ktor = "3.5.2"
 
+markdown = "0.41.0"
+
 [libraries]
+markdown-core = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "markdown" }
+markdown-material3 = { module = "com.mikepenz:multiplatform-markdown-renderer-m3", version.ref = "markdown" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "androidx-browser" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
