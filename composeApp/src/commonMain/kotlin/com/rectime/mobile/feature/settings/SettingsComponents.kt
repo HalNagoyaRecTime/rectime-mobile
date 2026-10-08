@@ -11,6 +11,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import com.rectime.mobile.ui.component.SheetDragHandle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -168,6 +169,7 @@ internal fun SettingsSeparator() {
 internal fun AppInformationSheet(onDismiss: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        dragHandle = { SheetDragHandle() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = AppTheme.colors.commonBackground,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),

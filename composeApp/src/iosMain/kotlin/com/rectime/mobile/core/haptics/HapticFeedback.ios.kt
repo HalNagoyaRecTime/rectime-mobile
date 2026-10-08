@@ -17,7 +17,7 @@ private class IosAppHapticFeedback : AppHapticFeedback {
     override fun perform(event: AppHapticEvent) {
         val feedback = when (event) {
             AppHapticEvent.RefreshThreshold -> generator
-            AppHapticEvent.PreferenceEnabled, AppHapticEvent.PreferenceDisabled -> preferenceGenerator
+            AppHapticEvent.LogoTap, AppHapticEvent.PreferenceEnabled, AppHapticEvent.PreferenceDisabled -> preferenceGenerator
         }
 
         // 振動を利用できるかどうかはUIKitとOSの設定に任せる。

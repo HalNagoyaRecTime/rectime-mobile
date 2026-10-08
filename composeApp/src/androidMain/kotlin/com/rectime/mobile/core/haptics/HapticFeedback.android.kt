@@ -12,6 +12,7 @@ private class AndroidAppHapticFeedback(
 ) : AppHapticFeedback {
     override fun perform(event: AppHapticEvent) {
         val constant = when (event) {
+            AppHapticEvent.LogoTap -> HapticFeedbackConstants.VIRTUAL_KEY
             AppHapticEvent.RefreshThreshold -> refreshThresholdHapticConstant(Build.VERSION.SDK_INT)
             AppHapticEvent.PreferenceEnabled -> preferenceToggleHapticConstant(true, Build.VERSION.SDK_INT)
             AppHapticEvent.PreferenceDisabled -> preferenceToggleHapticConstant(false, Build.VERSION.SDK_INT)
