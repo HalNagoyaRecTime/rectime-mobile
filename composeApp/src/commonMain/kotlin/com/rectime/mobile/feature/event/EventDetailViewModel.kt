@@ -17,6 +17,7 @@ import com.rectime.mobile.core.network.GatheringResponse
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
+import com.rectime.mobile.core.network.toGatherings
 import com.rectime.mobile.core.network.toModel
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -38,7 +39,11 @@ class EventDetailViewModel(
     private val currentUserId: Int? = null,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
+    scheduleStore: EventScheduleStore? = null,
 ) : ViewModel() {
+
+    private val ownsScheduleStore = scheduleStore == null
+    private val scheduleStore = scheduleStore ?: EventScheduleStore(cache, client = httpClient)
 
     private val contentSession = CacheRequestGeneration()
     private val eventCache = EventCache(cache)
@@ -62,17 +67,13 @@ class EventDetailViewModel(
                 when (
                     val result = fetchWithCacheFirst(
                         fetchLive = {
-                            val response = httpClient.get("$apiBaseUrl/api/v1/events/$eventId")
-                            if (!response.status.isSuccess()) {
-                                throw apiErrorException(response.status, response.bodyAsText())
-                            }
-                            eventCache.saveDetail(response.body<EventDetailResponse>(), cacheRequest)
+                            scheduleStore.refreshDetail(eventId)
                         },
                         loadCache = { eventCache.loadDetail(eventId) },
                         // 統合済みの値を本文表示にも使う。
                         saveCache = {},
                         onCached = { saved ->
-                            val gatherings = fetchGatheringsFromCacheOnly()
+                            val gatherings = saved.toGatherings() ?: fetchGatheringsFromCacheOnly()
                             val attending = loadAttendingGatheringIdFromCache()
                             if (request.isCurrent) {
                                 _uiState.value = EventDetailUiState(
@@ -91,13 +92,13 @@ class EventDetailViewModel(
                         // その結果に応じてisOfflineを立てる。
                         // 集合情報や参加者の取得が遅くても、イベント本文は先に表示する。
                         _uiState.value = _uiState.value.copy(isLoading = false, eventDetail = latest.toModel())
-                        val (gatherings, gatheringIsOffline) = fetchGatherings()
+                        val (gatherings, gatheringIsOffline) = latest.toGatherings()?.let { it to false } ?: fetchGatherings()
                         if (!request.isCurrent) {
                             _uiState.value = EventDetailUiState()
                             return@launch
                         }
                         _uiState.value = _uiState.value.copy(gatherings = gatherings, isOffline = gatheringIsOffline)
-                        val attending = resolveAttendingGatheringId(gatherings, request)
+                        val attending = resolvePersonalGatherings(gatherings, request).firstOrNull()
                         if (!request.isCurrent) {
                             _uiState.value = EventDetailUiState()
                             return@launch
@@ -129,7 +130,7 @@ class EventDetailViewModel(
                             else -> {
                                 // イベント自体が既にオフライン(キャッシュ)なので、gatheringも
                                 // 通信を試みず直接キャッシュから読む(通信タイムアウトの二重待ちを避ける)。
-                                val gatherings = fetchGatheringsFromCacheOnly()
+                                val gatherings = result.value.toGatherings() ?: fetchGatheringsFromCacheOnly()
                                 val attending = loadAttendingGatheringIdFromCache()
                                 val latest = eventCache.reconcileDetail(result.value, cacheRequest)
                                 if (!request.isCurrent) {
@@ -227,6 +228,20 @@ class EventDetailViewModel(
         }
     }
 
+    private suspend fun resolvePersonalGatherings(gatherings: List<Gathering>, request: CacheRequestGeneration): Set<Int> {
+        if (currentUserId == null) return emptySet()
+        val saved = scheduleStore.cachedParticipation()
+        val participation = try {
+            scheduleStore.refreshParticipation()
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { saved }
+        if (!request.isCurrent) return emptySet()
+        val event = participation?.firstOrNull { it.eventId == eventId }
+        // 空の本人一覧は未参加。旧APIの集合ID欠落だけ従来の参加者照合へ戻す。
+        if (participation != null && event == null) return emptySet()
+        event?.gatheringIds?.let { return it.toSet().intersect(gatherings.map { it.gatheringId }.toSet()) }
+        return setOfNotNull(resolveAttendingGatheringId(gatherings, request))
+    }
+
     private suspend fun resolveAttendingGatheringId(gatherings: List<Gathering>, request: CacheRequestGeneration): Int? {
         val userId = currentUserId ?: return null
         if (gatherings.isEmpty()) return null
@@ -273,6 +288,7 @@ class EventDetailViewModel(
     }
 
     private suspend fun loadAttendingGatheringIdFromCache(): Int? {
+        scheduleStore.cachedAttendingGatheringIds(eventId)?.let { return it.firstOrNull() }
         return try {
             cache.load<Int?>(attendingGatheringCacheKey)
         } catch (e: CancellationException) {
@@ -284,6 +300,7 @@ class EventDetailViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        if (ownsScheduleStore) scheduleStore.close()
         httpClient.close()
     }
 }

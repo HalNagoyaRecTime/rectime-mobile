@@ -17,6 +17,8 @@ internal const val MY_EVENTS_CACHE_KEY = "notification_my_event_ids_v1"
 
 interface MyEventsGateway {
     suspend fun getMyEventIds(): Set<Int>
+    suspend fun getMyEvents(): List<MyEventParticipation> =
+        getMyEventIds().map { MyEventParticipation(it) }
     fun close() = Unit
 }
 
@@ -27,7 +29,9 @@ class MyEventsApi(
 ) : MyEventsGateway {
     private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/me/events"
 
-    override suspend fun getMyEventIds(): Set<Int> {
+    override suspend fun getMyEventIds(): Set<Int> = getMyEvents().map { it.eventId }.toSet()
+
+    override suspend fun getMyEvents(): List<MyEventParticipation> {
         val response = client.get(endpoint) {
             header("X-Client-Type", "mobile")
             val accessToken = accessTokenProvider()?.takeIf(String::isNotBlank)
@@ -41,7 +45,7 @@ class MyEventsApi(
         if (response.status.value !in 200..299) {
             throw apiErrorException(response.status, response.bodyAsText())
         }
-        return response.body<MyEventsResponse>().events.map { it.eventId }.toSet()
+        return response.body<MyEventsResponse>().events
     }
 
     override fun close() {
@@ -51,11 +55,14 @@ class MyEventsApi(
 
 @Serializable
 private data class MyEventsResponse(
-    val events: List<MyEventResponse>,
+    val events: List<MyEventParticipation>,
 )
 
 @Serializable
-private data class MyEventResponse(
+data class MyEventParticipation(
     @SerialName("event_id")
     val eventId: Int,
+    // nullは旧APIが集合IDを返していない状態。空配列の「未参加」と区別する。
+    @SerialName("gathering_ids")
+    val gatheringIds: List<Int>? = null,
 )

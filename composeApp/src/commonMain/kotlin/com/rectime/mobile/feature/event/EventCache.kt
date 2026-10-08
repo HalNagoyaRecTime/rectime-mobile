@@ -28,7 +28,7 @@ internal class EventCacheRequest internal constructor(
     internal val generation: CacheRequestGeneration,
 )
 
-/** 一覧と詳細を新旧比較して共有する。集合情報は別に管理する。 */
+/** 一覧と詳細を新旧比較して共有する。詳細のラウンド情報は一覧の更新でも保持する。 */
 @OptIn(ExperimentalTime::class)
 internal class EventCache(private val cache: LocalCache) {
     private val key: Any = if (cache.store is PlatformKeyValueStore) PlatformEventCacheKey else cache.store
@@ -93,7 +93,9 @@ internal class EventCache(private val cache: LocalCache) {
             if (!request.generation.isCurrent) return@withLock detail
             val events = loadOrNull<EventsResponse>("schedule_events_v1")
             val saved = savedDetail(detail.eventId, events)
-            val merged = if (saved != null && keepSaved(saved.updatedAt, detail.updatedAt, detail.eventId, request)) saved else detail
+            val merged = if (saved != null && keepSaved(saved.updatedAt, detail.updatedAt, detail.eventId, request)) {
+                saved.copy(rounds = detail.rounds ?: saved.rounds)
+            } else detail.copy(rounds = detail.rounds ?: saved?.rounds)
             val detailSaved = persist && saveOrIgnore("event_detail_v1_${detail.eventId}", merged, request)
             if (detailSaved) {
                 recordWrite(detail.eventId, detail = true, request)
@@ -111,8 +113,9 @@ internal class EventCache(private val cache: LocalCache) {
         }
 
     private suspend fun savedDetail(eventId: Int, events: EventsResponse?): EventDetailResponse? {
-        val listed = events?.events?.firstOrNull { it.eventId == eventId }?.toDetail()
+        val listEntry = events?.events?.firstOrNull { it.eventId == eventId }?.toDetail()
         val detailed = loadOrNull<EventDetailResponse>("event_detail_v1_$eventId")
+        val listed = listEntry?.copy(rounds = detailed?.rounds)
         if (listed == null) return detailed
         if (detailed == null) return listed
         val comparison = compareTime(detailed.updatedAt, listed.updatedAt)
