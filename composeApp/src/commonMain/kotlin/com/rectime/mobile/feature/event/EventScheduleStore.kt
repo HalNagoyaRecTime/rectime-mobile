@@ -56,7 +56,6 @@ class EventScheduleStore(
         checkSession()
         val request = CacheRequestGeneration()
         val saved = participation ?: loadOrNull<List<MyEventParticipation>>(ParticipationKey)
-            ?: loadOrNull<Set<Int>>(MY_EVENTS_CACHE_KEY)?.map { MyEventParticipation(it) }
         if (!request.isCurrent) return null
         // 保存読み込み中に最新応答が届いた場合はメモリの最新値を優先する。
         if (participation == null) participation = saved
@@ -66,7 +65,7 @@ class EventScheduleStore(
     suspend fun cachedAttendingGatheringIds(eventId: Int): Set<Int>? {
         val saved = cachedParticipation() ?: return null
         val event = saved.firstOrNull { it.eventId == eventId } ?: return emptySet()
-        return event.gatheringIds?.toSet()
+        return event.gatheringIds.toSet()
     }
 
     suspend fun refreshParticipation(): List<MyEventParticipation> = sharedRequest("participation") {
@@ -88,6 +87,7 @@ class EventScheduleStore(
             val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events/$eventId")
             if (!response.status.isSuccess()) throw apiErrorException(response.status, response.bodyAsText())
             val detail = response.body<EventDetailResponse>()
+            checkNotNull(detail.rounds) { "イベント詳細のroundsがありません" }
             if (!request.isCurrent) throw CancellationException("イベントのセッションが変わりました")
             eventCache.saveDetail(detail, cacheRequest)
         }

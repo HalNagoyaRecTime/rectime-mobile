@@ -47,7 +47,6 @@ import com.rectime.mobile.core.model.EventDetail
 import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
-import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.MapModal
@@ -84,9 +83,8 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        val currentUserId = LocalUserProfile.current?.id?.toIntOrNull()
         val viewModel = viewModel(key = key) {
-            EventDetailViewModel(eventId = eventId, currentUserId = currentUserId, scheduleStore = EventScheduleStore.shared)
+            EventDetailViewModel(eventId = eventId, scheduleStore = EventScheduleStore.shared)
         }
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }

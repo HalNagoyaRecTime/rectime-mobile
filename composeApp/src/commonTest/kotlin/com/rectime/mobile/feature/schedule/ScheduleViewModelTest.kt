@@ -1310,7 +1310,7 @@ class ScheduleViewModelTest {
     @Test
     fun cachedParticipationIsVisibleBeforeEitherRequestCompletes() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
-        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        cache.save("event_participation_v1", listOf(com.rectime.mobile.core.network.MyEventParticipation(1, emptyList())))
         cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJsonOf(Triple(1, "0900", "1000"))))
         val gate = CompletableDeferred<Unit>()
         val viewModel = buildViewModel(mockClient { gate.await(); error("offline") }, cache = cache,
@@ -1404,7 +1404,7 @@ class ScheduleViewModelTest {
     )
 
     private fun participationGateway(fetch: suspend () -> Set<Int>) = object : MyEventsGateway {
-        override suspend fun getMyEventIds(): Set<Int> = fetch()
+        override suspend fun getMyEvents() = fetch().map { com.rectime.mobile.core.network.MyEventParticipation(it, emptyList()) }
     }
 
     private fun mockClient(
