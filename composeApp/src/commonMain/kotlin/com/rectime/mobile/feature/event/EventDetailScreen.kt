@@ -65,7 +65,6 @@ private val SectionSpacing = 24.dp
 private val SectionHeadingSpacing = 8.dp
 private val BodyIndent = 8.dp
 private val InfoIconSize = 16.dp
-private val GatheringRoundWidth = 32.dp
 private val GatheringTimeWidth = 60.dp
 private val GatheringBadgeWidth = 44.dp
 private val GatheringRowVerticalPadding = 6.dp
@@ -302,11 +301,20 @@ private fun GatheringList(gatherings: List<Gathering>, attendingGatheringIds: Se
             .clip(RoundedCornerShape(gatheringRowRadius()))
             .background(AppTheme.colors.detailsScreenListBackground),
     ) {
-        gatherings.forEach { gathering ->
-            GatheringRow(
-                gathering = gathering,
-                isAttending = gathering.gatheringId in attendingGatheringIds,
+        gatherings.byRound().forEach { (round, rows) ->
+            Text(
+                text = "第${round}ラウンド",
+                color = AppTheme.colors.textDetailsScreenBody,
+                fontSize = GatheringFontSize,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = GatheringRowHorizontalPadding, top = 12.dp, bottom = 4.dp),
             )
+            rows.forEach { gathering ->
+                GatheringRow(
+                    gathering = gathering,
+                    isAttending = gathering.gatheringId in attendingGatheringIds,
+                )
+            }
         }
     }
 }
@@ -331,14 +339,6 @@ private fun GatheringRow(gathering: Gathering, isAttending: Boolean) {
             ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "${gathering.round}.",
-            color = textColor,
-            fontSize = GatheringFontSize,
-            lineHeight = GatheringLineHeight,
-            fontWeight = fontWeight,
-            modifier = Modifier.width(GatheringRoundWidth),
-        )
         Text(
             text = gathering.displayTime(),
             color = textColor,
