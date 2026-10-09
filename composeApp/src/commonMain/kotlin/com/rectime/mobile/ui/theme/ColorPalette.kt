@@ -83,6 +83,11 @@ data class AppColorTokens(
     val textMapModal: Color,
     val textSettingModalHeader: Color,
     val textSettingModalBody: Color,
+    // ランキング画面
+    val rankingGoldAccent: Color,
+    val rankingSilverAccent: Color,
+    val rankingBronzeAccent: Color,
+    val rankingMyTeamHighlight: Color,
 )
 
 private val defaultLight = AppColorTokens(
@@ -93,7 +98,7 @@ private val defaultLight = AppColorTokens(
     navigationShadow = Color(0x33000000),
     sheetBackground = Color(0xFFFFFFFF),
     sheetHandle = Color(0xFFCED1DA),
-    surfacePrimary = Color(0xFFE0E1E5),
+    surfacePrimary = Color(0xFFFFFFFF),
     surfaceMuted = Color(0xFFECEEFA),
     surfaceAccent = Color(0xFFE0EAFF),
     surfaceAccentStrong = Color(0xFF4169E1),
@@ -136,7 +141,7 @@ private val defaultLight = AppColorTokens(
     textReadNotificationBody = Color(0xFF808080),
     textReadNotificationTime = Color(0xFFb3b3b3),
     readNotificationChevron = Color(0xFF999999),
-    notificationBackground = Color(0xFFf2f2f2),
+    notificationBackground = Color(0xFFFFFFFF),
     //スケジュール画面
     textScheduleTimeBar = Color(0xFF999999),
     textScheduleTimeLine = Color(0xFFb3b3b3),
@@ -152,7 +157,7 @@ private val defaultLight = AppColorTokens(
     userInformationBody = Color(0xFF333333),
     textContactInformation = Color(0xFF666666),
     textCopyRight = Color(0xFF808080),
-    settingBackground = Color(0xFFf2f2f2),
+    settingBackground = Color(0xFFFFFFFF),
     //詳細画面
     textDetailsScreenHeader = Color(0xFF666666),
     textDetailsScreenTitle = Color(0xFF000000),
@@ -160,12 +165,17 @@ private val defaultLight = AppColorTokens(
     textDetailsScreenBody = Color(0xFF333333),
     textRelationEvent = Color(0xFF808080),
     detailsScreenHeaderBackground = Color(0xCCFFFFFF),
-    detailsScreenListBackground = Color(0xFFf2f2f2),
+    detailsScreenListBackground = Color(0xFFFFFFFF),
     //モーダル画面
     modalBackground = Color(0x4D000000),
     textMapModal = Color(0xFF808080),
     textSettingModalHeader = Color(0xFF333333),
     textSettingModalBody = Color(0xFF999999),
+    //ランキング画面
+    rankingGoldAccent = Color(0xFFF2C230),
+    rankingSilverAccent = Color(0xFFA8C5B8),
+    rankingBronzeAccent = Color(0xFFC98A2C),
+    rankingMyTeamHighlight = Color(0x33FF4000),
 )
 
 internal fun appColors(themeId: ThemeId): AppColorTokens = when (themeId) {

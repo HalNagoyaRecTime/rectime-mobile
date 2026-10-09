@@ -28,6 +28,8 @@ class AuthSessionCodecTest {
                 avatarUpdatedAt = "2026-07-31",
                 studentIdNumber = "55024",
                 classRoomName = "1年Aクラス",
+                teamId = 34,
+                classCode = "IH22A",
                 role = Role.Student,
             ),
         )
@@ -36,6 +38,43 @@ class AuthSessionCodecTest {
         val decoded = decodeAuthSession(encoded)
 
         assertEquals(original, decoded)
+    }
+
+    @Test
+    fun numericClassCodeAndTeamIdRemainSeparate() {
+        val original = createTestSession().let { it.copy(user = it.user.copy(classCode = "123", teamId = 34)) }
+        assertEquals(original, decodeAuthSession(encodeAuthSession(original)))
+    }
+
+    @Test
+    fun legacyTwelvePartClassCodeIsRestoredWhenUnambiguous() {
+        val decoded = decodeAuthSession(legacyTwelvePartSession("IH22A"))
+        assertEquals("token123", decoded?.accessToken)
+        assertEquals("IH22A", decoded?.user?.classCode)
+        assertNull(decoded?.user?.teamId)
+    }
+
+    @Test
+    fun ambiguousLegacyTwelvePartValueWaitsForCurrentUserRefresh() {
+        val decoded = decodeAuthSession(legacyTwelvePartSession("34"))
+        assertEquals("token123", decoded?.accessToken)
+        assertEquals(Role.Student, decoded?.user?.role)
+        assertNull(decoded?.user?.classCode)
+        assertNull(decoded?.user?.teamId)
+    }
+
+    @Test
+    fun unknownProfileSchemaIsRejected() {
+        val parts = encodeAuthSession(createTestSession()).split(".").toMutableList()
+        parts[11] = "unknown-profile".encodeToByteArray().toBase64Url()
+        assertNull(decodeAuthSession(parts.joinToString(".")))
+    }
+
+    @Test
+    fun legacyEightPartAvatarIsRestored() {
+        val encoded = listOf("token123", "refresh456", "3600", "6", "e", "f", "https://example.com/a.png", "2026")
+            .joinToString(".") { it.encodeToByteArray().toBase64Url() }
+        assertEquals("https://example.com/a.png", decodeAuthSession(encoded)?.user?.avatarUrl)
     }
 
     @Test
@@ -101,6 +140,23 @@ class AuthSessionCodecTest {
         assertEquals(null, decoded?.user?.classRoomName)
     }
     @Test
+    fun decodeRestoresLegacyElevenPartSessionWithoutTeamId() {
+        val legacyEncoded = listOf(
+            "token123", "refresh456", "3600",
+            "6", "test@example.com", "テスト太郎",
+            "https://example.com/avatar.png", "2026-07-31",
+            "55024", "1年Aクラス", "Student",
+        ).joinToString(".") { it.encodeToByteArray().toBase64Url() }
+
+        val decoded = decodeAuthSession(legacyEncoded)
+
+        assertEquals("6", decoded?.user?.id)
+        assertEquals(Role.Student, decoded?.user?.role)
+        assertEquals("1年Aクラス", decoded?.user?.classRoomName)
+        assertNull(decoded?.user?.teamId)
+    }
+
+    @Test
     fun decodeReturnsNullForUnsupportedPartCount() {
         val sevenParts = listOf("a", "b", "3600", "6", "e", "f", "g")
             .joinToString(".") { it.encodeToByteArray().toBase64Url() }
@@ -164,3 +220,8 @@ private fun createTestSession(
         displayName = "テスト太郎",
     ),
 )
+
+private fun legacyTwelvePartSession(lastValue: String): String = listOf(
+    "token123", "refresh456", "3600", "6", "test@example.com", "テスト太郎",
+    "", "", "55024", "1年Aクラス", "Student", lastValue,
+).joinToString(".") { it.encodeToByteArray().toBase64Url() }

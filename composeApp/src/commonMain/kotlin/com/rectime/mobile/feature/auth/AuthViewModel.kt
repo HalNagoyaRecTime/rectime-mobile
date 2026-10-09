@@ -548,6 +548,7 @@ class AuthViewModel(
                             sessionStore.clearPendingAuth()
                         }
                         fetchPhotoIfDue(refreshed)
+                        updateUserAfterRefresh(refreshed)
                         refreshed.accessToken
                     } else {
                         null
@@ -575,6 +576,38 @@ class AuthViewModel(
                 null
             }
         }
+
+    /** 更新済みトークンを先に保存し、所属情報の取得失敗では巻き戻さない。 */
+    private fun updateUserAfterRefresh(refreshed: AuthSession) {
+        viewModelScope.launch {
+            try {
+                val user = api.currentUser(refreshed.accessToken)
+                sessionTransitionMutex.withLock {
+                    val stored = sessionStore.load()
+                    val current = _uiState.value.session
+                    if (loggingOut || stored?.accessToken != refreshed.accessToken ||
+                        stored.refreshTokenId != refreshed.refreshTokenId ||
+                        current?.accessToken != refreshed.accessToken
+                    ) return@withLock
+                    // 別アカウントへの切替として扱わず、同じ利用者の所属情報を補完する。
+                    if (user.id != refreshed.user.id) return@withLock
+                    val updated = refreshed.copy(user = user)
+                    sessionStore.save(updated)
+                    pushTokenLifecycle.updateSession(updated)
+                    _uiState.update { it.copy(session = updated) }
+                }
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                val rejectionMessage = (error as? AuthApiException)?.let {
+                    accountRejectionMessage(it.statusCode, it.errorCode)
+                }
+                if (rejectionMessage != null) {
+                    handleAccountRejected(refreshed.accessToken, rejectionMessage)
+                }
+                // 一時障害でも更新済み認証を維持し、次回の確認でユーザー情報を取得する。
+            }
+        }
+    }
 
     private suspend fun invalidateSession(
         message: String,

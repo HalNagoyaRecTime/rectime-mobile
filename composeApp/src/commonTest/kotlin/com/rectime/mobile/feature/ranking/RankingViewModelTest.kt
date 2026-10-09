@@ -274,34 +274,24 @@ class RankingViewModelTest {
     }
 
     @Test
-    fun fetchRankingsCancelsPreviousInFlightRequestOnRefetch() = runTest(testDispatcher) {
-        var requestCount = 0
-        val staleRequestGate = CompletableDeferred<Unit>()
-        val viewModel = buildViewModel(
-            client = mockClient {
-                requestCount++
-                if (requestCount == 1) {
-                    // 初回(init契機)の取得を、明示的な再取得が来るまで止めておく。
-                    staleRequestGate.await()
-                    respondJson(rankingsJsonOf(RankingFixture(1, 10, "古いチーム", 10)))
-                } else {
-                    respondJson(rankingsJsonOf(RankingFixture(2, 20, "新しいチーム", 20)))
-                }
-            },
-        )
+    fun refreshTriggersShareAnInFlightRequest() = runTest(testDispatcher) {
+        var calls = 0
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(client = mockClient {
+            calls++
+            gate.await()
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", 10)))
+        })
         testDispatcher.scheduler.runCurrent()
-
-        // 初回取得がまだ進行中のうちに再取得を発行すると、初回はキャンセルされる。
+        viewModel.onForeground()
         viewModel.fetchRankings()
+        viewModel.fetchRankings(isPullRefresh = true)
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(1, calls)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        gate.complete(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
-
-        // 初回のgateを開放しても(キャンセル済みのため)結果は反映されない。
-        staleRequestGate.complete(Unit)
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val items = viewModel.uiState.value.rankingItems
-        assertEquals(1, items.size)
-        assertEquals("新しいチーム", items.first().teamName)
+        assertEquals(10, viewModel.uiState.value.rankingItems.single().score)
     }
 
     @Test
@@ -429,6 +419,217 @@ class RankingViewModelTest {
         assertEquals(1, viewModel.uiState.value.rankingItems.size)
         assertNull(viewModel.uiState.value.error)
         assertTrue(viewModel.uiState.value.isOffline)
+    }
+
+    @Test
+    fun sessionChangeDuringFailedRefreshDoesNotKeepPreviousRankings() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            if (++requests == 1) {
+                respondJson(rankingsJsonOf(RankingFixture(1, 42, "前ユーザーのチーム", 321)))
+            } else {
+                gate.await()
+                respond(content = "", status = HttpStatusCode.InternalServerError, headers = jsonHeaders)
+            }
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun refreshStartedAfterSessionChangeClearsPreviouslyDisplayedRankings() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            if (++requests == 1) {
+                respondJson(rankingsJsonOf(RankingFixture(1, 42, "前ユーザーのチーム", 321)))
+            } else {
+                respond(content = "", status = HttpStatusCode.InternalServerError, headers = jsonHeaders)
+            }
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        cache.clearAll()
+        viewModel.fetchRankings()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+    }
+
+    @Test
+    fun sessionChangeBeforeScheduledRequestPreventsFetch() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        var requests = 0
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            requests++
+            respondJson(rankingsJsonOf(RankingFixture(1, 42, "古い要求のチーム", 321)))
+        })
+        // viewModelScopeのlaunchが実行される前にセッションが切り替わる。
+        cache.clearAll()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, requests)
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun cachedRankingsAreVisibleBeforeTheNetworkCompletes() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val saved = Json.decodeFromString<com.rectime.mobile.core.network.RankingsResponse>(
+            rankingsJsonOf(RankingFixture(1, 42, "保存済み", 100))
+        )
+        cache.save("rankings_v1", saved)
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(cache = cache, initialMyTeamId = 42, client = mockClient {
+            gate.await()
+            respondJson(rankingsJsonOf(RankingFixture(1, 42, "最新", 200)))
+        })
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("保存済み", viewModel.uiState.value.rankingItems.single().teamName)
+        assertTrue(viewModel.uiState.value.rankingItems.single().isMyTeam)
+        assertTrue(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("最新", viewModel.uiState.value.rankingItems.single().teamName)
+    }
+
+    @Test
+    fun emptyIntermediatePageDoesNotReplaceCompleteCache() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val saved = Json.decodeFromString<com.rectime.mobile.core.network.RankingsResponse>(
+            rankingsJsonOf(RankingFixture(1, 42, "保存済み", 100))
+        )
+        cache.save("rankings_v1", saved)
+        val viewModel = buildViewModel(cache = cache, client = mockClient { request ->
+            if (request.url.parameters["offset"] == "0") {
+                respondJson(rankingsJsonOf(RankingFixture(1, 10, "途中", 200), total = 2))
+            } else respondJson(rankingsJsonOf(total = 2))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("保存済み", viewModel.uiState.value.rankingItems.single().teamName)
+        assertEquals(saved, cache.load<com.rectime.mobile.core.network.RankingsResponse>("rankings_v1"))
+    }
+
+    @Test
+    fun pullRefreshKeepsItsIndicatorUntilMinimumDuration() = runTest(testDispatcher) {
+        val viewModel = buildViewModel(client = mockClient {
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", 100)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings(isPullRefresh = true)
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.uiState.value.isRefreshing)
+        assertEquals(1, viewModel.uiState.value.rankingItems.size)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.isRefreshing)
+    }
+
+    @Test
+    fun newSessionReloadsWithoutWaitingForManualRefresh() = runTest(testDispatcher) {
+        var calls = 0
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            calls++
+            respondJson(rankingsJsonOf(RankingFixture(1, calls, "チーム$calls", 100)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        cache.clearAll()
+        viewModel.onSession(2)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertTrue(viewModel.uiState.value.rankingItems.single().isMyTeam)
+    }
+
+    @Test
+    fun foregroundRefreshKeepsDisplayedItemsWithoutPullIndicator() = runTest(testDispatcher) {
+        var calls = 0
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(client = mockClient {
+            calls++
+            if (calls > 1) gate.await()
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", calls * 100)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onForeground()
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(100, viewModel.uiState.value.rankingItems.single().score)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(200, viewModel.uiState.value.rankingItems.single().score)
+    }
+
+    @Test
+    fun cacheReadAndWriteFailuresDoNotPreventLiveRankings() = runTest(testDispatcher) {
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = error("読込失敗")
+            override suspend fun putString(key: String, value: String) { error("保存失敗") }
+            override suspend fun clear() = Unit
+        })
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "最新", 100)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("最新", viewModel.uiState.value.rankingItems.single().teamName)
+        assertNull(viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.isOffline)
+    }
+
+    @Test
+    fun logoutDuringMinimumPullDurationDropsRankings() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", 100)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.fetchRankings(isPullRefresh = true)
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.uiState.value.isRefreshing)
+        cache.clearAll()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        assertNull(cache.load<com.rectime.mobile.core.network.RankingsResponse>("rankings_v1"))
+    }
+
+    @Test
+    fun duplicatePageKeepsPreviouslyDisplayedRankings() = runTest(testDispatcher) {
+        var refreshing = false
+        val viewModel = buildViewModel(client = mockClient {
+            if (!refreshing) respondJson(rankingsJsonOf(RankingFixture(1, 42, "保存済み", 100)))
+            else respondJson(rankingsJsonOf(RankingFixture(1, 10, "重複", 200), total = 2))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        refreshing = true
+        viewModel.fetchRankings()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("保存済み", viewModel.uiState.value.rankingItems.single().teamName)
+        assertNull(viewModel.uiState.value.error)
+    }
+
+    @Test
+    fun duplicateLegacyCacheIsNotDisplayedAndLiveFetchStillRuns() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("rankings_v1", Json.decodeFromString<com.rectime.mobile.core.network.RankingsResponse>(
+            rankingsJsonOf(RankingFixture(1, 10, "重複", 100), RankingFixture(1, 10, "重複", 100))
+        ))
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = buildViewModel(cache = cache, client = mockClient {
+            gate.await()
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "最新", 200)))
+        })
+        testDispatcher.scheduler.runCurrent()
+        assertTrue(viewModel.uiState.value.rankingItems.isEmpty())
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("最新", viewModel.uiState.value.rankingItems.single().teamName)
     }
 
     private fun buildViewModel(

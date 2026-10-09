@@ -29,6 +29,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -52,6 +53,7 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
+import com.rectime.mobile.feature.ranking.RankingScreen
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.ui.theme.AppTheme
@@ -60,6 +62,8 @@ import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_notification_fill
 import rectime_mobile.composeapp.generated.resources.ic_notification_outline
+import rectime_mobile.composeapp.generated.resources.ic_ranking_fill
+import rectime_mobile.composeapp.generated.resources.ic_ranking_outline
 import rectime_mobile.composeapp.generated.resources.ic_schedule_fill
 import rectime_mobile.composeapp.generated.resources.ic_schedule_outline
 import rectime_mobile.composeapp.generated.resources.ic_settings_fill
@@ -69,8 +73,9 @@ import rectime_mobile.composeapp.generated.resources.ic_settings_outline
 private const val CompactAspectRatioThreshold = 1.9f
 private const val CompactScale = 0.80f
 
-// バー幅に対する比率で幅を決め、かつ3タブの幅を揃えたい
-private const val NavItemContentWidthRatio = 0.33f
+// バー幅をタブ数で等分した幅より少し広く取り、隣のタブと重ねたい
+// （選択中のピルの幅を保つため。全タブの幅は揃える）
+private const val NavItemOverlapRatio = 0.24f
 private val NavItemContentMinWidth = 88.dp
 private val NavItemContentMaxWidth = 160.dp
 
@@ -90,7 +95,7 @@ private val ItemContentPaddingHorizontal = 16.dp
 private val ItemContentPaddingTop = 12.dp
 private val ItemContentPaddingBottom = 2.dp
 private val ItemContentSpacing = 2.dp
-private val ItemIconSize = 24.dp
+private val ItemIconSize = 22.dp
 private val ItemLabelFontSize = 11.sp
 
 private val BadgeOffsetX = 2.dp
@@ -122,6 +127,12 @@ fun BottomNavigationBar(
         "スケジュール",
         Res.drawable.ic_schedule_outline,
         Res.drawable.ic_schedule_fill,
+    ),
+    NavigationItemConfig(
+        RankingScreen,
+        "ランキング",
+        Res.drawable.ic_ranking_outline,
+        Res.drawable.ic_ranking_fill,
     ),
     NavigationItemConfig(
         NotificationsScreen,
@@ -160,7 +171,8 @@ fun BottomNavigationBar(
     ) {
         val outerMarginHorizontal = BarOuterMarginHorizontal * scale
         val barWidth = maxWidth - outerMarginHorizontal * 2
-        val itemContentWidth = (barWidth * NavItemContentWidthRatio)
+        val itemWidth = barWidth / items.size * (1f + NavItemOverlapRatio)
+        val itemContentWidth = (itemWidth - ItemContentPaddingHorizontal * scale * 2)
             .coerceIn(NavItemContentMinWidth * scale, NavItemContentMaxWidth * scale)
 
         Box(
@@ -216,13 +228,12 @@ fun BottomNavigationBar(
                 }
 
                 items.forEachIndexed { index, item ->
-                    // 3タブとも同じ幅を保ちたい（Rowだと幅が足りないとき最後の要素だけ縮んでしまうため。
+                    // どのタブも同じ幅を保ちたい（Rowだと幅が足りないとき最後の要素だけ縮んでしまうため。
                     // はみ出して重なるのは許容する）
-                    val itemAlignment = when (index) {
-                        0 -> Alignment.BottomStart
-                        items.lastIndex -> Alignment.BottomEnd
-                        else -> Alignment.BottomCenter
-                    }
+                    val itemAlignment = BiasAlignment(
+                        horizontalBias = if (items.size == 1) 0f else -1f + 2f * index / (items.lastIndex),
+                        verticalBias = 1f,
+                    )
                     BottomNavigationItem(
                         label = item.label,
                         outlineIcon = item.outlineIcon,

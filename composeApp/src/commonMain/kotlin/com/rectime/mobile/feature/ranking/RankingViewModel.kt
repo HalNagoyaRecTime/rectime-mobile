@@ -2,12 +2,16 @@ package com.rectime.mobile.feature.ranking
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.LocalCache
-import com.rectime.mobile.core.cache.fetchWithCacheFallback
+import com.rectime.mobile.core.cache.fetchWithCacheFirst
+import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.RankingsResponse
@@ -53,6 +57,7 @@ class RankingViewModel(
 
     private var contentSession = CacheRequestGeneration()
     private var fetchJob: Job? = null
+    private var displayedGeneration = CacheGeneration.value
 
     init {
         fetchRankings()
@@ -73,11 +78,28 @@ class RankingViewModel(
         }
     }
 
-    fun fetchRankings() {
-        // 更新ボタンの連打で複数の取得が同時に走ると、後から届いた新しい結果を
-        // 古い結果が上書きしてしまうため、前回分をキャンセルしてから開始する。
+    fun onForeground() = fetchRankings()
+
+    fun onSession(myTeamId: Int?) {
+        updateMyTeamId(myTeamId)
+        if (!contentSession.isCurrent) fetchRankings()
+    }
+
+    fun fetchRankings(isPullRefresh: Boolean = false) {
+        // ボタン・引っ張り更新・前面復帰は同じ取得を共有する。別セッションの取得は破棄する。
+        if (fetchJob?.isActive == true && contentSession.isCurrent) return
         fetchJob?.cancel()
+        val generationAtStart = CacheGeneration.value
+        if (displayedGeneration != generationAtStart) {
+            _uiState.value = RankingUiState(isLoading = true)
+            displayedGeneration = generationAtStart
+        }
         fetchJob = viewModelScope.launch {
+            // キュー待ち中にログアウトした要求を開始しない。
+            if (generationAtStart != CacheGeneration.value) {
+                _uiState.value = RankingUiState()
+                return@launch
+            }
             val request = CacheRequestGeneration()
             if (!contentSession.isCurrent) {
                 _uiState.value = RankingUiState()
@@ -86,15 +108,30 @@ class RankingViewModel(
             // 手動更新時に一覧が一瞬空にならないよう、既存のrankingItemsは
             // 保持したままローディング状態にする。isOfflineは今回の結果が
             // 出るまで意味を持たないため、古い表示を引きずらないようリセットする。
-            _uiState.update { it.copy(isLoading = true, error = null, isOffline = false) }
+            _uiState.update {
+                it.copy(isLoading = true, isRefreshing = isPullRefresh, error = null, isOffline = false)
+            }
 
             try {
                 when (
-                    val result = fetchWithCacheFallback(
-                        fetchLive = { fetchAllRankings(httpClient, baseUrl) },
-                        loadCache = { cache.load<RankingsResponse>(RANKING_CACHE_KEY) },
-                        saveCache = { cache.save(RANKING_CACHE_KEY, it) },
-                    )
+                    val result = request.validate(withMinimumRefreshDuration(isPullRefresh) {
+                        fetchWithCacheFirst(
+                            fetchLive = { fetchAllRankings(httpClient, baseUrl) },
+                            loadCache = {
+                                if (_uiState.value.rankingItems.isEmpty()) {
+                                    cache.load<RankingsResponse>(RANKING_CACHE_KEY)?.takeIf { saved ->
+                                        saved.items.map { it.teamId }.distinct().size == saved.items.size
+                                    }
+                                } else null
+                            },
+                            saveCache = { cache.save(RANKING_CACHE_KEY, it) },
+                            onCached = { saved ->
+                                _uiState.update {
+                                    it.copy(rankingItems = saved.items.toModelList().toRankingItems(myTeamId))
+                                }
+                            },
+                        )
+                    })
                 ) {
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = RankingUiState(
@@ -130,7 +167,7 @@ class RankingViewModel(
                         result.error.printStackTrace()
                         val status = (result.error as? HttpStatusException)?.status
                         if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(result.error, contentSession)) {
-                            _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                            _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null, isOffline = true) }
                             return@launch
                         }
                         // キャッシュ世代の変更（ログアウト等）もFailedになるため、
@@ -146,7 +183,7 @@ class RankingViewModel(
             } catch (e: Exception) {
                 e.printStackTrace()
                 if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(e, contentSession)) {
-                    _uiState.update { it.copy(isLoading = false, error = null, isOffline = true) }
+                    _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null, isOffline = true) }
                 } else {
                     _uiState.value = RankingUiState(error = rankingErrorMessage(null))
                 }
@@ -165,6 +202,7 @@ class RankingViewModel(
 private suspend fun fetchAllRankings(httpClient: HttpClient, baseUrl: String): RankingsResponse {
     val items = mutableListOf<RankingsResponse.Ranking>()
     var offset = 0
+    val seenTeamIds = mutableSetOf<Int>()
 
     do {
         val response = httpClient.get("${baseUrl.trimEnd('/')}/api/v1/ranking") {
@@ -175,6 +213,11 @@ private suspend fun fetchAllRankings(httpClient: HttpClient, baseUrl: String): R
             throw apiErrorException(response.status, response.bodyAsText())
         }
         val page = response.body<RankingsResponse>()
+        // 総件数に届く前の空ページを成功扱いすると、不完全な一覧でキャッシュが置き換わる。
+        check(page.items.isNotEmpty() || offset >= page.total) { "ランキングの途中ページが空です" }
+        check(page.items.all { seenTeamIds.add(it.teamId) }) {
+            "ランキングのページに重複があります"
+        }
         items += page.items
         offset += page.items.size
     } while (page.items.isNotEmpty() && offset < page.total)
@@ -188,5 +231,6 @@ private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status)
     else -> "ランキング情報の取得に失敗しました"
 }
 
-// 削除済み(404)・閲覧拒否(403)は、キャッシュや直前の表示内容が
-// あっても誤表示しないよう一覧を消してエラーを優先する対象。
+internal fun rankingViewModelFactory() = viewModelFactory {
+    initializer { RankingViewModel() }
+}

@@ -157,6 +157,7 @@ private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
         avatarUpdatedAt = avatarUpdatedAt,
         studentIdNumber = studentIdNumber,
         classRoomName = classRoomName,
+        teamId = teamId,
         classCode = classCode,
         role = Role.fromCategories(isStudent = isStudent, isStaff = isStaff, isTeacher = isTeacher),
     )
@@ -207,6 +208,7 @@ private data class AuthUserResponse(
     val avatarUpdatedAt: String? = null,
     val studentIdNumber: String? = null,
     val classRoomName: String? = null,
+    val teamId: Int? = null,
     val classCode: String? = null,
     val isStudent: Boolean = false,
     val isStaff: Boolean = false,

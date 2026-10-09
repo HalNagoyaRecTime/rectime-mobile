@@ -445,6 +445,79 @@ class AuthViewModelTest {
         assertEquals("new-access-token", viewModel.uiState.value.session?.accessToken)
     }
 
+    @Test
+    fun startupRefreshLoadsTeamWithNewToken() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val tokens = mutableListOf<String?>()
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                respond("""{"access_token":"new-token","refresh_token_id":"new-refresh","expires_in":7200}""", HttpStatusCode.OK, jsonHeaders)
+            } else {
+                tokens += request.headers[HttpHeaders.Authorization]
+                if (tokens.size == 1) respond("expired", HttpStatusCode.Unauthorized)
+                else respond("""{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎","team_id":12,"class_code":"IH11"}}""", HttpStatusCode.OK, jsonHeaders)
+            }
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(listOf<String?>("Bearer access-token", "Bearer new-token"), tokens)
+        assertEquals(12, store.session?.user?.teamId)
+        assertEquals("IH11", store.session?.user?.classCode)
+        assertEquals(12, viewModel.uiState.value.session?.user?.teamId)
+    }
+
+    @Test
+    fun resourceRefreshUpdatesTeamAndKeepsRotatedTokenOnUserLookupFailure() = runTest(testDispatcher) {
+        for (fails in listOf(false, true)) {
+            val store = FakeAuthSessionStorage(session = storedSession)
+            var userCalls = 0
+            val viewModel = buildViewModel(AuthApi(mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                    respond("""{"access_token":"new-token","refresh_token_id":"new-refresh","expires_in":7200}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    userCalls++
+                    if (userCalls > 1 && fails) respond("unavailable", HttpStatusCode.ServiceUnavailable)
+                    else respond("""{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎","team_id":12}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }), store)
+            testDispatcher.scheduler.advanceUntilIdle()
+            viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+            testDispatcher.scheduler.advanceUntilIdle()
+            assertEquals(2, userCalls)
+            assertEquals("new-token", store.session?.accessToken)
+            assertEquals("new-refresh", store.session?.refreshTokenId)
+            assertEquals(12, viewModel.uiState.value.session?.user?.teamId)
+        }
+    }
+
+    @Test
+    fun delayedTeamLookupCannotRestoreSessionAfterLogout() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val store = FakeAuthSessionStorage(session = storedSession)
+        var userCalls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            when {
+                request.url.encodedPath.endsWith("/auth/refresh") -> respond("""{"access_token":"new-token","expires_in":7200}""", HttpStatusCode.OK, jsonHeaders)
+                request.url.encodedPath.endsWith("/auth/logout") -> respond("", HttpStatusCode.NoContent)
+                else -> {
+                    userCalls++
+                    if (userCalls > 1) gate.await()
+                    respond("""{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎","team_id":12}}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            }
+        }), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refreshAfterUnauthorized(storedSession.accessToken)
+        testDispatcher.scheduler.runCurrent()
+        viewModel.logout()
+        testDispatcher.scheduler.runCurrent()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(store.session)
+        assertNull(viewModel.uiState.value.session)
+    }
+
+    // ---- restoreSession 正常系 ----
+
     private val deletedBody = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"削除済み"}}"""
 
     private val meBody = """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎"}}"""
@@ -616,8 +689,13 @@ class AuthViewModelTest {
         val viewModel = buildViewModel(
             api = AuthApi(mockClient { request ->
                 if (request.url.encodedPath.endsWith("/auth/me")) {
-                    finishMe.await()
-                    respond("""{"user":{"id":"6","display_name":"古い取得結果"}}""", HttpStatusCode.OK, jsonHeaders)
+                    if (request.headers[HttpHeaders.Authorization] == "Bearer new-token") {
+                        // develop-v2側はrefresh後にも所属情報を取得するため、新旧の応答を分ける。
+                        respond("""{"user":{"id":"6","display_name":"更新後"}}""", HttpStatusCode.OK, jsonHeaders)
+                    } else {
+                        finishMe.await()
+                        respond("""{"user":{"id":"6","display_name":"古い取得結果"}}""", HttpStatusCode.OK, jsonHeaders)
+                    }
                 } else {
                     respond("""{"access_token":"new-token"}""", HttpStatusCode.OK, jsonHeaders)
                 }
@@ -631,7 +709,8 @@ class AuthViewModelTest {
 
         assertEquals("new-token", store.session?.accessToken)
         assertEquals("new-token", SessionTokenHolder.accessToken)
-        assertEquals(storedSession.user.displayName, viewModel.uiState.value.session?.user?.displayName)
+        assertEquals("更新後", viewModel.uiState.value.session?.user?.displayName)
+        assertEquals("更新後", store.session?.user?.displayName)
     }
 
     @Test
