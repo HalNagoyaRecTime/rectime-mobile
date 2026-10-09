@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -27,8 +28,8 @@ import com.rectime.mobile.ui.theme.AppTheme
 fun AppLoadingIndicator(
     modifier: Modifier = Modifier,
     strokeWidth: Dp = 4.dp,
+    color: Color = AppTheme.colors.themeColorFirst,
 ) {
-    val color = AppTheme.colors.themeColorFirst
     val transition = rememberInfiniteTransition()
     val rotation by transition.animateFloat(
         initialValue = 0f,

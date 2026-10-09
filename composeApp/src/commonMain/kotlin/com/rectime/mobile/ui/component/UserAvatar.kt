@@ -20,7 +20,9 @@ import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.ui.theme.AppTheme
+import okio.ByteString.Companion.toByteString
 
 internal val AvatarBackgrounds = listOf(
     Color(0xFFD4EEF0), Color(0xFFF5DDD5), Color(0xFFF5EBCB),
@@ -43,15 +45,19 @@ internal fun UserAvatar(
     colorIndex: Int? = null,
 ) {
     val platformContext = LocalPlatformContext.current
+    val photoRepository = LocalProfilePhotoRepository.current
+    val photoImageLoader = photoRepository?.imageLoader(platformContext)
     val background = AvatarBackgrounds.getOrNull(colorIndex ?: -1)
         ?: remember(userId) { avatarBackground(userId) }
     val sport = sportOverride ?: remember(userId) { avatarSport(userId) }
-    val request = remember(platformContext, userId, photoBytes) {
+    val request = remember(platformContext, userId, photoBytes, photoImageLoader) {
         photoBytes?.let { bytes ->
             ImageRequest.Builder(platformContext)
                 .data(bytes)
                 // 写真の保存・削除はProfilePhotoRepositoryだけで管理する。
-                .memoryCachePolicy(CachePolicy.DISABLED)
+                // 同じ写真のデコード結果を再利用し、タブ復帰時の描画待ちを減らす。
+                .memoryCacheKey("profile:$userId:${bytes.toByteString().sha256().hex()}")
+                .memoryCachePolicy(if (photoImageLoader != null) CachePolicy.ENABLED else CachePolicy.DISABLED)
                 .diskCachePolicy(CachePolicy.DISABLED)
                 .build()
         }
@@ -76,6 +82,7 @@ internal fun UserAvatar(
             if (usePhoto && request != null) {
                 AsyncImage(
                     model = request,
+                    imageLoader = photoImageLoader ?: coil3.SingletonImageLoader.get(platformContext),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().clip(CircleShape),

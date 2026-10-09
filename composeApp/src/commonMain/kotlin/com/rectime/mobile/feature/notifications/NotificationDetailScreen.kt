@@ -25,8 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationState
-import com.rectime.mobile.app.navigation.PushTransitionMode
-import com.rectime.mobile.app.navigation.ActiveGesture
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.util.toFormattedTime
@@ -136,11 +134,10 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
     }
 }
 
-internal fun isNotificationDetailFullyVisible(state: NavigationState, screen: NotificationDetailScreen): Boolean =
-    state.pushStack.lastOrNull()?.screen == screen &&
-        state.pushTransition.mode == PushTransitionMode.Idle &&
-        !state.isTransitioning && state.activeGesture == ActiveGesture.None &&
-        state.backDragOffsetPx == 0f && state.sheet == null
+internal fun isNotificationDetailFullyVisible(state: NavigationState, screen: NotificationDetailScreen): Boolean {
+    val entry = state.pushStack.lastOrNull() ?: return false
+    return entry.screen == screen && state.isPushInteractive(entry.key)
+}
 
 @Composable
 private fun NotificationDetailContent(

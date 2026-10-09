@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,15 +51,13 @@ object RankingScreen : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        val myTeamId = LocalUserProfile.current?.teamId
-        val viewModel: RankingViewModel = viewModel {
-            RankingViewModel(initialMyTeamId = myTeamId)
-        }
+        val user = LocalUserProfile.current
+        val myTeamId = user?.teamId
+        val viewModel: RankingViewModel = viewModel(factory = rankingViewModelFactory())
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val hasRankingItems = uiState.rankingItems.isNotEmpty()
         val lazyListState = rememberLazyListState()
-        val snackbarHostState = remember { SnackbarHostState() }
-        var hasAutoScrolled by remember { mutableStateOf(false) }
+        var hasAutoScrolled by remember(user?.id) { mutableStateOf(false) }
 
         // セッションのユーザー情報が後から更新されteamIdが変わった場合でも、
         // 生成済みのViewModelにハイライト対象を反映させる。
@@ -68,24 +65,14 @@ object RankingScreen : Screen {
             viewModel.updateMyTeamId(myTeamId)
         }
 
-        // 一覧が既に表示されている状態での取得失敗は、全画面エラーで隠さず
-        // スナックバーで一時的に知らせる(空の状態からの失敗は下のStatusMessageが担当)。
-        LaunchedEffect(uiState.error) {
-            val message = uiState.error
-            if (message != null && hasRankingItems) {
-                snackbarHostState.showSnackbar(message)
-            }
-        }
-
-        LaunchedEffect(uiState.rankingItems, uiState.isOffline) {
+        LaunchedEffect(uiState.rankingItems) {
             if (!hasAutoScrolled && uiState.rankingItems.isNotEmpty()) {
                 val myTeamIndex = uiState.rankingItems.indexOfFirst { it.isMyTeam }
                 if (myTeamIndex >= 0) {
                     lazyListState.scrollToItem(index = 0)
                     delay(300.milliseconds)
 
-                    val bannerCount = if (uiState.isOffline) 1 else 0
-                    lazyListState.animateScrollToItem(index = (myTeamIndex - 4).coerceAtLeast(0) + bannerCount)
+                    lazyListState.animateScrollToItem(index = (myTeamIndex - 4).coerceAtLeast(0))
                     // 所属チーム情報がランキングより遅れて届いた場合に備え、対象行が
                     // 見つかった時だけ完了扱いにする。見つからない間は次回の更新で
                     // 再度スクロールを試みる。
@@ -98,9 +85,11 @@ object RankingScreen : Screen {
             title = "ランキング",
             horizontalPadding = false,
             lazyListState = lazyListState,
-            snackbarHostState = snackbarHostState,
-            onTrailingClick = {
-                viewModel.fetchRankings()
+            isRefreshing = uiState.isRefreshing,
+            refreshEnabled = !uiState.isLoading,
+            onRefresh = { viewModel.fetchRankings(isPullRefresh = true) },
+            onTrailingClick = if (uiState.isLoading) null else {
+                { viewModel.fetchRankings() }
             },
             trailing = {
                 if (uiState.isLoading) {
@@ -142,21 +131,7 @@ object RankingScreen : Screen {
                 }
 
                 else -> {
-                    if (uiState.isOffline) {
-                        item {
-                            Text(
-                                text = "オフライン表示中(前回取得した内容です)",
-                                color = AppTheme.colors.textSecondary,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        horizontal = AppTheme.layout.screenHorizontalPadding,
-                                        vertical = 8.dp,
-                                    ),
-                            )
-                        }
-                    }
-                    items(uiState.rankingItems) { item ->
+                    items(uiState.rankingItems, key = { it.teamId }) { item ->
                         RankingRow(item = item)
                         // 自チームのハイライトが区切り線まで途切れなく見えるようにする
                         HorizontalDivider(

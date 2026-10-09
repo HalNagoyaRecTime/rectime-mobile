@@ -13,6 +13,7 @@ data class RankingItem(
 data class RankingUiState(
     val rankingItems: List<RankingItem> = emptyList(),
     val isLoading: Boolean = false,
+    val isRefreshing: Boolean = false,
     val error: String? = null,
     val isOffline: Boolean = false,
 )

@@ -13,7 +13,7 @@ data class AppRadius(
     val xl: Dp = 20.dp,
     val xxl: Dp = 24.dp,
     val card: Dp = 16.dp,
-    val sheet: Dp = 22.dp,
+    val sheet: Dp = 28.dp,
     val full: Dp = 9999.dp,
 )
 
