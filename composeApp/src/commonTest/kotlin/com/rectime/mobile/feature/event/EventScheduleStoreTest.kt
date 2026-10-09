@@ -71,6 +71,22 @@ class EventScheduleStoreTest {
             runCurrent(); assertEquals(1, count); gate.complete(Unit)
             assertEquals(a.await(), b.await())
             assertEquals(listOf(10, 30), store.cachedParticipation()?.single()?.gatheringIds)
+            assertEquals(setOf(1), store.cachedParticipatingEventIds())
+            assertNull(cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+        } finally { store.close() }
+    }
+
+    @Test fun freshEmptyParticipationOverridesOldIdsAndHasOneWriteOwner() = runTest(dispatcher) {
+        val cache = LocalCache(MemoryStore())
+        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        val store = EventScheduleStore(cache, client { detailBody }, object : MyEventsGateway {
+            override suspend fun getMyEvents() = emptyList<MyEventParticipation>()
+        })
+        try {
+            assertEquals(setOf(1), store.cachedParticipatingEventIds())
+            assertNull(store.cachedAttendingGatheringIds(1))
+            store.refreshParticipation()
+            assertEquals(emptySet(), store.cachedParticipatingEventIds())
             assertEquals(setOf(1), cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
         } finally { store.close() }
     }

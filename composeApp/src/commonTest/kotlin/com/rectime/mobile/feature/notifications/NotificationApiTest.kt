@@ -286,7 +286,7 @@ class MyEventsApiTest {
             accessTokenProvider = { "access-token" },
         )
 
-        val ids = api.getMyEventIds()
+        val ids = api.getMyEvents().map { it.eventId }.toSet()
 
         val request = requireNotNull(capturedRequest)
         assertEquals("https://api.example.com/api/v1/me/events", request.url.toString())
@@ -310,7 +310,7 @@ class MyEventsApiTest {
             accessTokenProvider = { "access-token" },
         )
 
-        val ids = api.getMyEventIds()
+        val ids = api.getMyEvents().map { it.eventId }.toSet()
 
         assertTrue(ids.isEmpty())
     }
@@ -331,7 +331,7 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.Unauthorized, error.status)
         assertEquals("UNAUTHORIZED", error.code)
@@ -353,7 +353,7 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.InternalServerError, error.status)
         assertEquals("INTERNAL_SERVER_ERROR", error.code)
@@ -371,7 +371,7 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.Unauthorized, error.status)
         assertEquals("UNAUTHORIZED", error.code)
@@ -389,7 +389,7 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.Unauthorized, error.status)
         assertEquals("UNAUTHORIZED", error.code)

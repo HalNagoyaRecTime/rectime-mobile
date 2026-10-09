@@ -85,11 +85,12 @@ class EventDetailViewModel(
                         // 参加情報を待つ間に別の取得が完了した場合も、最新の保存内容を使う。
                         val finalDetail = eventCache.reconcileDetail(latest, cacheRequest)
                         if (!request.isCurrent) return@launch
+                        val finalGatherings = finalDetail.toGatherings().orEmpty()
                         _uiState.value = EventDetailUiState(
                             isLoading = false,
                             eventDetail = finalDetail.toModel(),
-                            gatherings = gatherings,
-                            attendingGatheringId = attending,
+                            gatherings = finalGatherings,
+                            attendingGatheringId = attending?.takeIf { id -> finalGatherings.any { it.gatheringId == id } },
                             isOffline = participationIsOffline,
                         )
                     }
@@ -108,9 +109,9 @@ class EventDetailViewModel(
                             )
                             else -> {
                                 // 本文と全ラウンドを保存済み詳細から復元し、参加情報もキャッシュを使う。
-                                val gatherings = result.value.toGatherings().orEmpty()
-                                val attending = loadAttendingGatheringIdFromCache()
                                 val latest = eventCache.reconcileDetail(result.value, cacheRequest)
+                                val gatherings = latest.toGatherings().orEmpty()
+                                val attending = loadAttendingGatheringIdFromCache()
                                 if (!request.isCurrent) {
                                     _uiState.value = EventDetailUiState()
                                     return@launch

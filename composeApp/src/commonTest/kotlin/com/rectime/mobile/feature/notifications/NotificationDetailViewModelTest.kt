@@ -605,6 +605,29 @@ class NotificationDetailViewModelTest {
     // ---- 参加イベント判定 ----
 
     @Test
+    fun notificationAndScheduleShareParticipationRequestAndMemory() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var requests = 0
+        val store = com.rectime.mobile.feature.event.EventScheduleStore(cache = cache,
+            myEvents = FakeMyEventsGateway { requests++; gate.await(); setOf(7) })
+        try {
+            val schedule = async { store.refreshParticipation() }
+            val related = NotificationRelatedEvent(7, "玉入れ", emptyList(), "0915", "0945")
+            val viewModel = NotificationDetailViewModel(15,
+                gateway = FakeGateway { notification(it).copy(relatedEvent = related) },
+                cache = cache, readStore = readStore(), scheduleStore = store)
+            testDispatcher.scheduler.runCurrent()
+            assertEquals(1, requests)
+            gate.complete(Unit)
+            schedule.await()
+            testDispatcher.scheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.isParticipatingInRelatedEvent)
+            assertEquals(setOf(7), store.cachedParticipatingEventIds())
+        } finally { store.close() }
+    }
+
+    @Test
     fun isParticipatingIsTrueWhenRelatedEventIsInMyEvents() = runTest(testDispatcher) {
         val relatedEvent = NotificationRelatedEvent(
             id = 7,

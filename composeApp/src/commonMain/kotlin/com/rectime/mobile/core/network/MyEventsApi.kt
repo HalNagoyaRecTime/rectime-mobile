@@ -12,12 +12,11 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// 通知一覧が使う参加イベントIDを、本人予定から保存する。
+// 更新前の保存済み参加ID。新しい本人予定がない場合の読み込み専用。
 internal const val MY_EVENTS_CACHE_KEY = "notification_my_event_ids_v1"
 
 interface MyEventsGateway {
     suspend fun getMyEvents(): List<MyEventParticipation>
-    suspend fun getMyEventIds(): Set<Int> = getMyEvents().map { it.eventId }.toSet()
     fun close() = Unit
 }
 

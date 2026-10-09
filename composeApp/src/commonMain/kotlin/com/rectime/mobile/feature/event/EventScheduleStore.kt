@@ -62,6 +62,14 @@ class EventScheduleStore(
         return participation
     }
 
+    /** 更新前のIDキャッシュは出場表示の復元にだけ使い、集合情報を捏造しない。 */
+    suspend fun cachedParticipatingEventIds(): Set<Int>? {
+        val request = CacheRequestGeneration()
+        val saved = cachedParticipation()?.map { it.eventId }?.toSet()
+            ?: loadOrNull<Set<Int>>(MY_EVENTS_CACHE_KEY)
+        return saved.takeIf { request.isCurrent }
+    }
+
     suspend fun cachedAttendingGatheringIds(eventId: Int): Set<Int>? {
         val saved = cachedParticipation() ?: return null
         val event = saved.firstOrNull { it.eventId == eventId } ?: return emptySet()
@@ -74,7 +82,6 @@ class EventScheduleStore(
         if (!request.isCurrent) throw CancellationException("参加情報のセッションが変わりました")
         participation = latest
         saveOrIgnore(ParticipationKey, latest, request)
-        saveOrIgnore(MY_EVENTS_CACHE_KEY, latest.map { it.eventId }.toSet(), request)
         latest
     }
 
