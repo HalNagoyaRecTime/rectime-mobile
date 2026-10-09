@@ -94,7 +94,7 @@ internal class EventCache(private val cache: LocalCache) {
             val events = loadOrNull<EventsResponse>("schedule_events_v1")
             val saved = savedDetail(detail.eventId, events)
             val merged = if (saved != null && keepSaved(saved.updatedAt, detail.updatedAt, detail.eventId, request)) {
-                saved.copy(rounds = detail.rounds ?: saved.rounds)
+                saved.copy(rounds = saved.rounds ?: detail.rounds)
             } else detail.copy(rounds = detail.rounds ?: saved?.rounds)
             val detailSaved = persist && saveOrIgnore("event_detail_v1_${detail.eventId}", merged, request)
             if (detailSaved) {

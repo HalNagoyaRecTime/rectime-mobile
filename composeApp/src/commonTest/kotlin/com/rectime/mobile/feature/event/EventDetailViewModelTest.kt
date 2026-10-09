@@ -573,10 +573,12 @@ class EventDetailViewModelTest {
         val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
         testDispatcher.scheduler.runCurrent()
         val saved = requireNotNull(EventCache(cache).loadDetail(1))
-        EventCache(cache).saveDetail(saved.copy(eventName = "更新後"))
+        EventCache(cache).saveDetail(saved.copy(eventName = "更新後", rounds = listOf(EventRoundResponse(2, listOf(EventRoundGatheringResponse(20, "09:00", EventGatheringSpotResponse(5, "新しい集合場所")))))))
         gate.complete(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals("更新後", viewModel.uiState.value.eventDetail?.eventName)
+        assertEquals(20, viewModel.uiState.value.gatherings.single().gatheringId)
+        assertNull(viewModel.uiState.value.attendingGatheringId)
     }
 
     // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、

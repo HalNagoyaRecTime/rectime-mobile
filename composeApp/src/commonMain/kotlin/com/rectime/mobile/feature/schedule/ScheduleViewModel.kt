@@ -19,7 +19,6 @@ import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.core.network.MyEventsApi
 import com.rectime.mobile.core.network.MyEventsGateway
-import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
@@ -50,11 +49,11 @@ class ScheduleViewModel(
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val cache: LocalCache = LocalCache(),
-    private val myEventsGateway: MyEventsGateway = MyEventsApi(baseUrl = baseUrl),
+    myEventsGateway: MyEventsGateway? = null,
     scheduleStore: EventScheduleStore? = null,
 ) : ViewModel() {
     private val ownsScheduleStore = scheduleStore == null
-    private val scheduleStore = scheduleStore ?: EventScheduleStore(cache, client, myEventsGateway, baseUrl)
+    private val scheduleStore = scheduleStore ?: EventScheduleStore(cache, client, myEventsGateway ?: MyEventsApi(client = client, baseUrl = baseUrl), baseUrl)
     private val eventCache = EventCache(cache)
     private var contentSession = CacheRequestGeneration()
     private var enteredSession: CacheRequestGeneration? = null
@@ -146,7 +145,7 @@ class ScheduleViewModel(
                 // 保存済みの出場表示を一覧の初回描画に間に合わせる。
                 if (participatingEventIds == null) {
                     val saved = try {
-                        scheduleStore.cachedParticipation()?.map { it.eventId }?.toSet()
+                        scheduleStore.cachedParticipatingEventIds()
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -263,18 +262,14 @@ class ScheduleViewModel(
     }
 
     private suspend fun updateParticipation(request: CacheRequestGeneration) {
-        val result = fetchWithCacheFirst(
-            fetchLive = { scheduleStore.refreshParticipation().map { it.eventId }.toSet() },
-            loadCache = { cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY) },
-            saveCache = { cache.save(MY_EVENTS_CACHE_KEY, it) },
-            onCached = {},
-        )
-        if (!request.isCurrent) return
-        when (result) {
-            is CachedFetchResult.Fresh -> applyParticipation(result.value)
-            // 通信失敗で表示中の参加情報を古い保存値へ戻さない。
-            is CachedFetchResult.Cached -> result.error.printStackTrace()
-            is CachedFetchResult.Failed -> result.error.printStackTrace()
+        try {
+            val latest = scheduleStore.refreshParticipation()
+            if (request.isCurrent) applyParticipation(latest.map { it.eventId }.toSet())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 初回の保存済み表示と、表示中の最新値を維持する。
+            e.printStackTrace()
         }
     }
 
@@ -344,9 +339,7 @@ class ScheduleViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        client.close()
-        if (ownsScheduleStore) scheduleStore.close()
-        myEventsGateway.close()
+        if (ownsScheduleStore) scheduleStore.close() else client.close()
     }
 }
 
