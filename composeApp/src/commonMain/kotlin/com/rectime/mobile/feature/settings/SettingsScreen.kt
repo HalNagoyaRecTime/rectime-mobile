@@ -66,8 +66,8 @@ import com.rectime.mobile.core.haptics.AppHapticEvent
 import com.rectime.mobile.core.haptics.rememberPlatformHapticFeedback
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.ui.component.UserAvatar
-import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.core.platform.openInAppBrowser
+import com.rectime.mobile.core.config.contactFormUrl
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.NotificationPermissionStatus
@@ -91,7 +91,6 @@ class SettingsScreen(
     @Composable
     override fun Content(navigationController: NavigationController) {
         var showAppInformation by remember { mutableStateOf(false) }
-        var showContactDetails by remember { mutableStateOf(false) }
         var showLogoutConfirmation by remember { mutableStateOf(false) }
         var notificationPermissionStatus by remember {
             mutableStateOf(NotificationPermissionStatus.Unavailable)
@@ -211,7 +210,7 @@ class SettingsScreen(
                             SettingsRow(
                                 title = "お問い合わせ",
                                 icon = SettingsIcon.Contact,
-                                onClick = { showContactDetails = true },
+                                onClick = { scope.launch { openInAppBrowser(contactFormUrl) } },
                             )
                             SettingsSeparator()
                             AccountDeletionSection { enabled, showConfirmation ->
@@ -287,16 +286,6 @@ class SettingsScreen(
 
         if (showAppInformation) {
             AppInformationSheet(onDismiss = { showAppInformation = false })
-        }
-
-        if (showContactDetails) {
-            SettingsModal(
-                title = "お問い合わせ",
-                onDismiss = { showContactDetails = false },
-                dismissText = "閉じる",
-            ) {
-                ContactSection()
-            }
         }
 
         if (showLogoutConfirmation) {
@@ -480,31 +469,6 @@ private fun ProfileDetailRow(label: String, value: String, modifier: Modifier = 
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/**
- * お問い合わせ先セクション
- */
-@Composable
-private fun ContactSection(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = "レ・クリエイション実行委員会　アプリ開発班",
-            fontSize = 13.sp,
-            color = AppTheme.colors.textSettingModalBody,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            text = "担当教官：高橋真広先生",
-            fontSize = 13.sp,
-            color = AppTheme.colors.textSettingModalBody,
-            textAlign = TextAlign.Center,
         )
     }
 }
