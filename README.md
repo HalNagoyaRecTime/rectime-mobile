@@ -102,6 +102,8 @@ AAB は `composeApp/build/outputs/bundle/release/` に出力される。
 
 ### Desktop（JVM）
 
+API 接続先と Microsoft ログインの設定は [Desktop 認証の手順](setup/desktop-auth.md) を参照。
+
 ```shell
 # macOS / Linux
 ./gradlew :composeApp:run
