@@ -175,8 +175,6 @@ private fun NotificationDetailContent(
                 lineHeight = NotificationBodyLineHeight,
             ),
         )
-        AppDivider()
-
         notification.relatedEvent?.let { event ->
             Column(verticalArrangement = Arrangement.spacedBy(RelatedEventSpacing)) {
                 Text(

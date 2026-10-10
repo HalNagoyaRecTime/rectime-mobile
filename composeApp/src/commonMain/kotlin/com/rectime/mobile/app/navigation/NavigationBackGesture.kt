@@ -27,10 +27,16 @@ internal fun Modifier.navigationBackGesture(
         velocityTracker.addPosition(down.uptimeMillis, down.position)
         try {
             while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
+                // 操作の開始は子から親へ判定する。横スクロールや画像操作が
+                // 消費した入力を戻る操作として奪わず、確定後だけ親が所有する。
+                val event = awaitPointerEvent(
+                    if (gestureKey == null) PointerEventPass.Main else PointerEventPass.Initial,
+                )
                 val pointer = event.changes.firstOrNull { it.id == down.id } ?: break
                 velocityTracker.addPosition(pointer.uptimeMillis, pointer.position)
                 if (gestureKey == null) {
+                    // タップのdown消費だけでは方向は未確定。移動を子が所有した時に譲る。
+                    if (event.changes.any { it.isConsumed && it.position != it.previousPosition }) break
                     if (!pointer.pressed) break
                     val displacement = pointer.position - down.position
                     if (displacement.getDistance() <= viewConfiguration.touchSlop) continue
