@@ -76,7 +76,8 @@ class EventCardDimensions(screenWidthDp: Dp) {
     val u = screenWidthDp.value / 100f
 
     // サイズ切り替わり閾値
-    val compactHeightThreshold: Dp = (6f * u).dp
+    // 15分程度のイベントは縦2行(Small)では窮屈になるため、横一列(Compact)で表示する
+    val compactHeightThreshold: Dp = (8.5f * u).dp
     val smallHeightThreshold: Dp = (9f * u).dp
     val mediumHeightThreshold: Dp = (17.1f * u).dp
     val mediumWidthThreshold: Dp = (35.0f * u).dp

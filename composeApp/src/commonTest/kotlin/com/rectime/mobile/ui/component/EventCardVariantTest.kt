@@ -25,10 +25,29 @@ class EventCardVariantTest {
     }
 
     @Test
-    fun fifteenMinuteEventUsesSmallLayout() {
+    fun fifteenMinuteEventUsesSingleRowCompactLayout() {
+        assertEquals(
+            EventCardSizeVariant.Compact,
+            resolveEventCardVariant(cardWidth, heightOf(15), dim),
+        )
+    }
+
+    @Test
+    fun fifteenMinuteEventUsesCompactLayoutOnNarrowAndWideScreens() {
+        for (screenWidth in listOf(360.dp, 412.dp, 430.dp)) {
+            assertEquals(
+                EventCardSizeVariant.Compact,
+                resolveEventCardVariant(cardWidth, heightOf(15), EventCardDimensions(screenWidth)),
+                "screenWidth=$screenWidth",
+            )
+        }
+    }
+
+    @Test
+    fun seventeenMinuteEventUsesSmallLayout() {
         assertEquals(
             EventCardSizeVariant.Small,
-            resolveEventCardVariant(cardWidth, heightOf(15), dim),
+            resolveEventCardVariant(cardWidth, heightOf(17), dim),
         )
     }
 
