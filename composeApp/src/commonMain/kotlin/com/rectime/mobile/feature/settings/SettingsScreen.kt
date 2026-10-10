@@ -9,7 +9,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import org.jetbrains.compose.resources.painterResource
@@ -148,8 +146,7 @@ class SettingsScreen(
                     userId = session.user.id,
                     displayName = session.user.displayName,
                     email = session.user.email,
-                    studentIdNumber = session.user.studentIdNumber,
-                    classCode = session.user.classCode,
+                    details = accountProfileDetails(session.user),
                 )
             }
 
@@ -320,8 +317,7 @@ private fun UserInfoHeader(
     userId: String,
     displayName: String,
     email: String,
-    studentIdNumber: String?,
-    classCode: String?,
+    details: List<AccountProfileDetail>,
     modifier: Modifier = Modifier,
 ) {
     val preference = remember(userId) { AvatarPreference(userId) }
@@ -370,9 +366,9 @@ private fun UserInfoHeader(
                         ),
                     )
                     .padding(
-                        start = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                        start = AppTheme.layout.screenHorizontalPadding,
                         top = ProfileAvatarSize / 2 + AppTheme.spacing.sm,
-                        end = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                        end = AppTheme.layout.screenHorizontalPadding,
                         bottom = AppTheme.spacing.md / 2,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -397,27 +393,15 @@ private fun UserInfoHeader(
                     fontSize = 13.sp,
                     color = AppTheme.colors.textSecondary,
                 )
-                Spacer(Modifier.height(AppTheme.spacing.md))
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val detailGap = 12.dp
-                    val maxDetailWidth = (maxWidth - detailGap) / 2
-                    Row(
+                if (details.isNotEmpty()) {
+                    Spacer(Modifier.height(AppTheme.spacing.md))
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(
-                            detailGap,
-                            Alignment.CenterHorizontally,
-                        ),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                     ) {
-                        ProfileDetailRow(
-                            label = "学籍番号",
-                            value = studentIdNumber.orEmpty(),
-                            modifier = Modifier.widthIn(max = maxDetailWidth),
-                        )
-                        ProfileDetailRow(
-                            label = "所属クラス",
-                            value = classCode.orEmpty(),
-                            modifier = Modifier.widthIn(max = maxDetailWidth),
-                        )
+                        details.forEach { detail ->
+                            ProfileDetailRow(detail.label, detail.value, Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }
@@ -469,17 +453,13 @@ private fun ProfileDetailRow(label: String, value: String, modifier: Modifier = 
             fontSize = 12.sp,
             color = AppTheme.colors.textMuted,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = value.ifBlank { "-" },
+            text = value,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = AppTheme.colors.textPrimary,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }

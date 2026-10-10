@@ -20,6 +20,19 @@ import kotlin.test.assertTrue
 
 class AuthApiTest {
 
+    @Test
+    fun currentUserReadsTeacherClassesAndBothCategories() = runTest {
+        val api = AuthApi(mockClient {
+            respond("""{"user":{"id":"12","is_student":true,"is_teacher":true,"teacher":{"teacher_id":12,"class_rooms":[{"class_room_id":3,"class_code":"1-A","class_room_name":"1年A組"}]}}}""", HttpStatusCode.OK, jsonHeaders)
+        })
+        try {
+            val user = api.currentUser("token")
+            assertTrue(user.isStudent)
+            assertTrue(user.isTeacher)
+            assertEquals(AuthTeacher(12, listOf(AuthTeacherClassRoom(3, "1-A", "1年A組"))), user.teacher)
+        } finally { api.close() }
+    }
+
     // ---- requestAuthUrl 正常系 ----
 
     @Test
