@@ -96,7 +96,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 
         Box(modifier = Modifier.fillMaxSize()) {
             PushScreenScaffold(
-                title = "イベント詳細",
+                title = "スケジュール詳細",
                 onBack = { navigationController.requestPop() },
                 horizontalPadding = false,
                 contentTopPadding = false,
