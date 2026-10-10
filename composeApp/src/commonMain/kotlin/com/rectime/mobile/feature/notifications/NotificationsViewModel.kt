@@ -154,7 +154,7 @@ data class NotificationDetailUiState(
     val isOffline: Boolean = false,
 )
 
-class NotificationDetailViewModel(
+class NotificationDetailViewModel internal constructor(
     private val notificationId: Int,
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),

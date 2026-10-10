@@ -27,7 +27,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** 詳細と本人参加情報を共有する。全イベントの詳細を起動時に取得しない。 */
-class EventScheduleStore(
+internal class EventScheduleStore(
     private val cache: LocalCache = LocalCache(),
     private val client: HttpClient = createAppHttpClient(),
     private val myEvents: MyEventsGateway = MyEventsApi(client = client),

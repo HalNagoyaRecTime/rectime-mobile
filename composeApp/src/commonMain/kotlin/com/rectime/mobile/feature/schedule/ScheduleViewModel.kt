@@ -43,7 +43,7 @@ import kotlin.time.ExperimentalTime
 private const val EVENTS_PAGE_SIZE = 100
 
 @OptIn(ExperimentalTime::class)
-class ScheduleViewModel(
+class ScheduleViewModel internal constructor(
     private val client: HttpClient = createAppHttpClient(),
     private val baseUrl: String = apiBaseUrl,
     private val clock: Clock = Clock.System,

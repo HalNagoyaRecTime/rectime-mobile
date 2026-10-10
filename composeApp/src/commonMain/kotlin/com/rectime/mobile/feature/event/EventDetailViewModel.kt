@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import io.ktor.client.HttpClient
 
-class EventDetailViewModel(
+class EventDetailViewModel internal constructor(
     private val eventId: Int,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
@@ -58,11 +58,11 @@ class EventDetailViewModel(
                         saveCache = {},
                         onCached = { saved ->
                             val gatherings = saved.toGatherings().orEmpty()
-                            val attending = loadAttendingGatheringIdFromCache()
+                            val attending = loadAttendingGatheringIdsFromCache()
                             if (request.isCurrent) {
                                 _uiState.value = EventDetailUiState(
                                     eventDetail = saved.toModel(), gatherings = gatherings,
-                                    attendingGatheringId = attending,
+                                    attendingGatheringIds = attending,
                                 )
                             }
                         },
@@ -81,7 +81,7 @@ class EventDetailViewModel(
                             _uiState.value = EventDetailUiState()
                             return@launch
                         }
-                        val attending = attendingIds.firstOrNull()
+                        val attending = attendingIds
                         // 参加情報を待つ間に別の取得が完了した場合も、最新の保存内容を使う。
                         val finalDetail = eventCache.reconcileDetail(latest, cacheRequest)
                         if (!request.isCurrent) return@launch
@@ -90,7 +90,7 @@ class EventDetailViewModel(
                             isLoading = false,
                             eventDetail = finalDetail.toModel(),
                             gatherings = finalGatherings,
-                            attendingGatheringId = attending?.takeIf { id -> finalGatherings.any { it.gatheringId == id } },
+                            attendingGatheringIds = attending.intersect(finalGatherings.map { it.gatheringId }.toSet()),
                             isOffline = participationIsOffline,
                         )
                     }
@@ -111,7 +111,7 @@ class EventDetailViewModel(
                                 // 本文と全ラウンドを保存済み詳細から復元し、参加情報もキャッシュを使う。
                                 val latest = eventCache.reconcileDetail(result.value, cacheRequest)
                                 val gatherings = latest.toGatherings().orEmpty()
-                                val attending = loadAttendingGatheringIdFromCache()
+                                val attending = loadAttendingGatheringIdsFromCache()
                                 if (!request.isCurrent) {
                                     _uiState.value = EventDetailUiState()
                                     return@launch
@@ -120,7 +120,7 @@ class EventDetailViewModel(
                                     isLoading = false,
                                     eventDetail = latest.toModel(),
                                     gatherings = gatherings,
-                                    attendingGatheringId = attending,
+                                    attendingGatheringIds = attending,
                                     isOffline = true,
                                 )
                                 // 通信失敗時のフォールバックは「オフライン」として
@@ -182,8 +182,8 @@ class EventDetailViewModel(
         return ids.intersect(gatherings.map { it.gatheringId }.toSet()) to isOffline
     }
 
-    private suspend fun loadAttendingGatheringIdFromCache(): Int? =
-        scheduleStore.cachedAttendingGatheringIds(eventId)?.firstOrNull()
+    private suspend fun loadAttendingGatheringIdsFromCache(): Set<Int> =
+        scheduleStore.cachedAttendingGatheringIds(eventId).orEmpty()
 
     override fun onCleared() {
         super.onCleared()
