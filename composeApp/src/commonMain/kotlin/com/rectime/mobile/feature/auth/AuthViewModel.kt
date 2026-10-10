@@ -35,6 +35,8 @@ class AuthViewModel(
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
+    private val prepareCallback: (String) -> String? = ::preparePlatformAuthCallback,
+    private val cancelCallback: (String) -> Unit = ::cancelPlatformAuthCallback,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState(isRestoringSession = true))
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -45,6 +47,7 @@ class AuthViewModel(
     private var photoFetchJob: Job? = null
     private var previousAccessToken: String? = null
     private var loggingOut = false
+    private var activeCallbackState: String? = null
     private var refreshJob: Deferred<String?>? = null
     private var refreshRequestToken: String? = null
     private var sessionCheckJob: Job? = null
@@ -242,12 +245,16 @@ class AuthViewModel(
                 it.copy(isLoading = true, error = null, message = "Opening Microsoft login...")
             }
             var pendingForAttempt: PendingAuth? = null
+            var callbackState: String? = null
             try {
                 val codeVerifier = generateBase64UrlRandom(32)
                 val codeChallenge = generateCodeChallenge(codeVerifier)
                 val state = generateBase64UrlRandom(32)
                 val pending = PendingAuth(state = state, codeVerifier = codeVerifier)
-                val authUrl = api.requestAuthUrl(state, codeChallenge)
+                callbackState = state
+                val redirectUri = prepareCallback(state)
+                activeCallbackState = state
+                val authUrl = api.requestAuthUrl(state, codeChallenge, redirectUri)
 
                 // Microsoftで認証済みの場合も即時コールバックを処理できるよう、
                 // ブラウザーへ制御を渡す前に今回のPKCE情報を保存する。
@@ -256,6 +263,7 @@ class AuthViewModel(
                 _uiState.update { it.copy(pendingAuth = pending) }
                 val opened = openUrl(authUrl)
                 if (!opened) {
+                    cancelCallback(state)
                     clearPendingAuthForAttempt(pending)
                     _uiState.update {
                         it.copy(
@@ -274,6 +282,7 @@ class AuthViewModel(
                     )
                 }
             } catch (error: Throwable) {
+                callbackState?.let { cancelCallback(it) }
                 if (error is CancellationException) throw error
                 pendingForAttempt?.let { clearPendingAuthForAttempt(it) }
                 _uiState.update { current ->
@@ -705,6 +714,7 @@ class AuthViewModel(
     }
 
     override fun onCleared() {
+        activeCallbackState?.let { cancelCallback(it) }
         AuthSessionInvalidationHandler.unregister(this)
         photoFetchJob?.cancel()
         api.close()
