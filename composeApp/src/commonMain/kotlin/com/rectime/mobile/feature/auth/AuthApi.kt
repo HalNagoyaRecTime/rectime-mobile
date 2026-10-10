@@ -155,6 +155,9 @@ private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
             if (!avatarUpdatedAt.isNullOrBlank()) "$base?v=$avatarUpdatedAt" else base
         },
         avatarUpdatedAt = avatarUpdatedAt,
+        isStudent = isStudent,
+        isTeacher = isTeacher,
+        teacher = teacher.takeIf { isTeacher },
         studentIdNumber = studentIdNumber,
         classRoomName = classRoomName,
         teamId = teamId,
@@ -213,4 +216,5 @@ private data class AuthUserResponse(
     val isStudent: Boolean = false,
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
+    val teacher: AuthTeacher? = null,
 )
