@@ -223,6 +223,22 @@ class EventCacheTest {
         }
     }
 
+    @Test
+    fun olderDetailCannotReplaceNewerRoundsDuringSaveOrReconciliation() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        fun rounds(id: Int) = listOf(com.rectime.mobile.core.network.EventRoundResponse(1,
+            listOf(com.rectime.mobile.core.network.EventRoundGatheringResponse(id, "08:45",
+                com.rectime.mobile.core.network.EventGatheringSpotResponse(1, "体育館")))))
+        val earlier = cache.beginRequest()
+        val old = detail("古い本文").copy(rounds = rounds(10))
+        val newer = cache.beginRequest()
+        val fresh = detail("新しい本文").copy(rounds = rounds(20))
+        cache.saveDetail(fresh, newer)
+        assertEquals(fresh, cache.reconcileDetail(old, earlier))
+        cache.saveDetail(old, earlier)
+        assertEquals(fresh, cache.loadDetail(1))
+    }
+
     private fun detail(name: String) = EventDetailResponse(1, name, emptyList(), "0900", "0930", null)
     private fun events(name: String) = EventsResponse(listOf(EventResponse(
         1, name, null, emptyList(), "0900", "0930", "2026-01-01", "2026-01-01",

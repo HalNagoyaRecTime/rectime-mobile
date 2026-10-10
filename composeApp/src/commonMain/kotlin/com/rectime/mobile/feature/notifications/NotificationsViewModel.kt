@@ -1,8 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
-import com.rectime.mobile.core.network.MyEventsApi
+import com.rectime.mobile.feature.event.EventScheduleStore
 import com.rectime.mobile.core.network.MyEventsGateway
-import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CacheRequestGeneration
@@ -155,17 +154,24 @@ data class NotificationDetailUiState(
     val isOffline: Boolean = false,
 )
 
-class NotificationDetailViewModel(
+class NotificationDetailViewModel internal constructor(
     private val notificationId: Int,
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),
     private val readStore: NotificationReadStore = NotificationReadStore.shared,
-    private val myEventsGateway: MyEventsGateway = MyEventsApi(),
+    myEventsGateway: MyEventsGateway? = null,
+    scheduleStore: EventScheduleStore? = null,
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val refreshOnOpen: Boolean = false,
     private val feedStore: NotificationFeedStore? = null,
 ) : ViewModel() {
+    private val ownsScheduleStore = scheduleStore == null
+    private val scheduleStore = scheduleStore ?: if (myEventsGateway == null) {
+        EventScheduleStore(cache = cache)
+    } else {
+        EventScheduleStore(cache = cache, myEvents = myEventsGateway)
+    }
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _uiState = MutableStateFlow(NotificationDetailUiState())
@@ -297,6 +303,7 @@ class NotificationDetailViewModel(
                     }
                 }
             } catch (e: CancellationException) {
+                if (!request.isCurrent) _uiState.value = NotificationDetailUiState(isLoading = false)
                 throw e
             } catch (e: Exception) {
                 if (_uiState.value.notification != null && request.canRetainDisplayedContent(e, detailSession)) {
@@ -314,7 +321,7 @@ class NotificationDetailViewModel(
     private suspend fun cachedParticipation(notification: UserNotification): Boolean {
         val eventId = notification.relatedEvent?.id ?: return false
         return try {
-            eventId in cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY).orEmpty()
+            eventId in scheduleStore.cachedParticipatingEventIds().orEmpty()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -324,22 +331,19 @@ class NotificationDetailViewModel(
 
     private suspend fun fetchIsParticipating(notification: UserNotification): Boolean {
         val eventId = notification.relatedEvent?.id ?: return false
-        return when (val result = fetchWithCacheFirst(
-            fetchLive = { myEventsGateway.getMyEventIds() },
-            loadCache = { cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY) },
-            saveCache = { cache.save(MY_EVENTS_CACHE_KEY, it) },
-            onCached = {},
-        )) {
-            is CachedFetchResult.Fresh -> eventId in result.value
-            is CachedFetchResult.Cached -> !result.error.invalidatesNotificationCache() && eventId in result.value
-            is CachedFetchResult.Failed -> false
+        return try {
+            scheduleStore.refreshParticipation().any { it.eventId == eventId }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            !e.invalidatesNotificationCache() && cachedParticipation(notification)
         }
     }
 
     override fun onCleared() {
         super.onCleared()
         gateway.close()
-        myEventsGateway.close()
+        if (ownsScheduleStore) scheduleStore.close()
     }
 }
 

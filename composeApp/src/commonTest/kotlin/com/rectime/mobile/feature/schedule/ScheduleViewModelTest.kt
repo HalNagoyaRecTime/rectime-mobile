@@ -1304,13 +1304,13 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertFalse(viewModel.events.value.first { it.eventId == 1 }.isParticipating)
         assertTrue(viewModel.events.value.first { it.eventId == 2 }.isParticipating)
-        assertEquals(setOf(2), cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+        assertEquals(setOf(2), cache.load<List<com.rectime.mobile.core.network.MyEventParticipation>>("event_participation_v1")?.map { it.eventId }?.toSet())
     }
 
     @Test
     fun cachedParticipationIsVisibleBeforeEitherRequestCompletes() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
-        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        cache.save("event_participation_v1", listOf(com.rectime.mobile.core.network.MyEventParticipation(1, emptyList())))
         cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJsonOf(Triple(1, "0900", "1000"))))
         val gate = CompletableDeferred<Unit>()
         val viewModel = buildViewModel(mockClient { gate.await(); error("offline") }, cache = cache,
@@ -1322,6 +1322,19 @@ class ScheduleViewModelTest {
         gate.complete(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
         assertTrue(viewModel.events.value.single().isParticipating)
+    }
+
+    @Test
+    fun oldParticipationIdsRestoreOfflineScheduleWithoutInventingGatherings() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJsonOf(Triple(1, "0900", "1000"))))
+        val viewModel = buildViewModel(mockClient { error("offline") }, cache = cache,
+            myEventsGateway = participationGateway { error("offline") })
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.events.value.single().isParticipating)
+        assertNull(cache.load<List<com.rectime.mobile.core.network.MyEventParticipation>>("event_participation_v1"))
     }
 
     @Test
@@ -1404,7 +1417,7 @@ class ScheduleViewModelTest {
     )
 
     private fun participationGateway(fetch: suspend () -> Set<Int>) = object : MyEventsGateway {
-        override suspend fun getMyEventIds(): Set<Int> = fetch()
+        override suspend fun getMyEvents() = fetch().map { com.rectime.mobile.core.network.MyEventParticipation(it, emptyList()) }
     }
 
     private fun mockClient(

@@ -216,7 +216,8 @@ class NotificationFeedStore(
                         else (verified + _notifications.value.drop(verifiedCount)).distinctBy { it.id }
                     try {
                         // 最新100件だけ保存し、それより古い取得分は永続化しない。
-                        history.saveList(applyDetailUpdates(combined))
+                        // 追加ページの取得で、先頭一覧の取得時刻を新しくしない。
+                        history.saveList(applyDetailUpdates(combined), refreshFetchedAt = false)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {

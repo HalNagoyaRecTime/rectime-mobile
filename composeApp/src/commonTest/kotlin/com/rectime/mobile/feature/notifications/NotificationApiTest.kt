@@ -286,7 +286,7 @@ class MyEventsApiTest {
             accessTokenProvider = { "access-token" },
         )
 
-        val ids = api.getMyEventIds()
+        val ids = api.getMyEvents().map { it.eventId }.toSet()
 
         val request = requireNotNull(capturedRequest)
         assertEquals("https://api.example.com/api/v1/me/events", request.url.toString())
@@ -310,7 +310,7 @@ class MyEventsApiTest {
             accessTokenProvider = { "access-token" },
         )
 
-        val ids = api.getMyEventIds()
+        val ids = api.getMyEvents().map { it.eventId }.toSet()
 
         assertTrue(ids.isEmpty())
     }
@@ -331,7 +331,7 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.Unauthorized, error.status)
         assertEquals("UNAUTHORIZED", error.code)
@@ -353,7 +353,7 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.InternalServerError, error.status)
         assertEquals("INTERNAL_SERVER_ERROR", error.code)
@@ -371,7 +371,7 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.Unauthorized, error.status)
         assertEquals("UNAUTHORIZED", error.code)
@@ -389,10 +389,21 @@ class MyEventsApiTest {
         )
 
         val error = assertFailsWith<HttpStatusException> {
-            api.getMyEventIds()
+            api.getMyEvents()
         }
         assertEquals(HttpStatusCode.Unauthorized, error.status)
         assertEquals("UNAUTHORIZED", error.code)
+    }
+
+    @Test
+    fun getMyEventsRequiresGatheringIdsInsteadOfAdaptingOldApi() = runTest {
+        val client = mockClient {
+            respond("""{"events":[{"event_id":5}]}""", HttpStatusCode.OK, jsonHeaders)
+        }
+        val api = MyEventsApi(client, "https://api.example.com", { "access-token" })
+        try {
+            assertFailsWith<io.ktor.serialization.JsonConvertException> { api.getMyEvents() }
+        } finally { api.close() }
     }
 
     private fun mockClient(
@@ -412,8 +423,8 @@ class MyEventsApiTest {
         val myEventsJson = """
             {
               "events": [
-                { "event_id": 5 },
-                { "event_id": 7 }
+                { "event_id": 5, "gathering_ids": [10] },
+                { "event_id": 7, "gathering_ids": [] }
               ]
             }
         """.trimIndent()

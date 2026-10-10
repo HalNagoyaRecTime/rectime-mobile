@@ -63,7 +63,8 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
     @Composable
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel(key = key) {
-            NotificationDetailViewModel(id, refreshOnOpen = refreshOnOpen, feedStore = NotificationFeedStore.shared)
+            NotificationDetailViewModel(id, refreshOnOpen = refreshOnOpen, feedStore = NotificationFeedStore.shared,
+                scheduleStore = com.rectime.mobile.feature.event.EventScheduleStore.shared)
         }
         val uiState by viewModel.uiState.collectAsState()
         val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()

@@ -47,7 +47,6 @@ import com.rectime.mobile.core.model.EventDetail
 import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
-import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.MapModal
@@ -84,9 +83,8 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 
     @Composable
     override fun Content(navigationController: NavigationController) {
-        val currentUserId = LocalUserProfile.current?.id?.toIntOrNull()
         val viewModel = viewModel(key = key) {
-            EventDetailViewModel(eventId = eventId, currentUserId = currentUserId)
+            EventDetailViewModel(eventId = eventId, scheduleStore = EventScheduleStore.shared)
         }
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
@@ -150,7 +148,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                             EventDetailContent(
                                 event = event,
                                 gatherings = uiState.gatherings,
-                                attendingGatheringId = uiState.attendingGatheringId,
+                                attendingGatheringIds = uiState.attendingGatheringIds,
                                 onOpenMap = { isMapVisible = true },
                                 onTitleBandHeightChanged = { titleBandHeightPx = it },
                             )
@@ -170,7 +168,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 private fun EventDetailContent(
     event: EventDetail,
     gatherings: List<Gathering>,
-    attendingGatheringId: Int?,
+    attendingGatheringIds: Set<Int>,
     onOpenMap: () -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
 ) {
@@ -209,7 +207,7 @@ private fun EventDetailContent(
                 DetailSection(heading = "集合時間・集合場所", onInfoClick = onOpenMap) {
                     GatheringList(
                         gatherings = gatherings,
-                        attendingGatheringId = attendingGatheringId,
+                        attendingGatheringIds = attendingGatheringIds,
                     )
                 }
             }
@@ -297,7 +295,7 @@ private fun DetailBodyText(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun GatheringList(gatherings: List<Gathering>, attendingGatheringId: Int?) {
+private fun GatheringList(gatherings: List<Gathering>, attendingGatheringIds: Set<Int>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -307,7 +305,7 @@ private fun GatheringList(gatherings: List<Gathering>, attendingGatheringId: Int
         gatherings.forEach { gathering ->
             GatheringRow(
                 gathering = gathering,
-                isAttending = gathering.gatheringId == attendingGatheringId,
+                isAttending = gathering.gatheringId in attendingGatheringIds,
             )
         }
     }

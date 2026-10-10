@@ -3,6 +3,7 @@ package com.rectime.mobile.feature.event
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.FetchedCache
 import com.rectime.mobile.core.cache.PlatformKeyValueStore
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.feature.schedule.EventResponse
@@ -28,7 +29,7 @@ internal class EventCacheRequest internal constructor(
     internal val generation: CacheRequestGeneration,
 )
 
-/** 一覧と詳細を新旧比較して共有する。集合情報は別に管理する。 */
+/** 一覧と詳細を新旧比較して共有する。詳細のラウンド情報は一覧の更新でも保持する。 */
 @OptIn(ExperimentalTime::class)
 internal class EventCache(private val cache: LocalCache) {
     private val key: Any = if (cache.store is PlatformKeyValueStore) PlatformEventCacheKey else cache.store
@@ -45,9 +46,11 @@ internal class EventCache(private val cache: LocalCache) {
         EventCacheRequest(++state().revision, CacheRequestGeneration())
     }
 
-    suspend fun loadEvents(): EventsResponse? = eventCacheMutex.withLock {
+    suspend fun loadEvents(): EventsResponse? = loadEventsEntry()?.data
+
+    suspend fun loadEventsEntry(): FetchedCache<EventsResponse>? = eventCacheMutex.withLock {
         val generation = CacheRequestGeneration()
-        loadOrNull<EventsResponse>("schedule_events_v1").takeIf { generation.isCurrent }
+        loadEntryOrNull<EventsResponse>("schedule_events_v1").takeIf { generation.isCurrent }
     }
 
     suspend fun saveEvents(events: EventsResponse): EventsResponse = saveEvents(events, beginRequest())
@@ -63,19 +66,21 @@ internal class EventCache(private val cache: LocalCache) {
             if (!request.generation.isCurrent) return@withLock events
             val savedEvents = loadOrNull<EventsResponse>("schedule_events_v1")
             val merged = events.copy(events = events.events.map { incoming ->
-                val saved = savedDetail(incoming.eventId, savedEvents)
+                val saved = savedDetail(incoming.eventId, savedEvents)?.data
                 if (saved != null && keepSaved(saved.updatedAt, incoming.updatedAt, incoming.eventId, request)) {
                     incoming.withDetail(saved)
                 } else incoming
             })
-            if (persist && saveOrIgnore("schedule_events_v1", merged, request)) {
+            if (persist && saveOrIgnore("schedule_events_v1", merged, request, cache.fetchedNow())) {
                 merged.events.forEach { recordWrite(it.eventId, detail = false, request) }
             }
             // 保存に失敗しても、通信結果と統合した内容は画面へ返す。
             merged
         }
 
-    suspend fun loadDetail(eventId: Int): EventDetailResponse? = eventCacheMutex.withLock {
+    suspend fun loadDetail(eventId: Int): EventDetailResponse? = loadDetailEntry(eventId)?.data
+
+    suspend fun loadDetailEntry(eventId: Int): FetchedCache<EventDetailResponse>? = eventCacheMutex.withLock {
         val generation = CacheRequestGeneration()
         savedDetail(eventId, loadOrNull("schedule_events_v1")).takeIf { generation.isCurrent }
     }
@@ -91,10 +96,22 @@ internal class EventCache(private val cache: LocalCache) {
     private suspend fun mergeDetail(detail: EventDetailResponse, request: EventCacheRequest, persist: Boolean): EventDetailResponse =
         eventCacheMutex.withLock {
             if (!request.generation.isCurrent) return@withLock detail
-            val events = loadOrNull<EventsResponse>("schedule_events_v1")
-            val saved = savedDetail(detail.eventId, events)
-            val merged = if (saved != null && keepSaved(saved.updatedAt, detail.updatedAt, detail.eventId, request)) saved else detail
-            val detailSaved = persist && saveOrIgnore("event_detail_v1_${detail.eventId}", merged, request)
+            val savedEvents = loadEntryOrNull<EventsResponse>("schedule_events_v1")
+            val events = savedEvents?.data
+            val savedEntry = savedDetail(detail.eventId, events)
+            val saved = savedEntry?.data
+            val retained = saved?.takeIf { keepSaved(it.updatedAt, detail.updatedAt, detail.eventId, request) }
+            val merged = if (retained != null) {
+                retained.copy(rounds = retained.rounds ?: detail.rounds)
+            } else detail.copy(rounds = detail.rounds ?: saved?.rounds)
+            val detailKey = "event_detail_v1_${detail.eventId}"
+            val detailSaved = if (persist) {
+                val fetchedAt = if (retained?.rounds != null) {
+                    // 遅い旧応答を捨てる場合、新しい詳細の取得時刻も保持する。
+                    savedEntry.fetchedAt
+                } else cache.fetchedNow()
+                saveOrIgnore(detailKey, merged, request, fetchedAt)
+            } else false
             if (detailSaved) {
                 recordWrite(detail.eventId, detail = true, request)
             }
@@ -102,7 +119,7 @@ internal class EventCache(private val cache: LocalCache) {
             if (persist && events != null && events.events.any { it.eventId == detail.eventId }) {
                 if (saveOrIgnore("schedule_events_v1", events.copy(events = events.events.map {
                     if (it.eventId == detail.eventId) it.withDetail(merged) else it
-                }), request)) {
+                }), request, savedEvents.fetchedAt)) {
                     // 詳細の保存だけ失敗した場合は、更新できた一覧を優先する。
                     recordWrite(detail.eventId, detail = detailSaved, request)
                 }
@@ -110,18 +127,26 @@ internal class EventCache(private val cache: LocalCache) {
             merged
         }
 
-    private suspend fun savedDetail(eventId: Int, events: EventsResponse?): EventDetailResponse? {
-        val listed = events?.events?.firstOrNull { it.eventId == eventId }?.toDetail()
-        val detailed = loadOrNull<EventDetailResponse>("event_detail_v1_$eventId")
-        if (listed == null) return detailed
-        if (detailed == null) return listed
-        val comparison = compareTime(detailed.updatedAt, listed.updatedAt)
-        return when {
-            comparison != null && comparison > 0 -> detailed
-            comparison != null && comparison < 0 -> listed
-            state().writes[eventId]?.detail == true -> detailed
-            else -> listed
-        }
+    private suspend fun savedDetail(eventId: Int, events: EventsResponse?): FetchedCache<EventDetailResponse>? {
+        val listEntry = events?.events?.firstOrNull { it.eventId == eventId }?.toDetail()
+        val saved = loadEntryOrNull<EventDetailResponse>("event_detail_v1_$eventId")
+        val detailed = saved?.data
+        val listed = listEntry?.copy(rounds = detailed?.rounds)
+        val value = when {
+            listed == null -> detailed
+            detailed == null -> listed
+            else -> {
+                val comparison = compareTime(detailed.updatedAt, listed.updatedAt)
+                when {
+                    comparison != null && comparison > 0 -> detailed
+                    comparison != null && comparison < 0 -> listed
+                    state().writes[eventId]?.detail == true -> detailed
+                    else -> listed
+                }
+            }
+        } ?: return null
+        // 一覧から本文を補っても、詳細APIの取得時刻を一覧の時刻で代用しない。
+        return FetchedCache(value, saved?.fetchedAt)
     }
 
     private fun keepSaved(savedAt: String?, incomingAt: String?, eventId: Int, request: EventCacheRequest): Boolean {
@@ -148,10 +173,10 @@ internal class EventCache(private val cache: LocalCache) {
         return a.compareTo(b)
     }
 
-    private suspend inline fun <reified T> saveOrIgnore(key: String, value: T, request: EventCacheRequest): Boolean {
+    private suspend inline fun <reified T> saveOrIgnore(key: String, value: T, request: EventCacheRequest, fetchedAt: String?): Boolean {
         if (!request.generation.isCurrent) return false
         return try {
-            cache.save(key, value)
+            cache.saveEntry(key, value, fetchedAt)
             request.generation.isCurrent
         } catch (e: CancellationException) {
             throw e
@@ -159,6 +184,14 @@ internal class EventCache(private val cache: LocalCache) {
             e.printStackTrace()
             false
         }
+    }
+
+    private suspend inline fun <reified T> loadEntryOrNull(key: String): FetchedCache<T>? = try {
+        cache.loadEntry<T>(key)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 
     private suspend inline fun <reified T> loadOrNull(key: String): T? = try {
