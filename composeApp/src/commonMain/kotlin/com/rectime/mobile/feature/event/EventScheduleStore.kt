@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.event
 
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.FetchedCache
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
@@ -36,7 +37,7 @@ internal class EventScheduleStore(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val mutex = Mutex()
     private var session = CacheRequestGeneration()
-    private var participation: List<MyEventParticipation>? = null
+    private var participation: FetchedCache<List<MyEventParticipation>>? = null
     private val requests = mutableMapOf<String, Deferred<Any>>()
 
     companion object {
@@ -52,10 +53,12 @@ internal class EventScheduleStore(
         session = CacheRequestGeneration()
     }
 
-    suspend fun cachedParticipation(): List<MyEventParticipation>? {
+    suspend fun cachedParticipation(): List<MyEventParticipation>? = cachedParticipationEntry()?.data
+
+    suspend fun cachedParticipationEntry(): FetchedCache<List<MyEventParticipation>>? {
         checkSession()
         val request = CacheRequestGeneration()
-        val saved = participation ?: loadOrNull<List<MyEventParticipation>>(ParticipationKey)
+        val saved = participation ?: loadEntryOrNull<List<MyEventParticipation>>(ParticipationKey)
         if (!request.isCurrent) return null
         // 保存読み込み中に最新応答が届いた場合はメモリの最新値を優先する。
         if (participation == null) participation = saved
@@ -80,10 +83,14 @@ internal class EventScheduleStore(
         val request = CacheRequestGeneration()
         val latest = myEvents.getMyEvents()
         if (!request.isCurrent) throw CancellationException("参加情報のセッションが変わりました")
-        participation = latest
-        saveOrIgnore(ParticipationKey, latest, request)
+        val entry = FetchedCache(latest, cache.fetchedNow())
+        participation = entry
+        saveOrIgnore(ParticipationKey, entry, request)
         latest
     }
+
+    suspend fun cachedDetailEntry(eventId: Int): FetchedCache<EventDetailResponse>? =
+        EventCache(cache).loadDetailEntry(eventId)
 
     /** 同時に開かれた詳細や将来のLive Activityも、イベントごとに通信を共有できる。 */
     suspend fun refreshDetail(eventId: Int): EventDetailResponse =
@@ -118,13 +125,21 @@ internal class EventScheduleStore(
         }
     }
 
+    private suspend inline fun <reified T> loadEntryOrNull(key: String): FetchedCache<T>? = try {
+        cache.loadEntry<T>(key)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
     private suspend inline fun <reified T> loadOrNull(key: String): T? = try {
         cache.load<T>(key)
     } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
 
-    private suspend inline fun <reified T> saveOrIgnore(key: String, value: T, request: CacheRequestGeneration) {
+    private suspend inline fun <reified T> saveOrIgnore(key: String, value: FetchedCache<T>, request: CacheRequestGeneration) {
         if (!request.isCurrent) return
-        try { cache.save(key, value) } catch (e: CancellationException) { throw e } catch (e: Exception) { e.printStackTrace() }
+        try { cache.saveEntry(key, value.data, value.fetchedAt) } catch (e: CancellationException) { throw e } catch (e: Exception) { e.printStackTrace() }
     }
 
     // 画面固有のテスト用Storeだけを破棄する。sharedは画面遷移で破棄しない。
