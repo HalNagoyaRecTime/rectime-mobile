@@ -145,6 +145,8 @@ class EventCardDimensions(screenWidthDp: Dp) {
     // 極小サイズ
     val compactCut: Dp = (6.1f * u).dp
     val compactTitleMaxFontSize: TextUnit = (2.4f * u).sp
+    val compactTimeMaxFontSize: TextUnit = (2.2f * u).sp
+    val compactTitleTimeSpacing: Dp = (1.5f * u).dp
     val compactArrowArm: Dp = (0.9f * u).dp
     val compactArrowStroke: Dp = (0.25f * u).dp
     val compactArrowOffsetX: Dp = (-1.5f * u).dp
@@ -213,7 +215,7 @@ class EventCardCutShape(
 }
 
 enum class EventCardSizeVariant {
-    Compact, // 極小: タイトルのみ最大表示
+    Compact, // 極小: タイトル → 時間を横一列に表示
     Small,   // 小: 時間 + タイトルのみ縦並び
     Medium,  // 中: フル表示
     Large    // 大: フル表示
@@ -760,26 +762,44 @@ private fun EventCardInnerContent(
                     )
                 }
                 EventCardSizeVariant.Compact -> {
+                    // 短時間イベントは縦に並べる余裕がないため、
+                    // 「イベント名 → 実施時間」を横一列に並べる(矢印はカード右端に別途描画)。
                     val density = LocalDensity.current
-                    val heightBasedSp = with(density) { (availableHeight * 0.75f).toSp() }
-                    val finalFontSize = if (heightBasedSp.value > dim.compactTitleMaxFontSize.value) {
-                        dim.compactTitleMaxFontSize
-                    } else {
-                        heightBasedSp.value.coerceAtLeast(4f).sp
-                    }
+                    val heightBasedSp = with(density) { (availableHeight * 0.6f).toSp() }.value
+                    val titleFontSize =
+                        minOf(heightBasedSp, dim.compactTitleMaxFontSize.value).coerceAtLeast(4f).sp
+                    val timeFontSize =
+                        minOf(heightBasedSp, dim.compactTimeMaxFontSize.value).coerceAtLeast(4f).sp
 
-                    Text(
-                        text = title,
-                        style = tightlySpacedTextStyle(
-                            fontSize = finalFontSize,
-                            fontWeight = titleWeight,
-                            fontFamily = fontFamily
-                        ),
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = title,
+                            style = tightlySpacedTextStyle(
+                                fontSize = titleFontSize,
+                                fontWeight = titleWeight,
+                                fontFamily = fontFamily
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            // 長いイベント名は省略し、実施時間は常に表示する
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(dim.compactTitleTimeSpacing))
+                        Text(
+                            text = time,
+                            style = tightlySpacedTextStyle(
+                                fontSize = timeFontSize,
+                                fontWeight = timeWeight,
+                                fontFamily = fontFamily
+                            ),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
             }
         }
