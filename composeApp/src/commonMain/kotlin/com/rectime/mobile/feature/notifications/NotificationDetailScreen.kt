@@ -30,6 +30,7 @@ import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppLoadingIndicator
+import com.rectime.mobile.ui.component.AppMarkdown
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.PressSurface
@@ -167,12 +168,13 @@ private fun NotificationDetailContent(
             modifier = Modifier.offset(y = NotificationDateTimeOffsetY),
         )
         AppDivider()
-        Text(
-            text = notification.body,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = AppTheme.colors.textDetailsScreenBody,
-            lineHeight = NotificationBodyLineHeight,
+        AppMarkdown(
+            content = notification.body,
+            imageTitle = notification.title,
+            bodyStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = FontWeight.Medium,
+                lineHeight = NotificationBodyLineHeight,
+            ),
         )
         AppDivider()
 

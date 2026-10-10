@@ -86,7 +86,7 @@ fun ImageViewerDialog(
     Dialog(onDismissRequest = { closeRequested = true }, properties = imageViewerDialogProperties()) {
         ModalScrimController(dimAmount = 0f)
         ImageViewerWindowController()
-        val painter = rememberAsyncImagePainter(imageUrl)
+        val painter = rememberCachedImagePainter(imageUrl)
         val state by painter.state.collectAsState()
         val openActions = rememberImageActions()
         val scope = rememberCoroutineScope()
