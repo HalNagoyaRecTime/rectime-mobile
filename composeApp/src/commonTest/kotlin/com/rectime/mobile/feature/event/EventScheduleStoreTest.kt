@@ -148,7 +148,32 @@ class EventScheduleStoreTest {
             advanceUntilIdle()
             assertEquals(1, count)
             assertEquals(listOf(10, 30), vm.uiState.value.gatherings.map { it.gatheringId })
-            assertEquals(10, vm.uiState.value.attendingGatheringId)
+            assertEquals(setOf(10, 30), vm.uiState.value.attendingGatheringIds)
+        } finally { store.close() }
+    }
+
+    @Test fun offlineDetailRestoresAllPersonalGatheringsAndSuccessfulEmptyListClearsThem() = runTest(dispatcher) {
+        val cache = LocalCache(MemoryStore())
+        var offline = false
+        var ids = listOf(10, 30)
+        val http = client { if (offline) error("offline") else detailBody }
+        val store = EventScheduleStore(cache, http, object : MyEventsGateway {
+            override suspend fun getMyEvents() = if (ids.isEmpty()) emptyList() else listOf(MyEventParticipation(1, ids))
+        })
+        try {
+            EventDetailViewModel(1, http, cache, store)
+            advanceUntilIdle()
+            offline = true
+            val offlineDetail = EventDetailViewModel(1, http, cache, store)
+            advanceUntilIdle()
+            assertEquals(setOf(10, 30), offlineDetail.uiState.value.attendingGatheringIds)
+            assertEquals(2, offlineDetail.uiState.value.gatherings.size)
+            assertTrue(offlineDetail.uiState.value.isOffline)
+            ids = emptyList()
+            store.refreshParticipation()
+            val nonParticipant = EventDetailViewModel(1, http, cache, store)
+            advanceUntilIdle()
+            assertTrue(nonParticipant.uiState.value.attendingGatheringIds.isEmpty())
         } finally { store.close() }
     }
 

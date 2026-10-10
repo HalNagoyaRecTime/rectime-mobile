@@ -149,7 +149,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                             EventDetailContent(
                                 event = event,
                                 gatherings = uiState.gatherings,
-                                attendingGatheringId = uiState.attendingGatheringId,
+                                attendingGatheringIds = uiState.attendingGatheringIds,
                                 onOpenMap = { isMapVisible = true },
                                 onTitleBandHeightChanged = { titleBandHeightPx = it },
                             )
@@ -169,7 +169,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 private fun EventDetailContent(
     event: EventDetail,
     gatherings: List<Gathering>,
-    attendingGatheringId: Int?,
+    attendingGatheringIds: Set<Int>,
     onOpenMap: () -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
 ) {
@@ -208,7 +208,7 @@ private fun EventDetailContent(
                 DetailSection(heading = "集合時間・集合場所", onInfoClick = onOpenMap) {
                     GatheringList(
                         gatherings = gatherings,
-                        attendingGatheringId = attendingGatheringId,
+                        attendingGatheringIds = attendingGatheringIds,
                     )
                 }
             }
@@ -302,7 +302,7 @@ private fun DetailBodyText(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun GatheringList(gatherings: List<Gathering>, attendingGatheringId: Int?) {
+private fun GatheringList(gatherings: List<Gathering>, attendingGatheringIds: Set<Int>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -312,7 +312,7 @@ private fun GatheringList(gatherings: List<Gathering>, attendingGatheringId: Int
         gatherings.forEach { gathering ->
             GatheringRow(
                 gathering = gathering,
-                isAttending = gathering.gatheringId == attendingGatheringId,
+                isAttending = gathering.gatheringId in attendingGatheringIds,
             )
         }
     }

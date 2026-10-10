@@ -578,7 +578,7 @@ class EventDetailViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals("更新後", viewModel.uiState.value.eventDetail?.eventName)
         assertEquals(20, viewModel.uiState.value.gatherings.single().gatheringId)
-        assertNull(viewModel.uiState.value.attendingGatheringId)
+        assertEquals(emptySet(), viewModel.uiState.value.attendingGatheringIds)
     }
 
     // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
