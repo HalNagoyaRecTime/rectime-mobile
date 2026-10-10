@@ -20,6 +20,23 @@ import kotlin.test.assertTrue
 
 class AuthApiTest {
 
+    @Test
+    fun desktopAuthUrlSendsLoopbackAndRejectsApiWithDifferentRedirect() = runTest {
+        val redirectUri = "http://localhost:54321/auth/callback"
+        val api = AuthApi(mockClient { request ->
+            assertEquals(redirectUri, request.headers["X-Desktop-Redirect-Uri"])
+            respond(
+                """{"auth_url":"https://login.microsoftonline.com/authorize?redirect_uri=http%3A%2F%2Flocalhost%3A54321%2Fauth%2Fcallback"}""",
+                HttpStatusCode.OK, jsonHeaders,
+            )
+        })
+        assertTrue(api.requestAuthUrl("state", "challenge", redirectUri).contains("redirect_uri="))
+        val oldApi = AuthApi(mockClient {
+            respond("""{"auth_url":"https://login.microsoftonline.com/authorize?redirect_uri=com.example%3A%2F%2Fauth%2Fcallback"}""", HttpStatusCode.OK, jsonHeaders)
+        })
+        assertFailsWith<IllegalStateException> { oldApi.requestAuthUrl("state", "challenge", redirectUri) }
+    }
+
     // ---- requestAuthUrl 正常系 ----
 
     @Test

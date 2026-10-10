@@ -1,81 +1,58 @@
-# Desktop の Microsoft ログイン（Windows 開発用）
+# DesktopのMicrosoftログイン
 
-モバイルと同じ `com.rectime.mobile://auth/callback` を使う。
-API のソースや環境変数を Desktop 用に変更する必要はない。
+DesktopはシステムブラウザとAuthorization Code + PKCEを使い、
+認証後はアプリが受信するHTTPループバックURLへ戻る。
+Android/iOSは従来どおりカスタムスキームを使う。
+WindowsのURL登録・受信用EXEは不要。
 
-## ログインの流れ
+## Entraの設定
 
-1. アプリから Microsoft のログイン画面を開く。
-2. Microsoft 側の認証・確認を進める。
-3. ブラウザがアプリ用 URL を開く際の確認で「開く」を選ぶ。
-4. Windows が登録済みの受信用プログラムを起動する。
-5. 認証結果が起動中のアプリへ渡り、既存の PKCE/state 検証と API のコード交換へ進む。
-6. アプリを前面に戻すよう要求する。
+アプリ登録 → 認証 →「モバイルとデスクトップ アプリケーション」に
+`http://localhost/auth/callback` を登録する。
+Web用の `/api/v1/auth/microsoft/callback` とはパスを分ける。
+localhostのポートはMicrosoftの一致判定で無視されるため、登録時に固定しない。
+Webとネイティブの登録で、同じlocalhostパスを重複させない。
+APIの `MICROSOFT_MOBILE_REDIRECT_URI` はAndroid/iOS用の値を保つ。
 
-Microsoft の確認画面と、ブラウザの「アプリを開く」確認は提供元の画面。
-表示や文言はセッション・ブラウザ設定で変わる。アプリ独自の確認画面は追加しない。
+- [Microsoftのlocalhostの規則](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url#localhost-exceptions)
+- [RFC 8252: ネイティブアプリのループバック認証](https://www.rfc-editor.org/rfc/rfc8252.html#section-7.3)
 
-- [Windows の URI 起動](https://learn.microsoft.com/en-us/windows/apps/develop/launch/launch-default-app)
-- [Edge の外部プロトコル確認](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/autolaunchprotocolsfromorigins)
+## 起動
 
-## 初回登録
-
-rectime-mobile のディレクトリで実行する。管理者権限は不要。
-
-```powershell
-.\setup\register-desktop-auth.ps1 -Register
-```
-
-Windows 標準の .NET Framework コンパイラで受信用プログラムをビルドし、
-現在のユーザーの `HKCU\Software\Classes\com.rectime.mobile` に登録する。
-別のアプリが登録済みの場合は上書きしない。
-登録・解除後は `SHChangeNotify(SHCNE_ASSOCCHANGED)` で Windows に関連付けの変更を通知する。
-実行ファイルは `composeApp/build/desktop-auth/` に置き、資格情報は保存しない。
-`gradlew clean` 後は再登録する。作業ディレクトリを移動する場合は、移動前に登録を解除し、新しい場所で再登録する。
-この登録は開発中のチェックアウト用。配布用インストーラーの登録処理は含まない。
-
-## ローカル起動
-
-rectime-api では通常どおり起動する。
+API側で通常どおり起動する。
 
 ```powershell
 npm run dev
 ```
 
-API の `MICROSOFT_MOBILE_REDIRECT_URI` はモバイルと同じ
-`com.rectime.mobile://auth/callback` のまま使う。
-
-rectime-mobile では API 接続先だけを指定する。
+モバイルリポジトリでDesktopを起動する。
 
 ```powershell
 $env:API_BASE_URL = 'http://127.0.0.1:8787'
 .\gradlew.bat :composeApp:run
 ```
 
-Desktop はブラウザを開く直前に `127.0.0.1:49152/auth/callback` で待ち受ける。
-この HTTP 接続は Windows の受信用プログラムからアプリへの中継専用で、
-Microsoft の戻り先には使わない。認証結果は保存せず、その場でアプリへ渡す。
-待ち受けは応答後、再試行時、ブラウザ起動の失敗時、または10分後に閉じる。
-アプリを終了してから認証を続けた場合は、アプリを起動してログインをやり直す。
+## 認証の流れと画面
 
-## Firefoxで「続行」の後に停止する場合
+1. 共通のログインボタンからMicrosoftの画面をシステムブラウザで開く。
+2. DesktopがIPv4ループバックの空きポートで待ち受ける。
+3. APIへ `X-Desktop-Redirect-Uri: http://localhost:<空きポート>/auth/callback` を送る。
+4. APIはlocalhost・パス・ポートを検証し、stateと一緒に戻り先を保存する。
+5. Microsoftの認証後、ブラウザがそのURLに戻る。
+6. DesktopはstateとHostを検証し、共通の認証処理へ結果を渡す。
+7. APIは開始時に保存した同じ戻り先とPKCEでコードを交換する。
 
-WindowsでChrome経由の実ログインとアプリへの復帰を確認済み。
-FirefoxではMicrosoftが正しい戻り先への302応答を返しても、
-不明なプロトコルとして移動を中止する現象が複数のFirefox環境で再現した。
-関連付け変更の通知を追加しても解消しておらず、Firefox側の具体的な原因は未特定。
-開発時はChromeを利用できる。
+ログイン前後のアプリ画面はモバイルと共通。
+Microsoftの画面はセッションやアカウントの設定によって変わる。
+「アプリを開きますか？」は出ず、ブラウザには結果をアプリに渡した旨の文言を表示する。
+アプリを前面に戻すよう要求するが、OSによっては手動で戻る必要がある。
 
-Microsoftの応答が `302` で、`Location` が `com.rectime.mobile://auth/callback` なら、
-Microsoftからの戻り先は正しい。FirefoxからWindowsのURLハンドラーへ渡す段階を確認する。
-登録コマンドを再実行して関連付け情報を更新し、アプリから新しいログインを開始する。
-改善しない場合はFirefoxを通常の操作で完全に終了して開き直し、再試行する。
-ネットワークの `Location` に含まれる認証コードや、リクエストのトークンは共有しない。
+受信は10分後、認証応答後、再試行時、API取得失敗時、ブラウザ起動失敗時に終了する。
+アプリを閉じた場合や認証待ちが期限切れの場合は、新しくログインを開始する。
+ブラウザのURLに認証コードが含まれるため、共有・保存しない。
 
-## 登録解除
+## 以前のWindows登録
 
-```powershell
-.\setup\register-desktop-auth.ps1 -Unregister
-```
-
-このチェックアウトの受信用プログラムを指す登録だけを解除する。
+以前の `register-desktop-auth.ps1` で登録したカスタムスキームは今回の方式では使わない。
+登録を解除する場合は以前のブランチの同スクリプトを `-Unregister` で実行する。
+別のアプリが所有する登録を手動で削除しない。

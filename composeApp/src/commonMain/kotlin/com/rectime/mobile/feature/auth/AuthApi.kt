@@ -11,6 +11,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
+import io.ktor.http.Url
 import io.ktor.http.contentType
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -23,18 +24,23 @@ class AuthApi(
     private val client: HttpClient = createAppHttpClient(),
     private val baseUrl: String = apiBaseUrl,
 ) {
-    suspend fun requestAuthUrl(state: String, codeChallenge: String): String {
+    suspend fun requestAuthUrl(state: String, codeChallenge: String, desktopRedirectUri: String? = null): String {
         val response = client.get("$baseUrl/api/v1/auth/microsoft/login") {
             header("X-Client-Type", "mobile")
             header("X-State", state)
             header("X-PKCE-Code-Challenge", codeChallenge)
+            desktopRedirectUri?.let { header("X-Desktop-Redirect-Uri", it) }
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
             throw response.toAuthApiException(body, "認証 URL の取得に失敗しました")
         }
-        return decodeBody<AuthUrlResponse>(body)?.authUrl
+        val authUrl = decodeBody<AuthUrlResponse>(body)?.authUrl
             ?: throw IllegalStateException("認証 URL のレスポンスが不正です")
+        if (desktopRedirectUri != null && Url(authUrl).parameters["redirect_uri"] != desktopRedirectUri) {
+            throw IllegalStateException("APIがDesktopの認証戻り先に対応していません")
+        }
+        return authUrl
     }
 
     suspend fun exchangeCode(code: String, state: String, codeVerifier: String): AuthSession {

@@ -1042,6 +1042,8 @@ class AuthViewModelTest {
     @Test
     fun startLoginReportsFailureWhenBrowserCannotBeOpened() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage()
+        val prepared = mutableListOf<String>()
+        val canceled = mutableListOf<String>()
         val viewModel = buildViewModel(
             api = AuthApi(
                 mockClient {
@@ -1054,6 +1056,8 @@ class AuthViewModelTest {
             ),
             store = store,
             openUrl = { false },
+            prepareCallback = { prepared += it; null },
+            cancelCallback = { canceled += it },
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -1065,11 +1069,15 @@ class AuthViewModelTest {
         assertTrue(state.error.orEmpty().startsWith(AUTH_FAILED_MESSAGE), state.error.orEmpty())
         assertNull(state.pendingAuth)
         assertNull(store.pendingAuth)
+        assertEquals(1, prepared.size)
+        assertEquals(prepared, canceled)
     }
 
     @Test
     fun startLoginReportsFailureWhenAuthUrlRequestFails() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage()
+        val prepared = mutableListOf<String>()
+        val canceled = mutableListOf<String>()
         val viewModel = buildViewModel(
             api = AuthApi(
                 mockClient {
@@ -1082,6 +1090,8 @@ class AuthViewModelTest {
             ),
             store = store,
             openUrl = { error("ブラウザを開いてはいけない") },
+            prepareCallback = { prepared += it; null },
+            cancelCallback = { canceled += it },
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -1092,6 +1102,8 @@ class AuthViewModelTest {
         assertEquals(false, state.isLoading)
         assertTrue(state.error.orEmpty().startsWith(AUTH_FAILED_MESSAGE), state.error.orEmpty())
         assertNull(store.pendingAuth)
+        assertEquals(1, prepared.size)
+        assertEquals(prepared, canceled)
     }
 
     @Test
@@ -1807,6 +1819,8 @@ class AuthViewModelTest {
         nowMillis: () -> Long = { 1_000L },
         // 単体テストではOSの共有状態や別Dispatcherの通知処理を呼び出さない。
         pushTokenLifecycle: PushTokenLifecycle = RecordingPushTokenLifecycle(mutableListOf()),
+        prepareCallback: (String) -> String? = { null },
+        cancelCallback: (String) -> Unit = {},
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
@@ -1815,6 +1829,8 @@ class AuthViewModelTest {
         openUrl = openUrl,
         nowMillis = nowMillis,
         pushTokenLifecycle = pushTokenLifecycle,
+        prepareCallback = prepareCallback,
+        cancelCallback = cancelCallback,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })

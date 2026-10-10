@@ -7,32 +7,18 @@ import java.awt.Frame
 import java.awt.Window
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
-private var activeReceiver: LoopbackAuthCallbackReceiver? = null
+private var activeReceiver: Pair<String, LoopbackAuthCallbackReceiver>? = null
 
 @Synchronized
-internal fun startDesktopAuthCallbackReceiver(authUrl: String): LoopbackAuthCallbackReceiver? {
-    val uri = URI(authUrl)
-    if (uri.scheme != "https" || uri.host != "login.microsoftonline.com" ||
-        !uri.path.endsWith("/oauth2/v2.0/authorize")) return null
-    val query = uri.rawQuery.orEmpty().split('&').mapNotNull { part ->
-        val separator = part.indexOf('=')
-        if (separator < 0) null else {
-            URLDecoder.decode(part.substring(0, separator), StandardCharsets.UTF_8) to
-                URLDecoder.decode(part.substring(separator + 1), StandardCharsets.UTF_8)
-        }
-    }.toMap()
-    val redirectUri = query["redirect_uri"] ?: return null
-    if (redirectUri != MOBILE_AUTH_CALLBACK_URI) return null
-    val state = requireNotNull(query["state"])
-    activeReceiver?.stop()
-    return LoopbackAuthCallbackReceiver(redirectUri) { url ->
+internal actual fun preparePlatformAuthCallback(state: String): String? {
+    activeReceiver?.second?.stop()
+    val receiver = LoopbackAuthCallbackReceiver { url ->
         AuthDeepLinkHandler.handle(url)
         EventQueue.invokeLater {
             Window.getWindows().firstOrNull { it.isVisible }?.apply {
@@ -41,15 +27,21 @@ internal fun startDesktopAuthCallbackReceiver(authUrl: String): LoopbackAuthCall
                 requestFocus()
             }
         }
-    }.apply {
-        start(state)
-        activeReceiver = this
+    }
+    val redirectUri = receiver.start(state)
+    activeReceiver = state to receiver
+    return redirectUri
+}
+
+@Synchronized
+internal actual fun cancelPlatformAuthCallback(state: String) {
+    if (activeReceiver?.first == state) {
+        activeReceiver?.second?.stop()
+        activeReceiver = null
     }
 }
 
 internal class LoopbackAuthCallbackReceiver(
-    private val configuredUri: String,
-    private val port: Int = 49152,
     private val onCallback: (String) -> Unit = AuthDeepLinkHandler::handle,
 ) {
     private var server: HttpServer? = null
@@ -58,15 +50,9 @@ internal class LoopbackAuthCallbackReceiver(
     @Synchronized
     fun start(state: String): String {
         stop()
-
-        require(configuredUri == MOBILE_AUTH_CALLBACK_URI) { "認証戻り先がモバイルの設定と一致しません。" }
-        require(port in 1024..65535) { "認証受信ポートの設定が不正です。" }
-        val address = InetSocketAddress(
-            InetAddress.getByName("127.0.0.1"),
-            port,
-        )
-        val listener = HttpServer.create(address, 0)
-        val redirectUri = "http://127.0.0.1:${listener.address.port}/auth/callback"
+        require(state.isNotEmpty()) { "認証stateがありません。" }
+        val listener = HttpServer.create(InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0)
+        val redirectUri = "http://localhost:${listener.address.port}/auth/callback"
         listener.createContext("/auth/callback") { exchange ->
             handleCallback(exchange, state, redirectUri, listener)
         }
@@ -83,29 +69,34 @@ internal class LoopbackAuthCallbackReceiver(
 
     private fun handleCallback(exchange: HttpExchange, state: String, redirectUri: String, listener: HttpServer) {
         val query = exchange.requestURI.rawQuery.orEmpty()
-        val callbackState = query.split('&').firstOrNull { it.startsWith("state=") }?.substringAfter('=')
+        val values = runCatching {
+            query.split('&').map { part ->
+                val pair = part.split('=', limit = 2)
+                URLDecoder.decode(pair[0], StandardCharsets.UTF_8) to
+                    URLDecoder.decode(pair.getOrElse(1) { "" }, StandardCharsets.UTF_8)
+            }
+        }.getOrDefault(emptyList())
+        val states = values.filter { it.first == "state" }
         val valid = exchange.requestMethod == "GET" &&
             exchange.requestURI.path == "/auth/callback" &&
             exchange.requestHeaders.getFirst("Host") == redirectUri.removePrefix("http://").substringBefore('/') &&
-            callbackState == state
-        val message = if (valid) "ログイン処理をアプリで続けています。このタブを閉じてください。" else "認証応答を受け付けませんでした。"
+            states.size == 1 && states.single().second == state &&
+            (values.any { it.first == "code" && it.second.isNotEmpty() } ||
+                values.any { it.first == "error" && it.second.isNotEmpty() })
+        val message = if (valid) "認証結果をアプリに渡しました。このタブを閉じてアプリに戻ってください。" else "認証応答を受け付けませんでした。"
         val body = message.toByteArray(StandardCharsets.UTF_8)
         try {
             exchange.responseHeaders.set("Content-Type", "text/plain; charset=utf-8")
             exchange.responseHeaders.set("Cache-Control", "no-store")
+            exchange.responseHeaders.set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+            exchange.responseHeaders.set("Referrer-Policy", "no-referrer")
             exchange.sendResponseHeaders(if (valid) 200 else 400, body.size.toLong())
             exchange.responseBody.use { it.write(body) }
         } finally {
             exchange.close()
-            if (valid) {
-                synchronized(this) {
-                    if (server === listener) {
-                        try {
-                            onCallback("$configuredUri?$query")
-                        } finally {
-                            stop()
-                        }
-                    }
+            if (valid) synchronized(this) {
+                if (server === listener) {
+                    try { onCallback("$redirectUri?$query") } finally { stop() }
                 }
             }
         }
@@ -130,5 +121,3 @@ internal class LoopbackAuthCallbackReceiver(
         }
     }
 }
-
-internal const val MOBILE_AUTH_CALLBACK_URI = "com.rectime.mobile://auth/callback"
