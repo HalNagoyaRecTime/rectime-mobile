@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- アプリ本体のテーマ。背景が白いためステータスバーの文字を黒にする。
+         SplashScreen終了時にこのテーマの値でシステムバーの見た目が上書きされるため、
+         MainActivity の enableEdgeToEdge と同じ指定をテーマ側にも持たせる。 -->
+    <style name="Theme.App" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>
