@@ -67,6 +67,12 @@ class ScheduleViewModel internal constructor(
     private val _events = mutableStateOf(listOf<TimelineEvent>())
     val events: State<List<TimelineEvent>> = _events
 
+    internal val liveActivityReady: Boolean
+        get() = enteredSession?.isCurrent == true && !isLoading
+
+    internal val liveActivityEvents: List<TimelineEvent>
+        get() = if (enteredSession?.isCurrent == true) _events.value else emptyList()
+
     var isLoading by mutableStateOf(false)
         private set
 

@@ -9,6 +9,8 @@
   共通キー: CADisableMinimumFrameDurationOnPhone, UILaunchScreen, CFBundleURLTypes
 -->
 <dict>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>RE:CREATION</string>
 	<key>CFBundleName</key>
