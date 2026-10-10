@@ -5,7 +5,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +28,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -45,6 +43,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -73,12 +72,6 @@ import rectime_mobile.composeapp.generated.resources.ic_settings_outline
 private const val CompactAspectRatioThreshold = 1.9f
 private const val CompactScale = 0.80f
 
-// バー幅をタブ数で等分した幅より少し広く取り、隣のタブと重ねたい
-// （選択中のピルの幅を保つため。全タブの幅は揃える）
-private const val NavItemOverlapRatio = 0.24f
-private val NavItemContentMinWidth = 88.dp
-private val NavItemContentMaxWidth = 160.dp
-
 private val BarOuterMarginHorizontal = 16.dp
 private val BarOuterMarginTop = 12.dp
 private val BarShadowElevation = 6.dp
@@ -91,7 +84,7 @@ private const val IndicatorSpringStiffness = 380f
 private val IndicatorShadowElevation = 4.dp
 private val IndicatorUnderlineHeight = 3.dp
 
-private val ItemContentPaddingHorizontal = 16.dp
+private val ItemContentPaddingHorizontal = 2.dp
 private val ItemContentPaddingTop = 12.dp
 private val ItemContentPaddingBottom = 2.dp
 private val ItemContentSpacing = 2.dp
@@ -163,17 +156,13 @@ fun BottomNavigationBar(
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val safeAreaOverlap = minOf(LocalBottomNavigationSafeAreaOverlap.current, navigationBarInset / 2)
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
             .offset(y = safeAreaOverlap)
             .fillMaxWidth(),
     ) {
         val outerMarginHorizontal = BarOuterMarginHorizontal * scale
-        val barWidth = maxWidth - outerMarginHorizontal * 2
-        val itemWidth = barWidth / items.size * (1f + NavItemOverlapRatio)
-        val itemContentWidth = (itemWidth - ItemContentPaddingHorizontal * scale * 2)
-            .coerceIn(NavItemContentMinWidth * scale, NavItemContentMaxWidth * scale)
 
         Box(
             modifier = Modifier
@@ -227,28 +216,24 @@ fun BottomNavigationBar(
                     )
                 }
 
-                items.forEachIndexed { index, item ->
-                    // どのタブも同じ幅を保ちたい（Rowだと幅が足りないとき最後の要素だけ縮んでしまうため。
-                    // はみ出して重なるのは許容する）
-                    val itemAlignment = BiasAlignment(
-                        horizontalBias = if (items.size == 1) 0f else -1f + 2f * index / (items.lastIndex),
-                        verticalBias = 1f,
-                    )
-                    BottomNavigationItem(
-                        label = item.label,
-                        outlineIcon = item.outlineIcon,
-                        filledIcon = item.filledIcon,
-                        selected = currentScreen.key == item.screen.key,
-                        showBadge = item.showBadge,
-                        contentWidth = itemContentWidth,
-                        scale = scale,
-                        onClick = { onSelectRoot(item.screen) },
-                        modifier = Modifier
-                            .align(itemAlignment)
-                            .onGloballyPositioned { coordinates ->
-                                itemBounds[item.screen.key] = coordinates.boundsInParent()
-                            },
-                    )
+                // 表示とタップ領域を同じ4等分幅に収め、隣の項目へはみ出さない。
+                Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                    items.forEach { item ->
+                        BottomNavigationItem(
+                            label = item.label,
+                            outlineIcon = item.outlineIcon,
+                            filledIcon = item.filledIcon,
+                            selected = currentScreen.key == item.screen.key,
+                            showBadge = item.showBadge,
+                            scale = scale,
+                            onClick = { onSelectRoot(item.screen) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .onGloballyPositioned { coordinates ->
+                                    itemBounds[item.screen.key] = coordinates.boundsInParent()
+                                },
+                        )
+                    }
                 }
             }
         }
@@ -300,7 +285,6 @@ private fun BottomNavigationItem(
     filledIcon: DrawableResource,
     selected: Boolean,
     showBadge: Boolean,
-    contentWidth: Dp,
     scale: Float,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -326,7 +310,7 @@ private fun BottomNavigationItem(
         ),
     ) {
         Column(
-            modifier = Modifier.width(contentWidth),
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(ItemContentSpacing * scale),
         ) {
@@ -377,6 +361,7 @@ private fun BottomNavigationItem(
                 fontSize = ItemLabelFontSize * scale,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
