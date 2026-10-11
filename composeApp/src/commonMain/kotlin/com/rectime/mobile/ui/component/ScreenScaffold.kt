@@ -91,7 +91,7 @@ fun RootScreenScaffold(
                 LazyColumn(
                     userScrollEnabled = inputEnabled,
                     state = lazyListState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().lockVerticalScrollAxis(),
                     overscrollEffect = if (onRefresh == null) rememberOverscrollEffect() else null,
                     contentPadding = PaddingValues(
                         top = topInset,
@@ -182,7 +182,7 @@ fun PushScreenScaffold(
         LazyColumn(
             state = lazyListState,
             userScrollEnabled = inputEnabled,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().lockVerticalScrollAxis(),
             contentPadding = PaddingValues(
                 top = topInset,
                 start = if (horizontalPadding) hPad else 0.dp,
@@ -237,6 +237,7 @@ fun SheetScaffold(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .lockVerticalScrollAxis()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(top = spacing + AppTheme.layout.headerAction + spacing, bottom = 24.dp)
                 .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
