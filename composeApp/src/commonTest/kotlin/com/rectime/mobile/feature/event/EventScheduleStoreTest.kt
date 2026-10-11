@@ -177,6 +177,32 @@ class EventScheduleStoreTest {
         } finally { store.close() }
     }
 
+    @Test fun detailUsesLatestSharedParticipationWhileItsBodyIsStillLoading() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var delayDetail = false
+        var ids = listOf(10)
+        val cache = LocalCache(MemoryStore())
+        val http = client { if (delayDetail) gate.await(); detailBody }
+        val store = EventScheduleStore(cache, http, object : MyEventsGateway {
+            override suspend fun getMyEvents() = listOf(MyEventParticipation(1, ids))
+        })
+        try {
+            val vm = EventDetailViewModel(1, http, cache, store)
+            vm.onForeground()
+            advanceUntilIdle()
+            assertEquals(setOf(10), vm.uiState.value.attendingGatheringIds)
+            delayDetail = true
+            vm.onForeground()
+            runCurrent()
+            // 別画面での取得が先に完了しても、詳細は古い参加結果へ戻さない。
+            ids = listOf(30)
+            store.refreshParticipation()
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(setOf(30), vm.uiState.value.attendingGatheringIds)
+        } finally { store.close() }
+    }
+
     @Test fun scheduleUpdateRetainsDetailedRounds() = runTest(dispatcher) {
         val cache = EventCache(LocalCache(MemoryStore()))
         val detail = Json { ignoreUnknownKeys = true }.decodeFromString<EventDetailResponse>(detailBody)

@@ -212,6 +212,86 @@ class EventDetailViewModelTest {
     // ---- 正常系 ----
 
     @Test
+    fun firstResumeDoesNotDuplicateInitialFetchAndLaterResumeRefreshesBothApis() = runTest(testDispatcher) {
+        var detailCalls = 0
+        var participationCalls = 0
+        var body = validEventBody
+        var participating = validParticipationBody
+        val client = buildClient(
+            eventsHandler = { detailCalls++; jsonOk(body).invoke(this, it) },
+            participationHandler = { participationCalls++; jsonOk(participating).invoke(this, it) },
+        )
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore()))
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, detailCalls)
+        assertEquals(1, participationCalls)
+        assertEquals(setOf(10), vm.uiState.value.attendingGatheringIds)
+
+        body = validEventBody.replace("100m走", "変更された競技").replace("08:45", "08:55")
+        participating = """{"events":[]}"""
+        vm.onForeground()
+        assertEquals("100m走", vm.uiState.value.eventDetail?.eventName)
+        assertFalse(vm.uiState.value.isLoading)
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, detailCalls)
+        assertEquals(2, participationCalls)
+        assertEquals("変更された競技", vm.uiState.value.eventDetail?.eventName)
+        assertEquals("08:55", vm.uiState.value.gatherings.single().gatheringTime)
+        assertTrue(vm.uiState.value.attendingGatheringIds.isEmpty())
+    }
+
+    @Test
+    fun resumeUpdatesParticipationEvenWhenDetailFetchFails() = runTest(testDispatcher) {
+        var failDetail = false
+        var participating = validParticipationBody
+        val client = buildClient(
+            eventsHandler = {
+                if (failDetail) throw RuntimeException("detail unavailable")
+                jsonOk(validEventBody).invoke(this, it)
+            },
+            participationHandler = { jsonOk(participating).invoke(this, it) },
+        )
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore()))
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        failDetail = true
+        participating = """{"events":[]}"""
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("100m走", vm.uiState.value.eventDetail?.eventName)
+        assertEquals(10, vm.uiState.value.gatherings.single().gatheringId)
+        assertTrue(vm.uiState.value.attendingGatheringIds.isEmpty())
+        assertTrue(vm.uiState.value.isOffline)
+        assertNull(vm.uiState.value.error)
+        failDetail = false
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(vm.uiState.value.isOffline)
+    }
+
+    @Test
+    fun resumeDoesNotHideDeletedDetailBehindCache() = runTest(testDispatcher) {
+        var deleted = false
+        val client = buildClient(
+            eventsHandler = {
+                if (deleted) statusOnly(HttpStatusCode.NotFound).invoke(this, it)
+                else jsonOk(validEventBody).invoke(this, it)
+            },
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore()))
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        deleted = true
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(vm.uiState.value.eventDetail)
+        assertEquals("イベントが見つかりません", vm.uiState.value.error)
+    }
+
+    @Test
     fun fetchEventDetailSucceedsAndPopulatesEventDetail() = runTest(testDispatcher) {
         val client = buildClient(
             eventsHandler = jsonOk(validEventBody),
@@ -317,7 +397,7 @@ class EventDetailViewModelTest {
         assertTrue(state.isOffline)
     }
 
-    // ---- 詳細取得が失敗した場合は参加情報を取得しない ----
+    // ---- 詳細取得のエラー表示 ----
 
     @Test
     fun fetchEventDetailReturns404SetsNotFoundError() = runTest(testDispatcher) {
@@ -415,16 +495,21 @@ class EventDetailViewModelTest {
                 dispatcher = testDispatcher
                 addHandler { request ->
                     requests++
-                    assertTrue(request.url.encodedPath.endsWith("/events/1"))
-                    respond(validEventBody.replace(Regex("\"rounds\":.*"), "\"unused\": []"),
-                        HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                    if (request.url.encodedPath.endsWith("/me/events")) {
+                        respond(validParticipationBody, HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType, "application/json"))
+                    } else {
+                        assertTrue(request.url.encodedPath.endsWith("/events/1"))
+                        respond(validEventBody.replace(Regex("\"rounds\":.*"), "\"unused\": []"),
+                            HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                    }
                 }
             }
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
         }
         val vm = EventDetailViewModel(1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(1, requests)
+        assertEquals(2, requests)
         assertEquals("イベント情報の取得に失敗しました", vm.uiState.value.error)
     }
 

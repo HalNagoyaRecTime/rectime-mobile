@@ -41,6 +41,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
@@ -86,6 +88,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         val viewModel = viewModel(key = key) {
             EventDetailViewModel(eventId = eventId, scheduleStore = EventScheduleStore.shared)
         }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onForeground() }
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
         var titleBandHeightPx by remember { mutableIntStateOf(0) }
