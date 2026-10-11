@@ -26,8 +26,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,6 +110,8 @@ private data class NavigationItemConfig(
     val outlineIcon: DrawableResource,
     val filledIcon: DrawableResource,
     val showBadge: Boolean = false,
+    // nullなら内容と共通パディングから自動計算。指定値は安全条件より弱い見た目の希望。
+    val preferredMinimumPillWidth: Dp? = null,
 )
 
 @Composable
@@ -139,6 +143,7 @@ fun BottomNavigationBar(
         Res.drawable.ic_notification_outline,
         Res.drawable.ic_notification_fill,
         showBadge = hasUnreadNotifications,
+        preferredMinimumPillWidth = 112.dp,
     ),
     NavigationItemConfig(
         SettingsScreen(
@@ -149,6 +154,7 @@ fun BottomNavigationBar(
         "設定",
         Res.drawable.ic_settings_outline,
         Res.drawable.ic_settings_fill,
+        preferredMinimumPillWidth = 112.dp,
     ),
 )
     val shape = RoundedCornerShape(AppTheme.radius.full)
@@ -169,6 +175,9 @@ fun BottomNavigationBar(
         fontSize = ItemLabelFontSize * scale,
         fontWeight = FontWeight.Bold,
     )
+    var pillHeight by remember(scale, labelStyle, density) { mutableFloatStateOf(0f) }
+    var labelTop by remember(scale, labelStyle, density) { mutableFloatStateOf(Float.NaN) }
+    var labelBottom by remember(scale, labelStyle, density) { mutableFloatStateOf(Float.NaN) }
     // 選択時の太字で測り、切り替えによる配置の揺れを防ぐ。
     val labelWidths = items.map {
         with(density) { textMeasurer.measure(AnnotatedString(it.label), labelStyle).size.width.toDp().value }
@@ -213,31 +222,47 @@ fun BottomNavigationBar(
                     .background(AppTheme.colors.navigationDefaultBackground, shape)
                     .heightIn(min = AppTheme.layout.bottomTabMinHeight * scale),
             ) {
-                val slots = bottomNavigationSlots(
-                    barWidth = maxWidth.value,
-                    labelWidths = labelWidths,
-                    preferredPadding = NavigationLayoutConfig.preferredHorizontalPadding * 2 * scale,
-                    minimumPadding = NavigationLayoutConfig.minimumHorizontalPadding * 2 * scale,
-                    minimumTouchWidth = NavigationLayoutConfig.minimumTouchWidth,
-                    spaciousnessPriority = NavigationLayoutConfig.spaciousnessPriority,
-                    neighborLabelGap = NavigationLayoutConfig.neighborLabelGap * scale,
-                    equalLayoutMinBarWidth = NavigationLayoutConfig.equalLayoutMinBarWidth,
-                    preferredPillWidth = ((maxWidth / items.size * 1.24f - 32.dp * scale)
-                        .coerceIn(88.dp * scale, 160.dp * scale) + 32.dp * scale).value,
-                )
+                // 選択枠のアニメーション中は配置の最適化を繰り返さない。
+                val preferredPillWidths = items.map { (it.preferredMinimumPillWidth?.value ?: 0f) * scale }
+                val slots = remember(maxWidth, labelWidths, preferredPillWidths, scale, pillHeight, labelTop, labelBottom) {
+                    bottomNavigationSlots(
+                        barWidth = maxWidth.value,
+                        labelWidths = labelWidths,
+                        preferredPadding = NavigationLayoutConfig.preferredHorizontalPadding * 2 * scale,
+                        minimumPadding = NavigationLayoutConfig.minimumHorizontalPadding * 2 * scale,
+                        minimumTouchWidth = NavigationLayoutConfig.minimumTouchWidth,
+                        spaciousnessPriority = NavigationLayoutConfig.spaciousnessPriority,
+                        neighborContentGap = NavigationLayoutConfig.neighborContentGap,
+                        labelGeometry = if (pillHeight > 0f && !labelTop.isNaN() && !labelBottom.isNaN())
+                            BottomNavigationLabelGeometry(pillHeight, labelTop, labelBottom) else null,
+                        iconWidths = List(items.size) { ItemIconSize.value * scale },
+                        // 未読の有無で配置を変えず、通知には常に同じ安全領域を確保する。
+                        iconOverhangs = items.map {
+                            if (it.screen == NotificationsScreen) BadgeOffsetX.value * scale else 0f
+                        },
+                        preferredPillWidths = preferredPillWidths,
+                        // バッジの張り出しも含む矩形で保護する。文字より厳しい側の条件を使う。
+                        iconGeometry = if (pillHeight > 0f) BottomNavigationLabelGeometry(
+                            pillHeight,
+                            (ItemContentPaddingTop.value + minOf(0f, BadgeOffsetY.value)) * scale,
+                            (ItemContentPaddingTop.value + ItemIconSize.value) * scale,
+                        ) else null,
+                    )
+                }
                 // タブ切り替え時に強調表示をスライドさせたい
                 val selectedBounds = itemBounds[currentScreen.key]
-                if (selectedBounds != null) {
+                val selectedSlot = slots.getOrNull(items.indexOfFirst { it.screen.key == currentScreen.key })
+                if (selectedBounds != null && selectedSlot != null) {
                     val animationSpec = spring<Dp>(
                         dampingRatio = IndicatorSpringDampingRatio,
                         stiffness = IndicatorSpringStiffness,
                     )
                     val indicatorX by animateDpAsState(
-                        targetValue = with(density) { selectedBounds.left.toDp() },
+                        targetValue = selectedSlot.pillLeft.dp,
                         animationSpec = animationSpec,
                     )
                     val indicatorWidth by animateDpAsState(
-                        targetValue = with(density) { selectedBounds.width.toDp() },
+                        targetValue = (selectedSlot.pillRight - selectedSlot.pillLeft).dp,
                         animationSpec = animationSpec,
                     )
                     val indicatorY = with(density) { selectedBounds.top.toDp() }
@@ -263,18 +288,23 @@ fun BottomNavigationBar(
                         contentCenter = (slot.center - slot.left).dp,
                         scale = scale,
                         onClick = { onSelectRoot(item.screen) },
+                        onLabelBounds = { bounds ->
+                            with(density) {
+                                // 全項目を覆う範囲を保持し、測定順や選択時の字体で判定を揺らさない。
+                                val top = bounds.top.toDp().value + ItemContentPaddingTop.value * scale
+                                val bottom = bounds.bottom.toDp().value + ItemContentPaddingTop.value * scale
+                                labelTop = if (labelTop.isNaN()) top else minOf(labelTop, top)
+                                labelBottom = if (labelBottom.isNaN()) bottom else maxOf(labelBottom, bottom)
+                            }
+                        },
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .offset(x = slot.left.dp)
                             .width((slot.right - slot.left).dp)
                             .onGloballyPositioned { coordinates ->
                                 val bounds = coordinates.boundsInParent()
-                                itemBounds[item.screen.key] = Rect(
-                                    left = with(density) { slot.pillLeft.dp.toPx() },
-                                    top = bounds.top,
-                                    right = with(density) { slot.pillRight.dp.toPx() },
-                                    bottom = bounds.bottom,
-                                )
+                                pillHeight = maxOf(pillHeight, with(density) { coordinates.size.height.toDp().value })
+                                itemBounds[item.screen.key] = bounds
                             },
                     )
                 }
@@ -332,6 +362,7 @@ private fun BottomNavigationItem(
     contentCenter: Dp,
     scale: Float,
     onClick: () -> Unit,
+    onLabelBounds: (Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val contentColor = if (selected) AppTheme.colors.themeColorFirst else AppTheme.colors.textNavigationInactive
@@ -410,6 +441,7 @@ private fun BottomNavigationItem(
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.onGloballyPositioned { onLabelBounds(it.boundsInParent()) },
                 )
             }
         }
