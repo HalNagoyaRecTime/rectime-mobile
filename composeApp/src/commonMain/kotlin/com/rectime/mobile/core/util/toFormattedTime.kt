@@ -1,8 +1,9 @@
 package com.rectime.mobile.core.util
 
-fun String.toFormattedTime(): String {
+fun String.toFormattedTime(padHour: Boolean = true): String {
     if (this.length < 4) {
         return "--:--"
     }
-    return "${this.substring(0, 2)}:${this.substring(2, 4)}"
+    val hour = substring(0, 2).let { if (padHour) it else it.removePrefix("0") }
+    return "$hour:${substring(2, 4)}"
 }

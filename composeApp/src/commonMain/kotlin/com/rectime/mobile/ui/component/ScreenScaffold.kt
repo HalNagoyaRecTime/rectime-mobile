@@ -84,7 +84,7 @@ fun RootScreenScaffold(
         0.dp
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().background(AppTheme.colors.screenBackground)) {
         val listContent: @Composable () -> Unit = {
             Box(Modifier.fillMaxSize()) {
                 contentBackground()
@@ -160,10 +160,11 @@ fun PushScreenScaffold(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
+    titleVisible: Boolean = true,
+    lazyListState: LazyListState = rememberLazyListState(),
     contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
-    val lazyListState = rememberLazyListState()
     val inputEnabled = navigationScrollEnabled(lazyListState)
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
@@ -176,7 +177,7 @@ fun PushScreenScaffold(
 
     Box(modifier = modifier
         .fillMaxSize()
-        .background(AppTheme.colors.commonBackground),
+        .background(AppTheme.colors.screenBackground),
     ) {
         contentBackground()
         LazyColumn(
@@ -207,6 +208,7 @@ fun PushScreenScaffold(
         }
         PushHeader(
             title = title,
+            titleVisible = titleVisible,
             onBack = onBack,
             onTrailingClick = onTrailingClick,
             trailing = trailing,
