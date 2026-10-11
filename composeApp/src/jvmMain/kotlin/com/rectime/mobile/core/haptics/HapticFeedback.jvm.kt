@@ -4,3 +4,5 @@ import androidx.compose.runtime.Composable
 
 @Composable
 actual fun rememberPlatformHapticFeedback(): AppHapticFeedback = NoOpAppHapticFeedback
+
+internal actual fun loadPlatformHapticSupport(): Boolean = false

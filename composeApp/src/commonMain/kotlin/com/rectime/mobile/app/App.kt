@@ -25,6 +25,7 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
 import com.rectime.mobile.core.haptics.HapticPreference
+import com.rectime.mobile.core.haptics.HapticCapability
 import com.rectime.mobile.core.haptics.LocalHapticPreference
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import com.rectime.mobile.core.network.createHttpClient
@@ -69,6 +70,8 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         }
         return
     }
+
+    LaunchedEffect(Unit) { HapticCapability.load() }
 
     setSingletonImageLoaderFactory { context ->
         ImageLoader.Builder(context)
