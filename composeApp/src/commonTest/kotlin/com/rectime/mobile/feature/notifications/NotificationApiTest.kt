@@ -396,13 +396,15 @@ class MyEventsApiTest {
     }
 
     @Test
-    fun getMyEventsRequiresGatheringIdsInsteadOfAdaptingOldApi() = runTest {
+    fun getMyEventsPreservesParticipationWithoutGatheringIds() = runTest {
         val client = mockClient {
             respond("""{"events":[{"event_id":5}]}""", HttpStatusCode.OK, jsonHeaders)
         }
         val api = MyEventsApi(client, "https://api.example.com", { "access-token" })
         try {
-            assertFailsWith<io.ktor.serialization.JsonConvertException> { api.getMyEvents() }
+            val participation = api.getMyEvents().single()
+            assertEquals(5, participation.eventId)
+            assertTrue(participation.gatheringIds.isEmpty())
         } finally { api.close() }
     }
 

@@ -21,6 +21,7 @@ private object PlatformEventCacheKey
 private class EventCacheState(val generation: Int) {
     var revision = 0L
     val writes = mutableMapOf<Int, EventCacheWrite>()
+    val roundRevisions = mutableMapOf<Int, Long>()
 }
 private data class EventCacheWrite(val revision: Long, val detail: Boolean)
 
@@ -101,19 +102,22 @@ internal class EventCache(private val cache: LocalCache) {
             val savedEntry = savedDetail(detail.eventId, events)
             val saved = savedEntry?.data
             val retained = saved?.takeIf { keepSaved(it.updatedAt, detail.updatedAt, detail.eventId, request) }
-            val merged = if (retained != null) {
-                retained.copy(rounds = retained.rounds ?: detail.rounds)
-            } else detail.copy(rounds = detail.rounds ?: saved?.rounds)
+            // ラウンドは詳細APIだけが返すため、一覧やEvent本体の更新時刻と比較しない。
+            val keepRounds = detail.rounds == null ||
+                (state().roundRevisions[detail.eventId] ?: 0L) > request.revision
+            val merged = (retained ?: detail).copy(
+                rounds = if (keepRounds) saved?.rounds else detail.rounds,
+            )
             val detailKey = "event_detail_v1_${detail.eventId}"
             val detailSaved = if (persist) {
-                val fetchedAt = if (retained?.rounds != null) {
-                    // 遅い旧応答を捨てる場合、新しい詳細の取得時刻も保持する。
+                val fetchedAt = if (keepRounds && saved?.rounds != null) {
                     savedEntry.fetchedAt
                 } else cache.fetchedNow()
                 saveOrIgnore(detailKey, merged, request, fetchedAt)
             } else false
             if (detailSaved) {
                 recordWrite(detail.eventId, detail = true, request)
+                if (!keepRounds) state().roundRevisions[detail.eventId] = request.revision
             }
             // 詳細1件から不完全な一覧は作らない。既存の他イベントも保持する。
             if (persist && events != null && events.events.any { it.eventId == detail.eventId }) {

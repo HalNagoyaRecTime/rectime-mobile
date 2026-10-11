@@ -239,6 +239,59 @@ class EventCacheTest {
         assertEquals(fresh, cache.loadDetail(1))
     }
 
+    @Test
+    fun laterListRequestDoesNotRejectFreshRoundsInEitherCompletionOrder() = runTest {
+        for (listFirst in listOf(false, true)) {
+            val cache = EventCache(LocalCache(MemoryStore()))
+            cache.saveDetail(detail("保存済み").copy(updatedAt = "2026-01-01T10:00:00Z", rounds = rounds(10)))
+            val detailRequest = cache.beginRequest()
+            val listRequest = cache.beginRequest()
+            val fresh = detail("詳細").copy(updatedAt = "2026-01-01T10:00:00Z", rounds = rounds(20))
+            val list = events("一覧").copy(events = events("一覧").events.map {
+                it.copy(updatedAt = "2026-01-01T10:00:01Z")
+            })
+            if (listFirst) {
+                cache.saveEvents(list, listRequest)
+                assertEquals(rounds(20), cache.saveDetail(fresh, detailRequest).rounds)
+            } else {
+                cache.saveDetail(fresh, detailRequest)
+                cache.saveEvents(list, listRequest)
+            }
+            val saved = cache.loadDetail(1)!!
+            assertEquals("一覧", saved.eventName)
+            assertEquals(rounds(20), saved.rounds)
+            assertEquals(rounds(20), cache.reconcileDetail(fresh, detailRequest).rounds)
+        }
+    }
+
+    @Test
+    fun laterListCannotMaskNewerDetailRequestWhenOlderDetailArrivesLast() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val oldRequest = cache.beginRequest()
+        val newRequest = cache.beginRequest()
+        cache.saveDetail(detail("新しい詳細").copy(rounds = rounds(20)), newRequest)
+        cache.saveEvents(events("一覧"))
+        cache.saveDetail(detail("古い詳細").copy(rounds = rounds(10)), oldRequest)
+        assertEquals(rounds(20), cache.loadDetail(1)?.rounds)
+    }
+
+    @Test
+    fun roundsCanChangeAndBeRemovedWithoutChangingEventTimestamp() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val original = detail("本文").copy(updatedAt = "2026-01-01T10:00:00Z", rounds = rounds(10))
+        cache.saveDetail(original)
+        cache.saveDetail(original.copy(rounds = rounds(20)))
+        assertEquals(rounds(20), cache.loadDetail(1)?.rounds)
+        cache.saveDetail(original.copy(rounds = emptyList()))
+        assertEquals(emptyList(), cache.loadDetail(1)?.rounds)
+        cache.saveEvents(events("一覧"))
+        assertEquals(emptyList(), cache.loadDetail(1)?.rounds)
+    }
+
+    private fun rounds(id: Int) = listOf(com.rectime.mobile.core.network.EventRoundResponse(1,
+        listOf(com.rectime.mobile.core.network.EventRoundGatheringResponse(id, "08:45",
+            com.rectime.mobile.core.network.EventGatheringSpotResponse(1, "体育館")))))
+
     private fun detail(name: String) = EventDetailResponse(1, name, emptyList(), "0900", "0930", null)
     private fun events(name: String) = EventsResponse(listOf(EventResponse(
         1, name, null, emptyList(), "0900", "0930", "2026-01-01", "2026-01-01",

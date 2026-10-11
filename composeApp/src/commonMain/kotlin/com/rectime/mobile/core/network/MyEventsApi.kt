@@ -59,5 +59,5 @@ internal data class MyEventParticipation(
     @SerialName("event_id")
     val eventId: Int,
     @SerialName("gathering_ids")
-    val gatheringIds: List<Int>,
+    val gatheringIds: List<Int> = emptyList(),
 )

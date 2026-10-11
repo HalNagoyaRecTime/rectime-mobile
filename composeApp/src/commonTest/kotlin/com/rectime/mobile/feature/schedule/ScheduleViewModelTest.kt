@@ -1295,6 +1295,27 @@ class ScheduleViewModelTest {
     }
 
     @Test
+    fun participationBadgeSurvivesApiResponseWithoutGatheringIds() = runTest(testDispatcher) {
+        val client = mockClient { request ->
+            if (request.url.encodedPath == "/api/v1/me/events") {
+                respondJson("""{"events":[{"event_id":2}]}""")
+            } else {
+                respondJson(eventsJsonOf(Triple(1, "0900", "1000"), Triple(2, "1000", "1100")))
+            }
+        }
+        val viewModel = buildViewModel(
+            client,
+            myEventsGateway = com.rectime.mobile.core.network.MyEventsApi(
+                client, "https://api.example.com", { "access-token" },
+            ),
+        )
+        viewModel.fetchEvents()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(viewModel.events.value.first { it.eventId == 1 }.isParticipating)
+        assertTrue(viewModel.events.value.first { it.eventId == 2 }.isParticipating)
+    }
+
+    @Test
     fun participationApiMarksOnlyMyEventsAndPersistsIds() = runTest(testDispatcher) {
         val cache = LocalCache(InMemoryKeyValueStore())
         val viewModel = buildViewModel(mockClient { respondJson(eventsJsonOf(
