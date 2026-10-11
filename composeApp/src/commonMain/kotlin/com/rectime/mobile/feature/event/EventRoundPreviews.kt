@@ -163,7 +163,7 @@ private fun GatheringCard(content: @Composable ColumnScope.() -> Unit) {
         Modifier.fillMaxWidth()
             .outerShadow(shape = shape, color = AppTheme.colors.dropShadow.copy(alpha = 0.06f), blurRadius = 5.dp, offsetY = 2.dp)
             .clip(shape)
-            .background(AppTheme.colors.surfacePrimary)
+            .background(Color(0xFFFFF8E1))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         content = content,
