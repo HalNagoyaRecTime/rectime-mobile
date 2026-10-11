@@ -17,19 +17,21 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -45,6 +47,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -69,16 +75,11 @@ import rectime_mobile.composeapp.generated.resources.ic_schedule_outline
 import rectime_mobile.composeapp.generated.resources.ic_settings_fill
 import rectime_mobile.composeapp.generated.resources.ic_settings_outline
 
-// 縦に余裕のない端末ではバー全体を一回り小さくしたい（縦横比 = 画面の高さ / 幅）
+// 縦の表示領域が少ない端末では縮小する。
 private const val CompactAspectRatioThreshold = 1.9f
 private const val CompactScale = 0.80f
 
-// バー幅をタブ数で等分した幅より少し広く取り、隣のタブと重ねたい
-// （選択中のピルの幅を保つため。全タブの幅は揃える）
-private const val NavItemOverlapRatio = 0.24f
-private val NavItemContentMinWidth = 88.dp
-private val NavItemContentMaxWidth = 160.dp
-
+private val NavigationLayoutConfig = BottomNavigationLayoutConfig()
 private val BarOuterMarginHorizontal = 16.dp
 private val BarOuterMarginTop = 12.dp
 private val BarShadowElevation = 6.dp
@@ -91,7 +92,7 @@ private const val IndicatorSpringStiffness = 380f
 private val IndicatorShadowElevation = 4.dp
 private val IndicatorUnderlineHeight = 3.dp
 
-private val ItemContentPaddingHorizontal = 16.dp
+private val ItemContentPaddingHorizontal = 2.dp
 private val ItemContentPaddingTop = 12.dp
 private val ItemContentPaddingBottom = 2.dp
 private val ItemContentSpacing = 2.dp
@@ -109,6 +110,8 @@ private data class NavigationItemConfig(
     val outlineIcon: DrawableResource,
     val filledIcon: DrawableResource,
     val showBadge: Boolean = false,
+    // nullは自動。指定幅は干渉防止の範囲内で確保する。
+    val preferredMinimumPillWidth: Dp? = null,
 )
 
 @Composable
@@ -140,6 +143,7 @@ fun BottomNavigationBar(
         Res.drawable.ic_notification_outline,
         Res.drawable.ic_notification_fill,
         showBadge = hasUnreadNotifications,
+        preferredMinimumPillWidth = 112.dp,
     ),
     NavigationItemConfig(
         SettingsScreen(
@@ -150,6 +154,7 @@ fun BottomNavigationBar(
         "設定",
         Res.drawable.ic_settings_outline,
         Res.drawable.ic_settings_fill,
+        preferredMinimumPillWidth = 112.dp,
     ),
 )
     val shape = RoundedCornerShape(AppTheme.radius.full)
@@ -157,23 +162,36 @@ fun BottomNavigationBar(
     val itemBounds = remember { mutableStateMapOf<String, Rect>() }
     val containerSize = LocalWindowInfo.current.containerSize
     // 初回レイアウト前は幅が0になり得るので、その場合は縮小しない
-    val isCompact = containerSize.width > 0 &&
-        containerSize.height.toFloat() / containerSize.width < CompactAspectRatioThreshold
+    val windowWidth = with(density) { containerSize.width.toDp() }
+    val windowHeight = with(density) { containerSize.height.toDp() }
+    val isCompact = containerSize.width > 0 && (
+        windowHeight < 480.dp ||
+            (windowWidth < 600.dp &&
+                containerSize.height.toFloat() / containerSize.width < CompactAspectRatioThreshold)
+        )
     val scale = if (isCompact) CompactScale else 1f
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = LocalTextStyle.current.copy(
+        fontSize = ItemLabelFontSize * scale,
+        fontWeight = FontWeight.Bold,
+    )
+    var pillHeight by remember(scale, labelStyle, density) { mutableFloatStateOf(0f) }
+    var labelTop by remember(scale, labelStyle, density) { mutableFloatStateOf(Float.NaN) }
+    var labelBottom by remember(scale, labelStyle, density) { mutableFloatStateOf(Float.NaN) }
+    // 選択時の太字で測り、切り替えによる配置の揺れを防ぐ。
+    val labelWidths = items.map {
+        with(density) { textMeasurer.measure(AnnotatedString(it.label), labelStyle).size.width.toDp().value }
+    }
     val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val safeAreaOverlap = minOf(LocalBottomNavigationSafeAreaOverlap.current, navigationBarInset / 2)
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .windowInsetsPadding(WindowInsets.navigationBars)
             .offset(y = safeAreaOverlap)
             .fillMaxWidth(),
     ) {
         val outerMarginHorizontal = BarOuterMarginHorizontal * scale
-        val barWidth = maxWidth - outerMarginHorizontal * 2
-        val itemWidth = barWidth / items.size * (1f + NavItemOverlapRatio)
-        val itemContentWidth = (itemWidth - ItemContentPaddingHorizontal * scale * 2)
-            .coerceIn(NavItemContentMinWidth * scale, NavItemContentMaxWidth * scale)
 
         Box(
             modifier = Modifier
@@ -183,9 +201,10 @@ fun BottomNavigationBar(
                     end = outerMarginHorizontal,
                     bottom = LocalBottomNavigationBottomMargin.current * scale,
                 )
-                .fillMaxWidth(),
+                .widthIn(max = NavigationLayoutConfig.maxBarWidth.dp)
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter),
         ) {
-            // 半透明背景の内側に影が透けて二重に暗く見えるのを防ぎたい
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -196,25 +215,51 @@ fun BottomNavigationBar(
                         spotColor = AppTheme.colors.dropShadow,
                     ),
             )
-            Box(
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(AppTheme.colors.navigationDefaultBackground, shape)
                     .heightIn(min = AppTheme.layout.bottomTabMinHeight * scale),
             ) {
-                // タブ切り替え時に強調表示をスライドさせたい
+                // 選択枠のアニメーション中は配置の最適化を繰り返さない。
+                val preferredPillWidths = items.map { (it.preferredMinimumPillWidth?.value ?: 0f) * scale }
+                val slots = remember(maxWidth, labelWidths, preferredPillWidths, scale, pillHeight, labelTop, labelBottom) {
+                    bottomNavigationSlots(
+                        barWidth = maxWidth.value,
+                        labelWidths = labelWidths,
+                        preferredPadding = NavigationLayoutConfig.preferredHorizontalPadding * 2 * scale,
+                        minimumPadding = NavigationLayoutConfig.minimumHorizontalPadding * 2 * scale,
+                        minimumTouchWidth = NavigationLayoutConfig.minimumTouchWidth,
+                        spaciousnessPriority = NavigationLayoutConfig.spaciousnessPriority,
+                        neighborContentGap = NavigationLayoutConfig.neighborContentGap,
+                        labelGeometry = if (pillHeight > 0f && !labelTop.isNaN() && !labelBottom.isNaN())
+                            BottomNavigationLabelGeometry(pillHeight, labelTop, labelBottom) else null,
+                        iconWidths = List(items.size) { ItemIconSize.value * scale },
+                        // 未読の有無で配置を変えず、通知には常に同じ安全領域を確保する。
+                        iconOverhangs = items.map {
+                            if (it.screen == NotificationsScreen) BadgeOffsetX.value * scale else 0f
+                        },
+                        preferredPillWidths = preferredPillWidths,
+                        iconGeometry = if (pillHeight > 0f) BottomNavigationLabelGeometry(
+                            pillHeight,
+                            (ItemContentPaddingTop.value + minOf(0f, BadgeOffsetY.value)) * scale,
+                            (ItemContentPaddingTop.value + ItemIconSize.value) * scale,
+                        ) else null,
+                    )
+                }
                 val selectedBounds = itemBounds[currentScreen.key]
-                if (selectedBounds != null) {
+                val selectedSlot = slots.getOrNull(items.indexOfFirst { it.screen.key == currentScreen.key })
+                if (selectedBounds != null && selectedSlot != null) {
                     val animationSpec = spring<Dp>(
                         dampingRatio = IndicatorSpringDampingRatio,
                         stiffness = IndicatorSpringStiffness,
                     )
                     val indicatorX by animateDpAsState(
-                        targetValue = with(density) { selectedBounds.left.toDp() },
+                        targetValue = selectedSlot.pillLeft.dp,
                         animationSpec = animationSpec,
                     )
                     val indicatorWidth by animateDpAsState(
-                        targetValue = with(density) { selectedBounds.width.toDp() },
+                        targetValue = (selectedSlot.pillRight - selectedSlot.pillLeft).dp,
                         animationSpec = animationSpec,
                     )
                     val indicatorY = with(density) { selectedBounds.top.toDp() }
@@ -227,26 +272,36 @@ fun BottomNavigationBar(
                     )
                 }
 
+                // 文字とタップ領域は配分幅の中に収め、選択枠だけを広げる。
                 items.forEachIndexed { index, item ->
-                    // どのタブも同じ幅を保ちたい（Rowだと幅が足りないとき最後の要素だけ縮んでしまうため。
-                    // はみ出して重なるのは許容する）
-                    val itemAlignment = BiasAlignment(
-                        horizontalBias = if (items.size == 1) 0f else -1f + 2f * index / (items.lastIndex),
-                        verticalBias = 1f,
-                    )
+                    val slot = slots[index]
                     BottomNavigationItem(
                         label = item.label,
                         outlineIcon = item.outlineIcon,
                         filledIcon = item.filledIcon,
                         selected = currentScreen.key == item.screen.key,
                         showBadge = item.showBadge,
-                        contentWidth = itemContentWidth,
+                        contentWidth = (slot.contentWidth - 4f * scale).coerceAtLeast(0f).dp,
+                        contentCenter = (slot.center - slot.left).dp,
                         scale = scale,
                         onClick = { onSelectRoot(item.screen) },
+                        onLabelBounds = { bounds ->
+                            with(density) {
+                                // 測定順に依存しないよう、全項目の文字範囲を保護する。
+                                val top = bounds.top.toDp().value + ItemContentPaddingTop.value * scale
+                                val bottom = bounds.bottom.toDp().value + ItemContentPaddingTop.value * scale
+                                labelTop = if (labelTop.isNaN()) top else minOf(labelTop, top)
+                                labelBottom = if (labelBottom.isNaN()) bottom else maxOf(labelBottom, bottom)
+                            }
+                        },
                         modifier = Modifier
-                            .align(itemAlignment)
+                            .align(Alignment.BottomStart)
+                            .offset(x = slot.left.dp)
+                            .width((slot.right - slot.left).dp)
                             .onGloballyPositioned { coordinates ->
-                                itemBounds[item.screen.key] = coordinates.boundsInParent()
+                                val bounds = coordinates.boundsInParent()
+                                pillHeight = maxOf(pillHeight, with(density) { coordinates.size.height.toDp().value })
+                                itemBounds[item.screen.key] = bounds
                             },
                     )
                 }
@@ -260,7 +315,6 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
     val pillShape = RoundedCornerShape(AppTheme.radius.full)
 
     Box(modifier = modifier) {
-        // 影が背景の外にはみ出さないようにしたい
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -276,7 +330,7 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
                 .matchParentSize()
                 .background(AppTheme.colors.navigationActiveBackground, pillShape),
         )
-        // 下線の端をピルの丸みに馴染ませたい
+        // 下線を選択枠の輪郭で切り取る。
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -301,8 +355,10 @@ private fun BottomNavigationItem(
     selected: Boolean,
     showBadge: Boolean,
     contentWidth: Dp,
+    contentCenter: Dp,
     scale: Float,
     onClick: () -> Unit,
+    onLabelBounds: (Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val contentColor = if (selected) AppTheme.colors.themeColorFirst else AppTheme.colors.textNavigationInactive
@@ -325,59 +381,64 @@ private fun BottomNavigationItem(
             bottom = ItemContentPaddingBottom * scale,
         ),
     ) {
-        Column(
-            modifier = Modifier.width(contentWidth),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(ItemContentSpacing * scale),
-        ) {
-            Box {
-                Icon(
-                    painter = painterResource(if (selected) filledIcon else outlineIcon),
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier
-                        .size(ItemIconSize * scale)
-                        .then(
-                            if (showBadge) {
-                                // 背景色を上から塗るのではなくアイコン自体に穴を開けたい
-                                // （塗ると背景の不透明度と二重になってしまうため）
-                                Modifier
-                                    .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
-                                    .drawWithContent {
-                                        drawContent()
-                                        drawCircle(
-                                            color = Color.Black,
-                                            radius = (badgeDotSize / 2 + badgeCutoutGap).toPx(),
-                                            center = Offset(
-                                                x = size.width - (badgeDotSize / 2).toPx() + badgeOffsetX.toPx(),
-                                                y = (badgeDotSize / 2).toPx() + badgeOffsetY.toPx(),
-                                            ),
-                                            blendMode = BlendMode.Clear,
-                                        )
-                                    }
-                            } else {
-                                Modifier
-                            },
-                        ),
-                )
-                if (showBadge) {
-                    Box(
+        Box(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .offset(x = contentCenter - ItemContentPaddingHorizontal * scale - contentWidth / 2)
+                    .width(contentWidth),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(ItemContentSpacing * scale),
+            ) {
+                Box {
+                    Icon(
+                        painter = painterResource(if (selected) filledIcon else outlineIcon),
+                        contentDescription = null,
+                        tint = contentColor,
                         modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = badgeOffsetX, y = badgeOffsetY)
-                            .size(badgeDotSize)
-                            .background(badgeDotColor, CircleShape),
+                            .size(ItemIconSize * scale)
+                            .then(
+                                if (showBadge) {
+                                    // 半透明背景への重ね塗りを避け、バッジ周囲のアイコンを切り抜く。
+                                    Modifier
+                                        .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                                        .drawWithContent {
+                                            drawContent()
+                                            drawCircle(
+                                                color = Color.Black,
+                                                radius = (badgeDotSize / 2 + badgeCutoutGap).toPx(),
+                                                center = Offset(
+                                                    x = size.width - (badgeDotSize / 2).toPx() + badgeOffsetX.toPx(),
+                                                    y = (badgeDotSize / 2).toPx() + badgeOffsetY.toPx(),
+                                                ),
+                                                blendMode = BlendMode.Clear,
+                                            )
+                                        }
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     )
+                    if (showBadge) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = badgeOffsetX, y = badgeOffsetY)
+                                .size(badgeDotSize)
+                                .background(badgeDotColor, CircleShape),
+                        )
+                    }
                 }
+                Text(
+                    text = label,
+                    color = contentColor,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = ItemLabelFontSize * scale,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.onGloballyPositioned { onLabelBounds(it.boundsInParent()) },
+                )
             }
-            Text(
-                text = label,
-                color = contentColor,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                fontSize = ItemLabelFontSize * scale,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
         }
     }
 }

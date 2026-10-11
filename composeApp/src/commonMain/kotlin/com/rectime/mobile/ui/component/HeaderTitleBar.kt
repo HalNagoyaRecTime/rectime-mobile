@@ -52,7 +52,7 @@ internal fun HeaderTitleBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(color = AppTheme.colors.detailsScreenHeaderBackground, shape = shape)
+            .background(brush = headerBackgroundBrush(AppTheme.colors.detailsScreenHeaderBackground), shape = shape)
             .outerShadow(
                 shape = shape,
                 color = AppTheme.colors.dropShadow,
