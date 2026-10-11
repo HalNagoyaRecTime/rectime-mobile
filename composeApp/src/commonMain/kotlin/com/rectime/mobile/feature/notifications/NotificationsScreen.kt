@@ -108,7 +108,7 @@ object NotificationsScreen : Screen {
 
         Box(Modifier.fillMaxSize()) {
             RootScreenScaffold(
-                title = "通知一覧",
+                title = "通知",
                 lazyListState = listState,
                 isRefreshing = uiState.isPullRefreshing,
                 refreshEnabled = !uiState.isUpdating && !uiState.isRefreshing && !uiState.isLoadingMore,
