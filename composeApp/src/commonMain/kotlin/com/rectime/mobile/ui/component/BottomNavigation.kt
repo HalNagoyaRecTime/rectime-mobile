@@ -75,7 +75,7 @@ import rectime_mobile.composeapp.generated.resources.ic_schedule_outline
 import rectime_mobile.composeapp.generated.resources.ic_settings_fill
 import rectime_mobile.composeapp.generated.resources.ic_settings_outline
 
-// 縦に余裕のない端末ではバー全体を一回り小さくしたい（縦横比 = 画面の高さ / 幅）
+// 縦の表示領域が少ない端末では縮小する。
 private const val CompactAspectRatioThreshold = 1.9f
 private const val CompactScale = 0.80f
 
@@ -110,7 +110,7 @@ private data class NavigationItemConfig(
     val outlineIcon: DrawableResource,
     val filledIcon: DrawableResource,
     val showBadge: Boolean = false,
-    // nullなら内容と共通パディングから自動計算。指定値は安全条件より弱い見た目の希望。
+    // nullは自動。指定幅は干渉防止の範囲内で確保する。
     val preferredMinimumPillWidth: Dp? = null,
 )
 
@@ -205,7 +205,6 @@ fun BottomNavigationBar(
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter),
         ) {
-            // 半透明背景の内側に影が透けて二重に暗く見えるのを防ぎたい
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -241,7 +240,6 @@ fun BottomNavigationBar(
                             if (it.screen == NotificationsScreen) BadgeOffsetX.value * scale else 0f
                         },
                         preferredPillWidths = preferredPillWidths,
-                        // バッジの張り出しも含む矩形で保護する。文字より厳しい側の条件を使う。
                         iconGeometry = if (pillHeight > 0f) BottomNavigationLabelGeometry(
                             pillHeight,
                             (ItemContentPaddingTop.value + minOf(0f, BadgeOffsetY.value)) * scale,
@@ -249,7 +247,6 @@ fun BottomNavigationBar(
                         ) else null,
                     )
                 }
-                // タブ切り替え時に強調表示をスライドさせたい
                 val selectedBounds = itemBounds[currentScreen.key]
                 val selectedSlot = slots.getOrNull(items.indexOfFirst { it.screen.key == currentScreen.key })
                 if (selectedBounds != null && selectedSlot != null) {
@@ -290,7 +287,7 @@ fun BottomNavigationBar(
                         onClick = { onSelectRoot(item.screen) },
                         onLabelBounds = { bounds ->
                             with(density) {
-                                // 全項目を覆う範囲を保持し、測定順や選択時の字体で判定を揺らさない。
+                                // 測定順に依存しないよう、全項目の文字範囲を保護する。
                                 val top = bounds.top.toDp().value + ItemContentPaddingTop.value * scale
                                 val bottom = bounds.bottom.toDp().value + ItemContentPaddingTop.value * scale
                                 labelTop = if (labelTop.isNaN()) top else minOf(labelTop, top)
@@ -318,7 +315,6 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
     val pillShape = RoundedCornerShape(AppTheme.radius.full)
 
     Box(modifier = modifier) {
-        // 影が背景の外にはみ出さないようにしたい
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -334,7 +330,7 @@ private fun BottomNavIndicator(modifier: Modifier = Modifier) {
                 .matchParentSize()
                 .background(AppTheme.colors.navigationActiveBackground, pillShape),
         )
-        // 下線の端をピルの丸みに馴染ませたい
+        // 下線を選択枠の輪郭で切り取る。
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -402,8 +398,7 @@ private fun BottomNavigationItem(
                             .size(ItemIconSize * scale)
                             .then(
                                 if (showBadge) {
-                                    // 背景色を上から塗るのではなくアイコン自体に穴を開けたい
-                                    // （塗ると背景の不透明度と二重になってしまうため）
+                                    // 半透明背景への重ね塗りを避け、バッジ周囲のアイコンを切り抜く。
                                     Modifier
                                         .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                                         .drawWithContent {

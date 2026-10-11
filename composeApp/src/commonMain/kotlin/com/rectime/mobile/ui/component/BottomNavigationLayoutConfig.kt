@@ -4,7 +4,6 @@ package com.rectime.mobile.ui.component
 internal data class BottomNavigationLayoutConfig(
     // 0は均等位置で各枠を最大限広げる。1は位置を動かして共通の左右余白を最大限確保する。
     // 中間値は均等位置からのずれと共通余白の不足を全体で評価する重み。
-    // 干渉防止と中央揃えは全値で守る。
     val spaciousnessPriority: Float = 0.7f,
     val preferredHorizontalPadding: Float = 16f,
     val minimumHorizontalPadding: Float = 2f,

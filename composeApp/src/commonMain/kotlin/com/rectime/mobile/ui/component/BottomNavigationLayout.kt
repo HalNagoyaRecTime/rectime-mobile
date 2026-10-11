@@ -24,7 +24,7 @@ internal data class BottomNavigationSlot(
     val contentWidth: Float,
 )
 
-/** 0は均等位置、1は共通の左右余白を優先。どちらも干渉しない範囲に収める。 */
+/** 均等表示できない場合だけ、内容を保護しながら位置と選択枠の幅を調整する。 */
 internal fun bottomNavigationSlots(
     barWidth: Float,
     labelWidths: List<Float>,
@@ -72,7 +72,7 @@ internal fun bottomNavigationSlots(
     val visibleLabelWidths = requiredWidths.mapIndexed { index, width ->
         minOf(labelWidths[index], (width - minimumPadding).coerceAtLeast(0f))
     }
-    // 幅が高さ以上なら角丸の半径は一定。探索中も同じ形状の計算を繰り返さない。
+    // 幅が高さ以上なら角丸の半径・切り欠き幅は一定。
     val fullRadiusWidth = maxOf(labelGeometry?.height ?: 0f, iconGeometry?.height ?: 0f)
     val labelSideInset = labelGeometry?.sideInset(fullRadiusWidth) ?: 0f
     val iconSideInset = iconGeometry?.sideInset(fullRadiusWidth) ?: 0f
@@ -102,8 +102,7 @@ internal fun bottomNavigationSlots(
             value.coerceIn(leftInset, upper) + offsets[index]
         }
     }
-    // 同じ幅の枠が安全に収まるなら、位置・タップ領域・選択枠をすべて等分する。
-    // 広い画面では隣の文字の長さによって枠幅を変えず、位置の探索も行わない。
+    // 安全に等分できる場合は、位置・タップ領域・選択枠を揃えて探索を省く。
     val evenlySpacedCenters = labelWidths.indices.map { (it + 0.5f) * equalWidth }
     val equalLayoutFits = labelWidths.indices.all { index ->
         val wantedWidth = maxOf(measuredContentWidths[index] + preferredPadding, preferredPillWidths[index], minimumTouchWidth)
@@ -125,7 +124,7 @@ internal fun bottomNavigationSlots(
     )
     val priority = spaciousnessPriority
     val visibleContentWidths = visibleLabelWidths.indices.map { maxOf(visibleLabelWidths[it], iconWidths[it]) }
-    // 枠幅ではなく内容から枠までの左右余白を共通化する。長い内容の枠はその分広くなる。
+    // 内容の長さによらず左右余白を共通化する。
     fun paddedWidths(totalPadding: Float) = visibleContentWidths.map { it + totalPadding }
     fun roomyGaps(widths: List<Float>) = List(labelWidths.size - 1) { index ->
         maxOf(
@@ -155,8 +154,7 @@ internal fun bottomNavigationSlots(
         if (index < positions.lastIndex) halfWidth = minOf(halfWidth, positions[index + 1] - center -
             protectedHalfWidth(index + 1, fullRadiusWidth, textWidths[index + 1]) - neighborContentGap)
         val directWidth = 2 * halfWidth.coerceAtLeast(0f)
-        // 通常の横長の枠は隣の内容との距離から直接求められる。
-        // 丸に近い細い枠・浮動小数点の誤差が出た場合だけ従来の安全な探索を使う。
+        // 横長の枠は直接計算し、半径が変わる細い枠や丸め誤差には探索で対応する。
         if (directWidth >= fullRadiusWidth && pillFits(positions, index, directWidth, textWidths)) {
             return directWidth
         }
@@ -164,12 +162,10 @@ internal fun bottomNavigationSlots(
             pillFits(positions, index, width, textWidths)
         }
     }
-    // 希望幅は安全条件に混ぜず、評価の目標だけを引き上げる。
-    // 全部の希望が収まらなくても、内容・タップ幅を壊さず不足を分配する。
+    // 希望幅は目標値として扱い、安全条件を緩めない。
     val desiredWidths = roomyWidths.indices.map { maxOf(roomyWidths[it], preferredPillWidths[it]) }
     val hasAdditionalWidthRequests = desiredWidths != roomyWidths
-    // 位置のずれと、共通余白・希望幅からの不足を全項目で評価する。
-    // 0.5は位置の半分移動ではなく、この二つの評価に同じ重みを与える。
+    // 全項目の位置のずれと希望幅からの不足を評価する。
     fun layoutCost(positions: List<Float>): Double = positions.indices.sumOf { index ->
         val positionError = (positions[index] - (index + 0.5f) * equalWidth).toDouble()
         val availableWidth = safePillWidth(positions, index, visibleLabelWidths)
@@ -251,7 +247,7 @@ private fun minimizeLayoutCost(
     return centers
 }
 
-/** 必ず収まる側の値を返す。共通余白と個別の安全上限で同じ探索を使う。 */
+/** 二分探索で、必ず収まる側の値を返す。 */
 private inline fun largestFittingValue(upperBound: Float, fits: (Float) -> Boolean): Float {
     var lower = 0f
     var upper = upperBound
