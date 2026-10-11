@@ -134,8 +134,8 @@ class SettingsScreen(
                 Brush.verticalGradient(
                     0f to AppTheme.colors.themeColorSecond,
                     0.5f to AppTheme.colors.themeColorSecond,
-                    0.5f to AppTheme.colors.settingBackground,
-                    1f to AppTheme.colors.settingBackground,
+                    0.5f to AppTheme.colors.screenBackground,
+                    1f to AppTheme.colors.screenBackground,
                 ),
             ),
             horizontalPadding = false,
@@ -154,7 +154,7 @@ class SettingsScreen(
             }
 
             item {
-                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
                     Spacer(Modifier.height(AppTheme.spacing.xl))
                     Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
                         SettingsSection(title = "アプリ") {
@@ -204,7 +204,7 @@ class SettingsScreen(
                 }
             }
             item {
-                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
                     Spacer(Modifier.height(AppTheme.spacing.xl))
                     Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
                         SettingsSection(title = "ヘルプ") {
@@ -249,7 +249,7 @@ class SettingsScreen(
                 }
             }
             item {
-                Box(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                Box(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
                     Button(
                         onClick = { showLogoutConfirmation = true },
                         shape = RoundedCornerShape(SettingsCornerRadius),
@@ -280,7 +280,7 @@ class SettingsScreen(
                     Modifier
                         .fillMaxWidth()
                         .height(bottomPadding)
-                        .background(AppTheme.colors.settingBackground),
+                        .background(AppTheme.colors.screenBackground),
                 )
             }
         }
@@ -363,7 +363,7 @@ private fun UserInfoHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        color = AppTheme.colors.settingBackground,
+                        color = AppTheme.colors.screenBackground,
                         shape = RoundedCornerShape(
                             topStart = SettingsCornerRadius,
                             topEnd = SettingsCornerRadius,
@@ -438,6 +438,7 @@ private fun UserInfoHeader(
                 sportOverride = selection.sport,
                 usePhoto = selection.sport == null,
                 colorIndex = selection.colorIndex,
+                borderColor = AppTheme.colors.screenBackground,
             )
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)

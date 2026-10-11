@@ -83,7 +83,7 @@ internal fun SettingsSection(
         Column(
             modifier = Modifier.fillMaxWidth()
                 .clip(RoundedCornerShape(SettingsCornerRadius))
-                .background(AppTheme.colors.surfaceMuted),
+                .background(AppTheme.colors.commonBackground),
             content = content,
         )
     }

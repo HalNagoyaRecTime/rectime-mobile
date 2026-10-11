@@ -43,6 +43,7 @@ internal fun UserAvatar(
     sportOverride: SportAvatarPictogram? = null,
     usePhoto: Boolean = true,
     colorIndex: Int? = null,
+    borderColor: Color = AppTheme.colors.settingBackground,
 ) {
     val platformContext = LocalPlatformContext.current
     val photoRepository = LocalProfilePhotoRepository.current
@@ -65,8 +66,8 @@ internal fun UserAvatar(
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(AppTheme.colors.settingBackground)
-            .border(3.dp, AppTheme.colors.settingBackground, CircleShape)
+            .background(borderColor)
+            .border(3.dp, borderColor, CircleShape)
             .padding(3.dp)
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
