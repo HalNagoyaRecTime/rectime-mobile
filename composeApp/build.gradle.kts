@@ -214,6 +214,8 @@ compose.desktop {
         mainClass = "com.rectime.mobile.MainKt"
 
         nativeDistributions {
+            // Desktopの認証コールバック受信に必要なJDKモジュールを同梱する。
+            modules("jdk.httpserver")
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.rectime.mobile"
             packageVersion = "1.0.0"
