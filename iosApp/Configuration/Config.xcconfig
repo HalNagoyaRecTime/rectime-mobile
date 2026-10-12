@@ -1,0 +1,15 @@
+// Repository-managed iOS build settings.
+// Developer-specific signing and Debug API overrides belong in Local.xcconfig.
+
+TEAM_ID =
+DEBUG_API_BASE_URL = http:/$()/localhost:8787
+
+PRODUCT_NAME = Rectimemobile
+PRODUCT_BUNDLE_IDENTIFIER = com.rectime.mobile.Rectimemobile
+CURRENT_PROJECT_VERSION = 1
+MARKETING_VERSION = 1.0
+
+#include? "Local.xcconfig"
+
+API_BASE_URL[config=Debug] = $(DEBUG_API_BASE_URL)
+API_BASE_URL[config=Release] = https:/$()/rectime-api.rectime-project.workers.dev

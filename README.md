@@ -45,14 +45,19 @@ CIでAndroid版をビルドする場合は、Repository Secretなどに保存し
 
 ### iOSローカル設定
 
-`iosApp/Configuration/Config.xcconfig.example` を `iosApp/Configuration/Config.xcconfig` へコピーして使用します。
+iOSの共通設定はGit管理された `iosApp/Configuration/Config.xcconfig` を使用します。
+Bundle ID、バージョン、Release API URLはRepositoryを正とし、ローカルファイルへ複製しません。
 
-```shell
-cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
+実機デバッグなどで開発者固有の値が必要な場合だけ、
+Git管理対象外の `iosApp/Configuration/Local.xcconfig` を作成してください。
+
+```xcconfig
+TEAM_ID = <Apple Developer Team ID>
+DEBUG_API_BASE_URL = http:/$()/<MacのIP>:8787
 ```
 
-実機デバッグ時は `Config.xcconfig` 内の `API_BASE_URL`（例: `http://<MacのIP>:8787`）や `TEAM_ID`（Apple Developer Team ID）を各自の環境に合わせて設定してください。
-`Config.xcconfig` はGit管理対象外です。
+`Local.xcconfig` は任意です。未作成の場合、Debug APIは `http://localhost:8787` を使用します。
+Release API URLは `Config.xcconfig` の本番URLから変更しません。
 
 詳細なセットアップ手順は [`setup/README.md`](setup/README.md) を参照。
 

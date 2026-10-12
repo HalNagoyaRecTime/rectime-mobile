@@ -56,8 +56,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Setup iOS Config
-        run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
 
       - name: Test splash scene playback
         run: |
@@ -125,8 +123,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Setup iOS Config
-        run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
 
       # GoogleService-Info.plist が無い場合は実行時に FCM を無効化する作りのため、ビルド検証では配置しない。
       # 署名しないため、entitlements や署名設定はこのジョブでは検証されない。
