@@ -13,6 +13,11 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -22,8 +27,12 @@ import kotlin.test.assertTrue
 class NotificationsPaginationTest {
     @BeforeTest
     fun resetGeneration() {
+        Dispatchers.setMain(StandardTestDispatcher())
         CacheGeneration.resetForTest()
     }
+
+    @AfterTest
+    fun tearDown() { Dispatchers.resetMain() }
 
     @Test
     fun initialLoadFetchesHundredAndRevealsTwentyWithoutNetworkThenPagesOlder() = runTest {
@@ -433,6 +442,39 @@ class NotificationsPaginationTest {
         assertTrue(displayedSnapshots.isNotEmpty())
         displayedSnapshots.forEach { assertEquals(all.map { it.id }, it) }
         assertEquals(100, NotificationHistoryCache(cache).load()?.size)
+    }
+
+    @Test
+    fun detailOutsideHistoryIsSharedInMemoryWithoutIncreasingPersistedHistory() = runTest {
+        val storage = MemoryStore()
+        val cache = LocalCache(storage)
+        val history = NotificationHistoryCache(cache)
+        history.saveDetail(notification(101))
+        val reader = LocalCache(storage)
+        val key = notificationDetailCacheKey(101)
+        assertEquals("本文101", reader.load<UserNotification>(key)?.body)
+        assertTrue(storage.getString(key) == null)
+        assertTrue(history.load() == null)
+
+        history.saveList(listOf(notification(101).copy(body = "更新後の本文")))
+        assertEquals("更新後の本文", reader.load<UserNotification>(key)?.body)
+        assertTrue(storage.getString(key) == null)
+        cache.clearAll()
+        assertTrue(reader.load<UserNotification>(key) == null)
+    }
+
+    @Test
+    fun rejectionDuringPagingAlsoInvalidatesThePersistedHead() = runTest {
+        val cache = LocalCache(MemoryStore())
+        val store = NotificationFeedStore(Gateway { _, offset ->
+            if (offset > 0) throw com.rectime.mobile.core.network.HttpStatusException(io.ktor.http.HttpStatusCode.Forbidden)
+            page((1..20).map(::notification), 40, offset)
+        }, cache)
+        store.load()
+        store.loadMore()
+        assertTrue(store.notifications.value.isEmpty())
+        assertTrue(NotificationHistoryCache(cache).load() == null)
+        assertTrue(store.status.value.error is com.rectime.mobile.core.network.HttpStatusException)
     }
 
     private fun page(values: List<UserNotification>, total: Int, offset: Int) =

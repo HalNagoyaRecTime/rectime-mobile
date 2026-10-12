@@ -47,6 +47,7 @@ suspend fun <T> fetchWithCacheFirst(
     loadCache: suspend () -> T?,
     saveCache: suspend (T) -> Unit,
     onCached: suspend (T) -> Unit,
+    invalidateCache: suspend (Exception) -> Unit = {},
 ): CachedFetchResult<T> {
     val request = CacheRequestGeneration()
     val cached = try {
@@ -59,13 +60,14 @@ suspend fun <T> fetchWithCacheFirst(
     if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
     if (cached != null) onCached(cached)
     if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
-    return request.validate(fetchWithCacheFallback(fetchLive, { cached }, saveCache))
+    return request.validate(fetchWithCacheFallback(fetchLive, loadCache, saveCache, invalidateCache))
 }
 
 suspend fun <T> fetchWithCacheFallback(
     fetchLive: suspend () -> T,
     loadCache: suspend () -> T?,
     saveCache: suspend (T) -> Unit,
+    invalidateCache: suspend (Exception) -> Unit = {},
 ): CachedFetchResult<T> {
     // fetchLive/loadCache実行中にログアウト・新規ログイン等でLocalCache.clearAll()が
     // 走った場合、この通信は前ユーザー(または前セッション)のものである可能性が
@@ -82,9 +84,21 @@ suspend fun <T> fetchWithCacheFallback(
     val value = try {
         fetchLive()
     } catch (e: CancellationException) {
+        staleResultOrNull()?.let { return it }
         throw e
     } catch (e: Exception) {
         staleResultOrNull()?.let { return it }
+
+        if (e.invalidatesDisplayedContent()) {
+            try {
+                invalidateCache(e)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                // 無効化の永続化が失敗しても、拒否された本文は返さない。
+            }
+            return staleResultOrNull() ?: CachedFetchResult.Failed(e)
+        }
 
         // キャッシュの読み込み自体が失敗した場合も、キャッシュなし(Failed)として
         // 扱う。ここで例外を伝播させると、この関数自体の「例外を投げない」契約が
@@ -111,6 +125,7 @@ suspend fun <T> fetchWithCacheFallback(
     try {
         saveCache(value)
     } catch (e: CancellationException) {
+        staleResultOrNull()?.let { return it }
         throw e
     } catch (e: Exception) {
         // no-op

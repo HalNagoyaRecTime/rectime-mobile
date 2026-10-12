@@ -236,7 +236,7 @@ class NotificationDetailViewModelTest {
     }
 
     @Test
-    fun retryIsIgnoredWhileAnotherLoadIsInFlight() = runTest(testDispatcher) {
+    fun retryDuringInitialLoadRunsAgainAfterCurrentResponse() = runTest(testDispatcher) {
         val gate = CompletableDeferred<Unit>()
         var callCount = 0
         val gateway = FakeGateway { id ->
@@ -254,7 +254,7 @@ class NotificationDetailViewModelTest {
         gate.complete(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, callCount)
+        assertEquals(2, callCount)
         assertEquals(15, viewModel.uiState.value.notification?.id)
     }
 
@@ -673,6 +673,26 @@ class NotificationDetailViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isParticipatingInRelatedEvent)
+    }
+
+    @Test
+    fun changingRelatedEventInSharedCacheAlsoUpdatesParticipationWithoutFetchingAgain() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val event = NotificationRelatedEvent(7, "玉入れ", emptyList(), "0915", "0945")
+        val original = notification(15).copy(relatedEvent = event)
+        var calls = 0
+        val viewModel = NotificationDetailViewModel(
+            notificationId = 15,
+            gateway = FakeGateway { calls++; original }, cache = cache, readStore = readStore(),
+            myEventsGateway = FakeMyEventsGateway { setOf(7) },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isParticipatingInRelatedEvent)
+        NotificationHistoryCache(cache).saveDetail(original.copy(relatedEvent = event.copy(id = 8)))
+        testDispatcher.scheduler.runCurrent()
+        assertEquals(8, viewModel.uiState.value.notification?.relatedEvent?.id)
+        assertFalse(viewModel.uiState.value.isParticipatingInRelatedEvent)
+        assertEquals(1, calls)
     }
 
     @Test

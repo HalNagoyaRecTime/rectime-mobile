@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.rectime.mobile.core.cache.CacheGeneration
+import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
@@ -26,7 +27,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,11 +56,21 @@ class RankingViewModel(
     private var myTeamId: Int? = initialMyTeamId
 
     private var contentSession = CacheRequestGeneration()
-    private var fetchJob: Job? = null
+    private val refreshQueue = CacheRefreshQueue()
     private var displayedGeneration = CacheGeneration.value
 
     init {
-        fetchRankings()
+        viewModelScope.launch {
+            cache.observe<RankingsResponse>(RANKING_CACHE_KEY).collect { saved ->
+                _uiState.update { state ->
+                    if (!contentSession.isCurrent) RankingUiState()
+                    else state.copy(rankingItems = saved?.takeIf { value ->
+                        value.items.map { it.teamId }.distinct().size == value.items.size
+                    }?.items?.toModelList()?.toRankingItems(myTeamId).orEmpty())
+                }
+            }
+        }
+        fetchRankings(afterCurrent = false)
     }
 
     // 所属チームIDが取得済みのランキングより後から解決した場合に、既に表示中の
@@ -85,16 +95,13 @@ class RankingViewModel(
         if (!contentSession.isCurrent) fetchRankings()
     }
 
-    fun fetchRankings(isPullRefresh: Boolean = false) {
-        // ボタン・引っ張り更新・前面復帰は同じ取得を共有する。別セッションの取得は破棄する。
-        if (fetchJob?.isActive == true && contentSession.isCurrent) return
-        fetchJob?.cancel()
+    fun fetchRankings(isPullRefresh: Boolean = false, afterCurrent: Boolean = true) {
         val generationAtStart = CacheGeneration.value
         if (displayedGeneration != generationAtStart) {
             _uiState.value = RankingUiState(isLoading = true)
             displayedGeneration = generationAtStart
         }
-        fetchJob = viewModelScope.launch {
+        refreshQueue.launch(viewModelScope, afterCurrent = afterCurrent) {
             // キュー待ち中にログアウトした要求を開始しない。
             if (generationAtStart != CacheGeneration.value) {
                 _uiState.value = RankingUiState()
@@ -116,15 +123,22 @@ class RankingViewModel(
                 when (
                     val result = request.validate(withMinimumRefreshDuration(isPullRefresh) {
                         fetchWithCacheFirst(
-                            fetchLive = { fetchAllRankings(httpClient, baseUrl) },
-                            loadCache = {
-                                if (_uiState.value.rankingItems.isEmpty()) {
-                                    cache.load<RankingsResponse>(RANKING_CACHE_KEY)?.takeIf { saved ->
-                                        saved.items.map { it.teamId }.distinct().size == saved.items.size
+                            fetchLive = {
+                                cache.requests.run(RANKING_CACHE_KEY) {
+                                    fetchAllRankings(httpClient, baseUrl).also { value ->
+                                        try { cache.saveFetched(RANKING_CACHE_KEY, value) }
+                                        catch (e: CancellationException) { throw e }
+                                        catch (_: Exception) { }
                                     }
-                                } else null
+                                }
                             },
-                            saveCache = { cache.saveFetched(RANKING_CACHE_KEY, it) },
+                            loadCache = {
+                                cache.load<RankingsResponse>(RANKING_CACHE_KEY)?.takeIf { saved ->
+                                    saved.items.map { it.teamId }.distinct().size == saved.items.size
+                                }
+                            },
+                            saveCache = {},
+                            invalidateCache = { cache.invalidate(RANKING_CACHE_KEY) },
                             onCached = { saved ->
                                 _uiState.update {
                                     it.copy(rankingItems = saved.items.toModelList().toRankingItems(myTeamId))
@@ -136,7 +150,8 @@ class RankingViewModel(
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = RankingUiState(
                             isLoading = false,
-                            rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
+                            rankingItems = (cache.load<RankingsResponse>(RANKING_CACHE_KEY) ?: result.value)
+                                .items.toModelList().toRankingItems(myTeamId),
                             isOffline = false,
                         )
                     }
@@ -193,7 +208,7 @@ class RankingViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        httpClient.close()
+        cache.requests.afterRequests { httpClient.close() }
     }
 }
 

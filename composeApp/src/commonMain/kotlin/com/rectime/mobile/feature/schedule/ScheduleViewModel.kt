@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
@@ -60,6 +61,7 @@ class ScheduleViewModel internal constructor(
     private var displayedResponse: EventsResponse? = null
     private var displayedRequest: EventCacheRequest? = null
     private var hasEnteredForeground = false
+    private val refreshQueue = CacheRefreshQueue()
     private var loadJob: Job? = null
     private var participatingEventIds: Set<Int>? = null
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
@@ -83,19 +85,37 @@ class ScheduleViewModel internal constructor(
     var isOffline by mutableStateOf(false)
         private set
 
+    init {
+        viewModelScope.launch {
+            cache.observe<EventsResponse>("schedule_events_v1").collect { response ->
+                if (response == null) {
+                    clearDisplayedEvents()
+                    if (!contentSession.isCurrent) {
+                        isLoading = false
+                        isRefreshing = false
+                        isUpdating = false
+                    }
+                } else {
+                    displayedResponse = response
+                    _events.value = toTimelineEvents(response).events
+                    isLoading = false
+                }
+            }
+        }
+        viewModelScope.launch {
+            this@ScheduleViewModel.scheduleStore.participationChanges.collect { participation ->
+                if (participation != null) applyParticipation(participation.map { it.eventId }.toSet())
+                else if (!contentSession.isCurrent) participatingEventIds = null
+            }
+        }
+    }
+
     /** タブへ戻るだけでは再取得せず、ログインが切り替わった場合は初回取得する。 */
     suspend fun onEnter() {
         if (enteredSession?.isCurrent == true) {
-            // 詳細で更新された本人参加情報も同じStoreから反映する。タブ復帰だけでは通信しない。
-            scheduleStore.cachedParticipation()?.let { saved ->
-                if (enteredSession?.isCurrent == true) applyParticipation(saved.map { it.eventId }.toSet())
-            }
-            // 詳細で更新された保存内容を反映する。
-            val response = displayedResponse
-            val request = displayedRequest
-            if (response != null && request != null) {
-                val latest = eventCache.reconcileEvents(response, request)
-                if (request.generation.isCurrent) publishEvents(latest, request)
+            eventCache.loadEvents()?.let { response ->
+                displayedResponse = response
+                _events.value = toTimelineEvents(response).events
             }
             return
         }
@@ -128,17 +148,16 @@ class ScheduleViewModel internal constructor(
     fun refresh() = loadEvents(isRefresh = true)
 
     private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false) {
-        if (isUpdating) return
-        if (!contentSession.isCurrent) {
-            clearDisplayedEvents()
-            participatingEventIds = null
-            contentSession = CacheRequestGeneration()
-        }
-        isUpdating = true
-        isLoading = !isRefresh && !isBackground
-        isRefreshing = isRefresh
-        error = null
-        loadJob = viewModelScope.launch {
+        loadJob = refreshQueue.launch(viewModelScope, afterCurrent = isRefresh || isBackground) {
+            if (!contentSession.isCurrent) {
+                clearDisplayedEvents()
+                participatingEventIds = null
+                contentSession = CacheRequestGeneration()
+            }
+            isUpdating = true
+            isLoading = !isRefresh && !isBackground && _events.value.isEmpty()
+            isRefreshing = isRefresh
+            error = null
             val request = CacheRequestGeneration()
             var participationJob: Job? = null
             try {
@@ -159,10 +178,15 @@ class ScheduleViewModel internal constructor(
                 val cacheRequest = eventCache.beginRequest()
                 val result = request.validate(withMinimumRefreshDuration(isRefresh) {
                     fetchWithCacheFirst(
-                        fetchLive = { eventCache.saveEvents(fetchAllEvents(), cacheRequest) },
+                        fetchLive = {
+                            cache.requests.run("schedule_events_v1") {
+                                eventCache.saveEvents(fetchAllEvents(), cacheRequest)
+                            }
+                        },
                         loadCache = { eventCache.loadEvents() },
                         // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
                         saveCache = {},
+                        invalidateCache = { cache.invalidate("schedule_events_v1") },
                         onCached = { saved ->
                             if (!isRefresh && !isBackground && _events.value.isEmpty()) {
                                 publishEvents(saved, cacheRequest)
@@ -339,7 +363,7 @@ class ScheduleViewModel internal constructor(
 
     override fun onCleared() {
         super.onCleared()
-        if (ownsScheduleStore) scheduleStore.close() else client.close()
+        if (ownsScheduleStore) scheduleStore.close() else cache.requests.afterRequests { client.close() }
     }
 }
 

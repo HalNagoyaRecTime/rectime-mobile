@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.event
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
@@ -14,10 +15,10 @@ import com.rectime.mobile.core.network.toGatherings
 import com.rectime.mobile.core.network.toModel
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import io.ktor.client.HttpClient
@@ -38,11 +39,30 @@ class EventDetailViewModel internal constructor(
     private val _uiState = MutableStateFlow(EventDetailUiState(isLoading = true))
     val uiState: StateFlow<EventDetailUiState> = _uiState.asStateFlow()
 
-    private var loadJob: Job? = null
+    private val refreshQueue = CacheRefreshQueue()
     private var hasEnteredForeground = false
 
     init {
-        fetchEventDetail()
+        viewModelScope.launch {
+            combine(
+                cache.observe<EventDetailResponse>("event_detail_v1_$eventId"),
+                cache.observe<com.rectime.mobile.feature.schedule.EventsResponse>("schedule_events_v1"),
+                this@EventDetailViewModel.scheduleStore.participationChanges,
+            ) { _, _, participation -> participation }.collect { participation ->
+                if (_uiState.value.error != null) return@collect
+                val latest = eventCache.loadDetail(eventId)
+                val gatherings = latest?.toGatherings().orEmpty()
+                _uiState.value = _uiState.value.copy(
+                    isLoading = if (latest != null || !contentSession.isCurrent) false else _uiState.value.isLoading,
+                    eventDetail = latest?.toModel(),
+                    gatherings = gatherings,
+                    attendingGatheringIds = participation.orEmpty()
+                        .firstOrNull { it.eventId == eventId }?.gatheringIds.orEmpty().toSet()
+                        .intersect(gatherings.map { it.gatheringId }.toSet()),
+                )
+            }
+        }
+        fetchEventDetail(afterCurrent = false)
     }
 
     fun onForeground() {
@@ -51,9 +71,8 @@ class EventDetailViewModel internal constructor(
         hasEnteredForeground = true
     }
 
-    private fun fetchEventDetail() {
-        if (loadJob?.isActive == true) return
-        loadJob = viewModelScope.launch {
+    private fun fetchEventDetail(afterCurrent: Boolean = true) {
+        refreshQueue.launch(viewModelScope, afterCurrent = afterCurrent) {
             val request = CacheRequestGeneration()
             if (!contentSession.isCurrent || _uiState.value.eventDetail == null) {
                 _uiState.value = EventDetailUiState(isLoading = true)
@@ -73,6 +92,7 @@ class EventDetailViewModel internal constructor(
                         loadCache = { eventCache.loadDetail(eventId) },
                         // 統合済みの値を本文表示にも使う。
                         saveCache = {},
+                        invalidateCache = { eventCache.invalidateDetail(eventId, it) },
                         onCached = { saved ->
                             val gatherings = saved.toGatherings().orEmpty()
                             val attending = loadAttendingGatheringIdsFromCache()
@@ -203,6 +223,6 @@ class EventDetailViewModel internal constructor(
     override fun onCleared() {
         super.onCleared()
         if (ownsScheduleStore) scheduleStore.close()
-        httpClient.close()
+        cache.requests.afterRequests { httpClient.close() }
     }
 }

@@ -337,7 +337,7 @@ class NotificationsViewModelTest {
     }
 
     @Test
-    fun refreshIsIgnoredWhileAnotherLoadIsInFlight() = runTest(testDispatcher) {
+    fun refreshDuringInitialLoadRunsAgainAfterCurrentResponse() = runTest(testDispatcher) {
         val gate = CompletableDeferred<Unit>()
         var callCount = 0
         val gateway = FakeGateway { limit, offset ->
@@ -355,7 +355,7 @@ class NotificationsViewModelTest {
         gate.complete(Unit)
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, callCount)
+        assertEquals(2, callCount)
         assertEquals(listOf(1), viewModel.uiState.value.notifications.map(UserNotification::id))
     }
 

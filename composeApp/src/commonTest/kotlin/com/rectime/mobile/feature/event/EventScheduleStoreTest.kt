@@ -106,6 +106,22 @@ class EventScheduleStoreTest {
         } finally { store.close() }
     }
 
+    @Test fun confirmedParticipationRejectionClearsBothModernAndLegacyValues() = runTest(dispatcher) {
+        val cache = LocalCache(MemoryStore())
+        cache.save(EventScheduleStore.ParticipationKey, listOf(MyEventParticipation(1, listOf(10))))
+        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        val store = EventScheduleStore(cache, client { detailBody }, object : MyEventsGateway {
+            override suspend fun getMyEvents(): List<MyEventParticipation> =
+                throw HttpStatusException(io.ktor.http.HttpStatusCode.Forbidden)
+        })
+        try {
+            assertTrue(runCatching { store.refreshParticipation() }.isFailure)
+            assertEquals(emptyList(), store.cachedParticipation())
+            assertEquals(emptySet(), store.cachedParticipatingEventIds())
+            assertNull(cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+        } finally { store.close() }
+    }
+
     @Test fun failedStorageDoesNotStopLiveDetailAndParticipation() = runTest(dispatcher) {
         val cache = LocalCache(object : KeyValueStore {
             override suspend fun getString(key: String): String? = error("read")

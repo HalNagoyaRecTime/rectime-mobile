@@ -9,6 +9,11 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.BeforeTest
 import kotlin.test.assertFalse
@@ -19,7 +24,10 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotificationFeedStoreTest {
     @BeforeTest
-    fun resetGeneration() { CacheGeneration.resetForTest() }
+    fun resetGeneration() { Dispatchers.setMain(StandardTestDispatcher()); CacheGeneration.resetForTest() }
+
+    @AfterTest
+    fun tearDown() { Dispatchers.resetMain() }
 
     @Test
     fun savedFeedIsPublishedBeforeNetworkCompletes() = runTest {

@@ -19,11 +19,13 @@ internal object CacheGeneration {
 
     fun bump() {
         value++
+        clearCacheMemory()
     }
 
     // テスト用: このオブジェクトはプロセス全体で共有されるため、テストケース間で
     // 値が漏れないよう各テストの開始時にリセットする(本番コードからは呼ばない)。
     fun resetForTest() {
         value = 0
+        clearCacheMemory()
     }
 }
