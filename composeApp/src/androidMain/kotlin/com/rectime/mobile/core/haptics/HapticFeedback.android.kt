@@ -1,16 +1,21 @@
 package com.rectime.mobile.core.haptics
 
 import android.os.Build
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalView
+import com.rectime.mobile.core.platform.getPlatformContext
+import java.io.File
 
 private class AndroidAppHapticFeedback(
     private val view: View,
 ) : AppHapticFeedback {
     override fun perform(event: AppHapticEvent) {
+        if (!HapticCapability.status.value.canVibrate) return
         val constant = when (event) {
             AppHapticEvent.LogoTap -> HapticFeedbackConstants.VIRTUAL_KEY
             AppHapticEvent.RefreshThreshold -> refreshThresholdHapticConstant(Build.VERSION.SDK_INT)
@@ -41,4 +46,21 @@ internal fun preferenceToggleHapticConstant(enabled: Boolean, sdkInt: Int): Int 
 actual fun rememberPlatformHapticFeedback(): AppHapticFeedback {
     val view = LocalView.current
     return remember(view) { AndroidAppHapticFeedback(view) }
+}
+
+internal actual fun loadPlatformHapticSupport(): Boolean {
+    val context = checkNotNull(getPlatformContext()) { "Platform context is not initialized" }
+    val file = File(context.noBackupFilesDir, "haptic-capability-v1")
+    return loadCachedHapticSupport(
+        readCache = { file.readText() },
+        detectSupport = {
+            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
+                context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+            } else {
+                context.getSystemService(Vibrator::class.java)
+            }
+            checkNotNull(vibrator) { "Vibrator service is unavailable" }.hasVibrator()
+        },
+        writeCache = { file.writeText(it) },
+    )
 }

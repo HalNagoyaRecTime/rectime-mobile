@@ -62,6 +62,8 @@ import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.core.haptics.LocalHapticPreference
+import com.rectime.mobile.core.haptics.HapticCapability
+import com.rectime.mobile.core.haptics.HapticSupportStatus
 import com.rectime.mobile.core.haptics.AppHapticEvent
 import com.rectime.mobile.core.haptics.rememberPlatformHapticFeedback
 import com.rectime.mobile.feature.legal.LegalDocument
@@ -99,6 +101,7 @@ class SettingsScreen(
         val hapticPreference = LocalHapticPreference.current
         val hapticFeedback = rememberPlatformHapticFeedback()
         val hapticEnabled by hapticPreference.enabled.collectAsState()
+        val hapticStatus by HapticCapability.status.collectAsState()
         val lifecycleOwner = LocalLifecycleOwner.current
         val refreshNotificationPermission = {
             notificationPermissionStartup?.let { startup ->
@@ -108,6 +111,8 @@ class SettingsScreen(
             }
         }
 
+        LaunchedEffect(Unit) { HapticCapability.load() }
+
         LaunchedEffect(notificationPermissionStartup) {
             notificationPermissionStatus = notificationPermissionStartup?.getStatus()
                 ?: NotificationPermissionStatus.Unavailable
@@ -116,6 +121,7 @@ class SettingsScreen(
             val observer = LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
                     refreshNotificationPermission()
+                    scope.launch { HapticCapability.load() }
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
@@ -170,34 +176,40 @@ class SettingsScreen(
                                     notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
                                 onClick = { notificationPermissionStartup?.openSystemSettings() },
                             )
-                            SettingsSeparator()
-                            SettingsRow(
-                                title = "振動",
-                                icon = SettingsIcon.Haptic,
-                                trailingContent = {
-                                    Switch(
-                                        checked = hapticEnabled,
-                                        colors = SwitchDefaults.colors(
-                                            checkedTrackColor = AppTheme.colors.themeColorSecond,
-                                            checkedBorderColor = AppTheme.colors.themeColorSecond,
-                                            checkedThumbColor = AppTheme.colors.textThemeColorSecond,
-                                            uncheckedTrackColor = AppTheme.colors.borderSubtle,
-                                            uncheckedBorderColor = AppTheme.colors.borderStrong,
-                                            uncheckedThumbColor = AppTheme.colors.textMuted,
-                                        ),
-                                        onCheckedChange = { enabled ->
-                                            // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
-                                            hapticFeedback.perform(
-                                                if (enabled) AppHapticEvent.PreferenceEnabled
-                                                else AppHapticEvent.PreferenceDisabled,
-                                            )
-                                            scope.launch {
-                                                hapticPreference.setEnabled(enabled)
-                                            }
-                                        },
-                                    )
-                                },
-                            )
+                            if (hapticStatus.showSetting) {
+                                SettingsSeparator()
+                                SettingsRow(
+                                    title = "振動",
+                                    icon = SettingsIcon.Haptic,
+                                    enabled = hapticStatus.canVibrate,
+                                    subtitle = if (hapticStatus == HapticSupportStatus.Failed)
+                                        "振動の対応状況を確認できません" else null,
+                                    trailingContent = {
+                                        Switch(
+                                            checked = hapticEnabled,
+                                            enabled = hapticStatus.canVibrate,
+                                            colors = SwitchDefaults.colors(
+                                                checkedTrackColor = AppTheme.colors.themeColorSecond,
+                                                checkedBorderColor = AppTheme.colors.themeColorSecond,
+                                                checkedThumbColor = AppTheme.colors.textThemeColorSecond,
+                                                uncheckedTrackColor = AppTheme.colors.borderSubtle,
+                                                uncheckedBorderColor = AppTheme.colors.borderStrong,
+                                                uncheckedThumbColor = AppTheme.colors.textMuted,
+                                            ),
+                                            onCheckedChange = { enabled ->
+                                                // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
+                                                hapticFeedback.perform(
+                                                    if (enabled) AppHapticEvent.PreferenceEnabled
+                                                    else AppHapticEvent.PreferenceDisabled,
+                                                )
+                                                scope.launch {
+                                                    hapticPreference.setEnabled(enabled)
+                                                }
+                                            },
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
