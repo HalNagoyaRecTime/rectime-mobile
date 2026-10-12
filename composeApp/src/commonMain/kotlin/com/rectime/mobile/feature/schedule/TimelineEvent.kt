@@ -23,7 +23,18 @@ data class TimelineEvent(
     val isParticipating: Boolean = false,
     val overflowCount: Int = 0,
     val overflowEvents: List<TimelineEvent> = emptyList(),
-)
+) {
+    /**
+     * タイムライン上の表示に使う所要時間。
+     * 短時間イベントのカードが小さくなりすぎないよう、最小表示時間まで引き伸ばす。
+     * 実際の時刻(ラベル・開催中判定)には durationMinutes を使うこと。
+     */
+    val displayDurationMinutes: Int
+        get() = maxOf(durationMinutes, MIN_DISPLAY_DURATION_MINUTES)
+}
+
+/** カードの最小表示時間(分)。10分イベントでも20分ぶんの高さで表示する。 */
+internal const val MIN_DISPLAY_DURATION_MINUTES = 20
 
 private val apiTimeFormat = LocalTime.Format {
     hour()

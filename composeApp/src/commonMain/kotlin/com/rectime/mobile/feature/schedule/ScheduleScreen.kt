@@ -60,6 +60,13 @@ import com.rectime.mobile.ui.component.resolveEventCardShadowSpec
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.theme.AppTheme
 
+/**
+ * タイムラインの1時間あたりの高さ。
+ * 短時間イベントのカードが潰れないよう、72dpから拡大している。
+ * 短時間イベントは別途 MIN_DISPLAY_DURATION_MINUTES の高さまで引き伸ばす。
+ */
+internal val ScheduleHourHeight: Dp = 144.dp
+
 internal class ScheduleTimelineGeometry(
     private val topPadding: Dp,
     private val bottomPadding: Dp,
@@ -72,6 +79,14 @@ internal class ScheduleTimelineGeometry(
 
     fun minuteY(minute: Int): Dp =
         topPadding + hourHeight * ((minute - visibleStartHour * 60) / 60f)
+
+    /**
+     * 開始〜終了までのカードの高さ。
+     * minuteY(開始 + 所要時間) - minuteY(開始) で求めることで、
+     * カードの下端が終了時刻の位置と必ず一致する。
+     */
+    fun durationHeight(startMinute: Int, durationMinutes: Int): Dp =
+        minuteY(startMinute + durationMinutes) - minuteY(startMinute)
 
     fun pastHeight(minute: Int): Dp = minuteY(minute).coerceIn(0.dp, totalHeight)
 
@@ -130,7 +145,7 @@ private fun ScheduleScreenUI(
     val timelineBottomPadding = 120.dp + navigationBottomInset + 24.dp
     val hourStart = 9
     val hourEnd = 20
-    val hourHeight = 72.dp
+    val hourHeight = ScheduleHourHeight
     val timeBarWidth = 45.dp
 
     val timelineGeometry = ScheduleTimelineGeometry(
@@ -311,7 +326,7 @@ private fun ScheduleScreenUI(
                                 }
 
                                 val yOffset = timelineGeometry.minuteY(event.startMinuteOfDay)
-                                val eventHeight = hourHeight * (event.durationMinutes / 60f)
+                                val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.displayDurationMinutes)
 
                                 if (event.overflowCount > 0) {
                                     val shadowWidth = laneWidth - (dim.borderExtend * 2)
@@ -421,7 +436,7 @@ private fun ScheduleScreenUI(
                             }
 
                             val yOffset = timelineGeometry.minuteY(event.startMinuteOfDay)
-                            val eventHeight = hourHeight * (event.durationMinutes / 60f)
+                            val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.displayDurationMinutes)
 
                             if (event.overflowCount > 0) {
                                 Box(
