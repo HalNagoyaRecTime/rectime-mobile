@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -109,6 +110,10 @@ class EventCardDimensions(screenWidthDp: Dp) {
     val largeTimeTitleSpacingMax: Dp = (1.8f * u).dp
     val largeTitleCourtSpacingMin: Dp = (0.3f * u).dp
     val largeTitleCourtSpacingMax: Dp = (2.2f * u).dp
+    // イベント名の右に会場チップを並べるときの間隔と、右上の矢印を避けるための余白
+    val titleVenueSpacing: Dp = (1.5f * u).dp
+    val largeTitleRowEndReserve: Dp = (3.5f * u).dp
+    val mediumTitleRowEndReserve: Dp = (4f * u).dp
 
     // 中サイズ
     val mediumCut: Dp = (7.49f * u).dp
@@ -306,7 +311,6 @@ fun EventCard(
         val variant = resolveEventCardVariant(currentWidth, currentHeight, dim)
 
         val timeToTitleSpacing: Dp
-        val titleToCourtSpacing: Dp
 
         when (variant) {
             EventCardSizeVariant.Large -> {
@@ -314,8 +318,6 @@ fun EventCard(
                     ((currentHeight - dim.mediumHeightThreshold) / (20f * dim.u).dp).coerceIn(0f, 1f)
                 timeToTitleSpacing =
                     dim.largeTimeTitleSpacingMin + (dim.largeTimeTitleSpacingMax - dim.largeTimeTitleSpacingMin) * ratio
-                titleToCourtSpacing =
-                    dim.largeTitleCourtSpacingMin + (dim.largeTitleCourtSpacingMax - dim.largeTitleCourtSpacingMin) * ratio
             }
 
             EventCardSizeVariant.Medium -> {
@@ -326,8 +328,6 @@ fun EventCard(
                     )
                 timeToTitleSpacing =
                     dim.mediumTimeTitleSpacingMin + (dim.mediumTimeTitleSpacingMax - dim.mediumTimeTitleSpacingMin) * ratio
-                titleToCourtSpacing =
-                    dim.mediumTitleCourtSpacingMin + (dim.mediumTitleCourtSpacingMax - dim.mediumTitleCourtSpacingMin) * ratio
             }
 
             EventCardSizeVariant.Small -> {
@@ -338,12 +338,10 @@ fun EventCard(
                     )
                 timeToTitleSpacing =
                     dim.smallTimeTitleSpacingMin + (dim.smallTimeTitleSpacingMax - dim.smallTimeTitleSpacingMin) * ratio
-                titleToCourtSpacing = 0.dp
             }
 
             EventCardSizeVariant.Compact -> {
                 timeToTitleSpacing = 0.dp
-                titleToCourtSpacing = 0.dp
             }
         }
 
@@ -564,7 +562,6 @@ fun EventCard(
                             isLive = isLive,
                             cutSize = cutSize,
                             timeToTitleSpacing = timeToTitleSpacing,
-                            titleToCourtSpacing = titleToCourtSpacing,
                             dim = dim,
                             fontFamily = notoSansJpFontFamily()
                         )
@@ -637,7 +634,6 @@ private fun EventCardInnerContent(
     isLive: Boolean,
     cutSize: Dp,
     timeToTitleSpacing: Dp,
-    titleToCourtSpacing: Dp,
     dim: EventCardDimensions,
     fontFamily: FontFamily?,
 ) {
@@ -676,29 +672,23 @@ private fun EventCardInnerContent(
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(timeToTitleSpacing))
-                    Text(
-                        text = title,
-                        style = tightlySpacedTextStyle(
+                    EventTitleWithVenueChip(
+                        title = title,
+                        titleStyle = tightlySpacedTextStyle(
                             fontSize = dim.largeTitleFont,
                             fontWeight = titleWeight,
                             fontFamily = fontFamily
                         ),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(titleToCourtSpacing))
-                    EventVenueChip(
                         venues = venues,
-                        textStyle = tightlySpacedTextStyle(
+                        venueTextStyle = tightlySpacedTextStyle(
                             fontSize = dim.largeCourtFont,
                             fontWeight = courtWeight,
                             fontFamily = fontFamily
                         ),
-                        horizontalPadding = (2.3f * dim.u).dp,
-                        verticalPadding = (0.1f * dim.u).dp,
-                        maxWidth = availableWidth - rightReservedSpace,
-                        backgroundColor = eventVenueBackground,
+                        venueHorizontalPadding = (2.3f * dim.u).dp,
+                        endReserve = dim.largeTitleRowEndReserve,
+                        availableWidth = availableWidth - rightReservedSpace,
+                        venueBackgroundColor = eventVenueBackground,
                         dim = dim
                     )
                 }
@@ -713,29 +703,23 @@ private fun EventCardInnerContent(
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(timeToTitleSpacing))
-                    Text(
-                        text = title,
-                        style = tightlySpacedTextStyle(
+                    EventTitleWithVenueChip(
+                        title = title,
+                        titleStyle = tightlySpacedTextStyle(
                             fontSize = dim.mediumTitleFont,
                             fontWeight = titleWeight,
                             fontFamily = fontFamily
                         ),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(titleToCourtSpacing))
-                    EventVenueChip(
                         venues = venues,
-                        textStyle = tightlySpacedTextStyle(
+                        venueTextStyle = tightlySpacedTextStyle(
                             fontSize = dim.mediumCourtFont,
                             fontWeight = courtWeight,
                             fontFamily = fontFamily
                         ),
-                        horizontalPadding = (2f * dim.u).dp,
-                        verticalPadding = (0.1f * dim.u).dp,
-                        maxWidth = availableWidth - rightReservedSpace,
-                        backgroundColor = eventVenueBackground,
+                        venueHorizontalPadding = (2f * dim.u).dp,
+                        endReserve = dim.mediumTitleRowEndReserve,
+                        availableWidth = availableWidth - rightReservedSpace,
+                        venueBackgroundColor = eventVenueBackground,
                         dim = dim
                     )
                 }
@@ -836,6 +820,54 @@ fun fitEventVenueLabel(
     return EventVenueLabel(label = venues.first(), hiddenCount = venues.size - 1)
 }
 
+/** 会場チップの最大幅(イベント名と並べる行の幅に対する割合)。イベント名の表示領域を確保するため。 */
+private const val VenueChipMaxWidthRatio = 0.45f
+
+/**
+ * イベント名と会場チップを横一列に並べる。
+ * 会場チップを先に配置し、イベント名は残りの幅に収まらなければ省略表示する。
+ */
+@Composable
+private fun EventTitleWithVenueChip(
+    title: String,
+    titleStyle: TextStyle,
+    venues: List<String>,
+    venueTextStyle: TextStyle,
+    venueHorizontalPadding: Dp,
+    endReserve: Dp,
+    availableWidth: Dp,
+    venueBackgroundColor: Color,
+    dim: EventCardDimensions
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(end = endReserve),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = titleStyle,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        if (venues.isNotEmpty()) {
+            Spacer(modifier = Modifier.width(dim.titleVenueSpacing))
+            EventVenueChip(
+                venues = venues,
+                textStyle = venueTextStyle,
+                horizontalPadding = venueHorizontalPadding,
+                verticalPadding = (0.1f * dim.u).dp,
+                maxWidth = (availableWidth - endReserve) * VenueChipMaxWidthRatio,
+                backgroundColor = venueBackgroundColor,
+                dim = dim
+            )
+        }
+    }
+}
+
 @Composable
 private fun EventVenueChip(
     venues: List<String>,
@@ -845,7 +877,10 @@ private fun EventVenueChip(
     maxWidth: Dp,
     backgroundColor: Color,
     dim: EventCardDimensions
-) { if (venues.isEmpty()) return  // 会場が未設定のときは空の枠を表示しない
+) {
+    // 会場が未設定のときは空の枠を表示しない
+    if (venues.isEmpty()) return
+
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val hiddenCountSpacing = (0.8f * dim.u).dp
@@ -866,6 +901,7 @@ private fun EventVenueChip(
 
     Row(
         modifier = Modifier
+            .widthIn(max = maxWidth)
             .clip(CircleShape)
             .background(backgroundColor)
             .padding(
