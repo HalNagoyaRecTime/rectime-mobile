@@ -1,8 +1,7 @@
 {
   "project_info": {
     "project_number": "000000000000",
-    "project_id": "rectime-mobile-example",
-    "storage_bucket": "rectime-mobile-example.appspot.com"
+    "project_id": "rectime-mobile-ci"
   },
   "client": [
     {
@@ -15,7 +14,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "PLACEHOLDER_NOT_A_REAL_API_KEY"
+          "current_key": "CI_PLACEHOLDER_NOT_A_REAL_API_KEY"
         }
       ],
       "services": {

@@ -20,7 +20,7 @@ fun requireProductionApiOrigin(value: String?): String {
     val origin = value?.trim()?.trimEnd('/').orEmpty()
     if (origin.isEmpty()) {
         throw GradleException(
-            "release buildのAPI_BASE_URLが未設定です。-PRELEASE_API_BASE_URL=<本番origin> を指定してください。"
+            "release buildの本番API originが未設定です。productionApiOriginを確認してください。"
         )
     }
     val host = httpsOriginPattern.matchEntire(origin)?.groupValues?.get(1)?.lowercase()
@@ -195,9 +195,7 @@ android {
         }
         getByName("release") {
             isMinifyEnabled = false
-            val apiBaseUrl = requireProductionApiOrigin(
-                resolveBuildProperty("RELEASE_API_BASE_URL") ?: productionApiOrigin
-            )
+            val apiBaseUrl = requireProductionApiOrigin(productionApiOrigin)
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         }
     }

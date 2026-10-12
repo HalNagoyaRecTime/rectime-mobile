@@ -85,10 +85,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      # 実物はsecretだが、dependabotのPRはsecretを読めない。
-      # 依存更新でAndroidビルドが壊れたときこそ検知したいので、placeholderで組む。
-      - name: Setup google-services.json
-        run: cp composeApp/google-services.json.example composeApp/google-services.json
+      # 通常CIはFirebaseへ接続しない。Git管理するCI専用dummyを実ファイル名へコピーし、
+      # google-services Gradle PluginによるJSON形式とapplicationIdの整合性を検証する。
+      - name: Setup CI Firebase config
+        run: cp composeApp/google-services.ci.json composeApp/google-services.json
 
       - name: Assemble debug APK
         run: ./gradlew :composeApp:assembleDebug

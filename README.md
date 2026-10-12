@@ -33,15 +33,15 @@ cd rectime-mobile
 
 ### Firebase Android設定
 
-Android版のビルドには、Firebase Consoleから取得した設定ファイルが必要です。
-プロジェクト管理者から安全な方法で共有されたファイルを、次の場所へ配置してください。
+Android版をFirebaseへ接続して実行する場合は、Firebase Consoleから取得した設定ファイルを次の場所へ配置してください。
 
 ```text
 composeApp/google-services.json
 ```
 
 `composeApp/google-services.json`はGitの管理対象外です。コミットしないでください。
-CIでAndroid版をビルドする場合は、Repository Secretなどに保存した内容からビルド時に同じパスへ生成してください。
+`composeApp/google-services.ci.json` はGit管理するCI専用のdummy設定で、`google-services.json` のJSON形式と `applicationId` の整合性をビルドで確認するために使います。本番Firebase設定のテンプレートではなく、ローカル実行や配布用ビルドには使用しません。
+配布用ビルドでは対象Firebase projectから取得した実ファイルを使用してください。
 
 ### iOSローカル設定
 
