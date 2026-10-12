@@ -845,7 +845,7 @@ private fun EventVenueChip(
     maxWidth: Dp,
     backgroundColor: Color,
     dim: EventCardDimensions
-) {
+) { if (venues.isEmpty()) return  // 会場が未設定のときは空の枠を表示しない
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val hiddenCountSpacing = (0.8f * dim.u).dp

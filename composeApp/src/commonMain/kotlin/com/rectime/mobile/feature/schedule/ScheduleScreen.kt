@@ -62,10 +62,10 @@ import com.rectime.mobile.ui.theme.AppTheme
 
 /**
  * タイムラインの1時間あたりの高さ。
- * 10分程度の短時間イベントでも、カード内で「イベント名・実施時間・矢印」を
- * 横一列に表示できる高さを確保するため、72dpから拡大している。
+ * 短時間イベントのカードが潰れないよう、72dpから拡大している。
+ * 短時間イベントは別途 MIN_DISPLAY_DURATION_MINUTES の高さまで引き伸ばす。
  */
-internal val ScheduleHourHeight: Dp = 120.dp
+internal val ScheduleHourHeight: Dp = 144.dp
 
 internal class ScheduleTimelineGeometry(
     private val topPadding: Dp,
@@ -326,7 +326,7 @@ private fun ScheduleScreenUI(
                                 }
 
                                 val yOffset = timelineGeometry.minuteY(event.startMinuteOfDay)
-                                val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.durationMinutes)
+                                val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.displayDurationMinutes)
 
                                 if (event.overflowCount > 0) {
                                     val shadowWidth = laneWidth - (dim.borderExtend * 2)
@@ -436,7 +436,7 @@ private fun ScheduleScreenUI(
                             }
 
                             val yOffset = timelineGeometry.minuteY(event.startMinuteOfDay)
-                            val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.durationMinutes)
+                            val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.displayDurationMinutes)
 
                             if (event.overflowCount > 0) {
                                 Box(
