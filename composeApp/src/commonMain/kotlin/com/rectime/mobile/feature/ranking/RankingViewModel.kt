@@ -124,7 +124,7 @@ class RankingViewModel(
                                     }
                                 } else null
                             },
-                            saveCache = { cache.save(RANKING_CACHE_KEY, it) },
+                            saveCache = { cache.saveFetched(RANKING_CACHE_KEY, it) },
                             onCached = { saved ->
                                 _uiState.update {
                                     it.copy(rankingItems = saved.items.toModelList().toRankingItems(myTeamId))
