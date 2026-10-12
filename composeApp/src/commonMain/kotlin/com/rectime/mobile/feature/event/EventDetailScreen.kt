@@ -85,7 +85,6 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onForeground() }
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
-        var titleBandHeightPx by remember { mutableIntStateOf(0) }
         var titleHeightPx by remember { mutableIntStateOf(0) }
         val listState = rememberLazyListState()
         val titleInsetPx = with(LocalDensity.current) {
@@ -110,9 +109,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                 contentTopPadding = false,
                 headerEdgeFade = false,
                 contentBackground = {
-                    if (uiState.eventDetail != null && uiState.error == null) {
-                        BounceBackground(titleBandColor, bodyBackgroundColor, titleBandHeightPx.toFloat())
-                    }
+                    BounceBackground(titleBandColor, bodyBackgroundColor)
                 },
             ) {
                 item {
@@ -150,7 +147,6 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                 gatherings = uiState.gatherings,
                                 attendingGatheringIds = uiState.attendingGatheringIds,
                                 onOpenMap = { isMapVisible = true },
-                                onTitleBandHeightChanged = { titleBandHeightPx = it },
                                 onTitleHeightChanged = { titleHeightPx = it },
                             )
                         }
@@ -171,7 +167,6 @@ private fun EventDetailContent(
     gatherings: List<Gathering>,
     attendingGatheringIds: Set<Int>,
     onOpenMap: () -> Unit,
-    onTitleBandHeightChanged: (Int) -> Unit,
     onTitleHeightChanged: (Int) -> Unit,
 ) {
     var now by remember { mutableIntStateOf(overviewMinute()) }
@@ -191,7 +186,6 @@ private fun EventDetailContent(
     Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
         EventTitleBand(
             title = event.eventName,
-            onHeightChanged = onTitleBandHeightChanged,
             onTitleHeightChanged = onTitleHeightChanged,
             status = status,
             overview = { EventOverview(event, onOpenMap) },
@@ -228,7 +222,6 @@ private fun EventDetailContent(
 @Composable
 private fun EventTitleBand(
     title: String,
-    onHeightChanged: (Int) -> Unit,
     onTitleHeightChanged: (Int) -> Unit,
     status: String,
     overview: @Composable () -> Unit,
@@ -237,7 +230,6 @@ private fun EventTitleBand(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .onSizeChanged { onHeightChanged(it.height) }
             .background(AppTheme.colors.themeColorSecond)
             .drawBehind {
                 val thickness = 2.dp.toPx()
