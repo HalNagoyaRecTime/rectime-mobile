@@ -42,7 +42,7 @@ class IncomingPushNotificationTest {
             data = emptyMap(),
         )
 
-        assertEquals("REC TIME", notification.title)
+        assertEquals("RE:CREATION", notification.title)
         assertEquals("新しい通知があります。", notification.body)
     }
 }

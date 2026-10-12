@@ -24,5 +24,5 @@ data class IncomingPushNotification(
     }
 }
 
-private const val DEFAULT_TITLE = "REC TIME"
+private const val DEFAULT_TITLE = "RE:CREATION"
 private const val DEFAULT_BODY = "新しい通知があります。"

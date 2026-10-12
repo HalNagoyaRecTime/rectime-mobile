@@ -11,7 +11,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		E7C46A350BC0382DA91661D2 /* Rectimemobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rectimemobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7C46A350BC0382DA91661D2 /* RECREATION.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RECREATION.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -56,7 +56,7 @@
 		B575E86706B6F6ADE5C16A16 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E7C46A350BC0382DA91661D2 /* Rectimemobile.app */,
+				E7C46A350BC0382DA91661D2 /* RECREATION.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -94,7 +94,7 @@
 				7A1FC0100000000000000003 /* FirebaseMessaging */,
 			);
 			productName = iosApp;
-			productReference = E7C46A350BC0382DA91661D2 /* Rectimemobile.app */;
+			productReference = E7C46A350BC0382DA91661D2 /* RECREATION.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
