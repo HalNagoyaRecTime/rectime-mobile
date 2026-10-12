@@ -211,4 +211,25 @@ class EventScheduleStoreTest {
         assertEquals("更新された競技", cache.loadDetail(1)?.eventName)
         assertEquals(detail.rounds, cache.loadDetail(1)?.rounds)
     }
+    @Test fun roundStartChangesRefreshLegacyCacheWithoutEventTimestamp() = runTest(dispatcher) {
+        val local = LocalCache(MemoryStore())
+        val cache = EventCache(local)
+        val legacyBody = detailBody.replace("\"rule_text\":null", "\"rule_text\":null,\"updated_at\":\"2026-10-08T00:00:00Z\"")
+        cache.saveDetail(Json { ignoreUnknownKeys = true }.decodeFromString<EventDetailResponse>(legacyBody))
+        assertNull(cache.loadDetail(1)?.toGatherings()?.first()?.roundStartTime)
+        var body = legacyBody
+        val store = EventScheduleStore(local, client { body })
+        try {
+            for (startTime in listOf("0900", "0910", null)) {
+                val value = startTime?.let { "\"$it\"" } ?: "null"
+                body = legacyBody.replace("\"round\":1", "\"round\":1,\"start_time\":$value")
+                store.refreshDetail(1)
+                assertEquals(startTime, cache.loadDetail(1)?.toGatherings()?.first()?.roundStartTime)
+            }
+            body = legacyBody.substringBefore(",\"rounds\"") + ",\"rounds\":[]}"
+            store.refreshDetail(1)
+            assertEquals(emptyList(), cache.loadDetail(1)?.toGatherings())
+        } finally { store.close() }
+    }
+
 }

@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 import com.rectime.mobile.ui.component.AppTimeText
 import com.rectime.mobile.ui.component.AppMarkdown
 import androidx.compose.runtime.Composable
@@ -57,7 +61,6 @@ import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.ui.component.AppLoadingIndicator
-import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.MapModal
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.component.headerTitleBarHeight
@@ -217,7 +220,6 @@ private fun EventDetailContent(
             }
 
             event.ruleText?.takeIf { it.isNotBlank() }?.let { ruleText ->
-                AppDivider()
                 AppMarkdown(
                     content = ruleText,
                     imageTitle = event.eventName,
@@ -315,7 +317,7 @@ private fun EventOverview(event: EventDetail, onOpenMap: () -> Unit) {
                     textAlign = androidx.compose.ui.text.style.TextAlign.End,
                     maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                 )
-                Text("›", color = foreground, fontSize = 22.sp)
+                Icon(SolidGroup.ChevronRight, contentDescription = null, tint = foreground, modifier = Modifier.size(14.dp))
             }
         }
     }

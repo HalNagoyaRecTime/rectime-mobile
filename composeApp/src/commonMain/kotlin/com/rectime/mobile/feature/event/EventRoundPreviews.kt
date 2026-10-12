@@ -38,6 +38,10 @@ import androidx.compose.ui.unit.TextUnit
 import com.rectime.mobile.core.model.EventDetail
 import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.feature.settings.SettingsCornerRadius
+import com.rectime.mobile.ui.component.AppDivider
+import com.rectime.mobile.ui.component.TimelineTimeLabel
+import com.rectime.mobile.ui.graphics.drawTimelineSeparator
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
 import com.rectime.mobile.ui.component.AppTimeText
 import com.rectime.mobile.ui.component.AppBottomSheet
 import com.rectime.mobile.ui.component.AppIconButton
@@ -53,17 +57,13 @@ import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
 import rectime_mobile.composeapp.generated.resources.ic_location_outline
 
-// UI確定後の公開時にはfalseへ切り替え、未取得の開始時刻は表示しない。
-private const val UsePrototypeRoundTimes = true
-
 private data class RoundPreview(val number: Int, val rows: List<Gathering>) {
     private val gathering = rows.filter { minuteOf(it.gatheringTime) != null }.minByOrNull { minuteOf(it.gatheringTime)!! }
-    val times = resolveRoundDisplayTimes(gathering?.gatheringTime, rows.firstNotNullOfOrNull { it.roundStartTime },
-        UsePrototypeRoundTimes)
+    val times = resolveRoundDisplayTimes(gathering?.gatheringTime, rows.firstNotNullOfOrNull { it.roundStartTime })
     val minute: Int? = times.startMinute ?: times.gatheringMinute
     fun isMine(ids: Set<Int>): Boolean = rows.any { it.gatheringId in ids }
     fun timesFor(gathering: Gathering): RoundDisplayTimes =
-        resolveRoundDisplayTimes(gathering.gatheringTime, null, UsePrototypeRoundTimes)
+        resolveRoundDisplayTimes(gathering.gatheringTime, null)
             .copy(startMinute = times.startMinute)
 }
 
@@ -96,13 +96,14 @@ internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>,
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("ラウンド", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppTheme.colors.textDetailsScreenBody)
-            Text("全${rounds.size}回", fontSize = 12.sp, color = AppTheme.colors.textMuted)
+            Text("全${rounds.size}回", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppTheme.colors.textSecondary)
         }
         CalendarPreview(event, rounds, attendingIds, now, onOpenRound = { sheetRound = it })
         OutlinedButton(onClick = { sheetRound = rounds.first().number }, modifier = Modifier.fillMaxWidth(), border = null,
             colors = ButtonDefaults.outlinedButtonColors(containerColor = AppTheme.colors.surfacePrimary)) {
             Text("ラウンド別の集合情報")
         }
+        if (!event.ruleText.isNullOrBlank()) AppDivider()
     }
     sheetRound?.let { selected ->
         RoundGatheringsSheet(rounds, attendingIds, selected, onDismiss = { sheetRound = null })
@@ -249,11 +250,11 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                 }
                 for (minute in ((axisStart + 29) / 30 * 30)..axisEnd step 30) {
                     val y = position(minute).toPx()
-                    drawLine(grid.copy(alpha = 0.45f), Offset(labelWidth.toPx(), y), Offset(size.width, y), 1.dp.toPx())
+                    drawTimelineSeparator(y, labelWidth.toPx(), grid)
                 }
                 val ended = eventEnd?.let { now >= it } == true
                 val indicatorMinute = if (ended) eventEnd else now
-                if (indicatorMinute != null && indicatorMinute in axisStart..axisEnd) {
+                if (indicatorMinute in axisStart..axisEnd) {
                     val y = position(indicatorMinute).toPx()
                     val indicatorColor = if (ended) progress else accent
                     drawLine(indicatorColor, Offset(labelWidth.toPx(), y), Offset(size.width, y), 2.dp.toPx())
@@ -261,8 +262,7 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                 }
             }
             for (minute in ((axisStart + 29) / 30 * 30)..axisEnd step 30) {
-                AppTimeText(displayMinute(minute), modifier = Modifier.offset(y = position(minute) - 8.dp).width(labelWidth - 6.dp),
-                    fontSize = 10.sp, color = Color.DarkGray)
+                TimelineTimeLabel(displayMinute(minute), modifier = Modifier.offset(y = position(minute) - 10.dp).width(labelWidth))
             }
             // 同時刻のラウンドは1つのタグにまとめる。
             timed.groupBy { it.minute!! }.forEach { (minute, group) ->
@@ -293,7 +293,7 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                         }
                         Box(Modifier.size(8.dp).background(markerColor, RoundedCornerShape(50)))
                         Text(title, modifier = Modifier.weight(1f, fill = false),
-                            fontSize = 14.sp, fontWeight = FontWeight.Bold, color = textColor,
+                            fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold, color = textColor,
                             maxLines = 2, overflow = TextOverflow.Ellipsis)
                         start?.let {
                             Text("/", fontSize = 14.sp, color = textColor)
@@ -302,7 +302,7 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                                 Text(" ~", fontSize = 14.sp, color = textColor)
                             }
                         }
-                        Text("›", fontSize = 14.sp, color = textColor)
+                        Icon(SolidGroup.ChevronRight, contentDescription = null, tint = textColor, modifier = Modifier.size(10.dp))
                     }
                 }
             }
@@ -321,7 +321,7 @@ private fun RoundGatheringsSheet(rounds: List<RoundPreview>, ids: Set<Int>, sele
         Column(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("ラウンド別の集合情報", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textDetailsScreenBody)
+                    color = AppTheme.colors.textDetailsScreenBody, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 AppIconButton(onClick = closeSheet, color = Color.Transparent) {
                     Icon(SolidGroup.Xmark, contentDescription = "閉じる",
                         tint = AppTheme.colors.textDetailsScreenHeader, modifier = Modifier.size(22.dp))
@@ -335,17 +335,23 @@ private fun RoundGatheringsSheet(rounds: List<RoundPreview>, ids: Set<Int>, sele
                     val line = AppTheme.colors.commonSeparatorLine
                     val body = AppTheme.colors.textDetailsScreenBody
                     val muted = AppTheme.colors.textMuted
+                    val sheetBackground = AppTheme.colors.screenBackground
                     Row(Modifier.fillMaxWidth()) {
                         Spacer(Modifier.width(24.dp))
                         Column(Modifier.weight(1f).padding(bottom = 24.dp)
                             .drawBehind {
                                 val x = -14.dp.toPx()
-                                if (round != rounds.last()) drawLine(line, Offset(x, 12.dp.toPx()),
-                                    Offset(x, size.height + 24.dp.toPx()), 2.dp.toPx())
+                                val lastRound = round == rounds.last()
+                                val endY = size.height + (if (lastRound) 12.dp else 36.dp).toPx()
+                                drawLine(line, Offset(x, 12.dp.toPx()), Offset(x, endY), 2.dp.toPx())
+                                if (lastRound) {
+                                    drawCircle(sheetBackground, 5.dp.toPx(), Offset(x, endY))
+                                    drawCircle(line, 5.dp.toPx(), Offset(x, endY), style = Stroke(2.dp.toPx()))
+                                }
                                 drawCircle(if (round.isMine(ids)) accent else line, 5.dp.toPx(), Offset(x, 12.dp.toPx()))
                             }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("第${round.number}ラウンド", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = body)
+                                Text("第${round.number}ラウンド", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 round.times.startMinute?.let { RoundStartTime(it, color = muted, modifier = Modifier.align(Alignment.CenterVertically)) }
                             }
                             round.rows.forEach { gathering ->
