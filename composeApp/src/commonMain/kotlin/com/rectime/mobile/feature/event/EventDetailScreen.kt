@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +63,7 @@ import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.MapModal
 import com.rectime.mobile.ui.component.PushScreenScaffold
+import com.rectime.mobile.ui.component.BounceBackground
 import com.rectime.mobile.ui.component.headerTitleBarHeight
 import com.rectime.mobile.ui.theme.AppTheme
 
@@ -102,15 +102,6 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 
         Box(modifier = Modifier.fillMaxSize()) {
             PushScreenScaffold(
-                // 設定と同様、バウンスで見える背面も上は青・下は本文背景にする。
-                modifier = Modifier.background(
-                    Brush.verticalGradient(
-                        0f to titleBandColor,
-                        0.5f to titleBandColor,
-                        0.5f to bodyBackgroundColor,
-                        1f to bodyBackgroundColor,
-                    ),
-                ),
                 title = uiState.eventDetail?.eventName.orEmpty(),
                 titleVisible = headerTitleVisible && !uiState.isLoading && uiState.error == null,
                 lazyListState = listState,
@@ -120,17 +111,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                 headerEdgeFade = false,
                 contentBackground = {
                     if (uiState.eventDetail != null && uiState.error == null) {
-                        // 画面の割合ではなく、実際のタイトル帯の高さで背面の色を分ける。
-                        Box(
-                            Modifier.fillMaxSize()
-                                .background(bodyBackgroundColor)
-                                .drawBehind {
-                                    drawRect(
-                                        color = titleBandColor,
-                                        size = Size(size.width, titleBandHeightPx.toFloat().coerceAtMost(size.height)),
-                                    )
-                                },
-                        )
+                        BounceBackground(titleBandColor, bodyBackgroundColor, titleBandHeightPx.toFloat())
                     }
                 },
             ) {
