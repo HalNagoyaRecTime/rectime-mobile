@@ -85,7 +85,7 @@ fun RootScreenScaffold(
     }
 
     // 既定の背景より画面側の指定を優先し、バウンス用背景を上書きしない。
-    Box(modifier = Modifier.background(AppTheme.colors.screenBackground).then(modifier).fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         val listContent: @Composable () -> Unit = {
             Box(Modifier.fillMaxSize()) {
                 contentBackground()
@@ -177,7 +177,7 @@ fun PushScreenScaffold(
     }
 
     Box(modifier = Modifier
-        .background(AppTheme.colors.screenBackground)
+        .background(AppTheme.colors.commonBackground)
         .then(modifier)
         .fillMaxSize(),
     ) {

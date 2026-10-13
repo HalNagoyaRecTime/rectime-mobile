@@ -10,11 +10,11 @@ import androidx.compose.ui.graphics.Color
 
 /** スケジュールと同様に、上下へ画面1枚分延長した背面を描く。 */
 @Composable
-internal fun BounceBackground(topColor: Color, bottomColor: Color) {
+internal fun BounceBackground(topColor: Color, bottomColor: Color, topHeightPx: Float? = null) {
     Canvas(Modifier.fillMaxSize()) {
         val top = -size.height
         val bottom = size.height * 2f
-        val split = size.height / 2f
+        val split = topHeightPx ?: (size.height / 2f)
         drawRect(bottomColor, Offset(0f, top), Size(size.width, bottom - top))
         drawRect(topColor, Offset(0f, top), Size(size.width, split - top))
     }

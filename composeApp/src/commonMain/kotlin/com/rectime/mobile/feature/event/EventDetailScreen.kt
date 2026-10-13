@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onSizeChanged
@@ -71,6 +72,9 @@ private val TitleBandVerticalPadding = 12.dp
 private val SectionSpacing = 24.dp
 private val ContentBottomSpacing = 48.dp
 
+// イベント詳細だけに適用する背景色。共通画面の配色は変えない。
+private val EventDetailBackground = Color(0xFFF7F7F7)
+
 private val TitleFontSize = 28.sp
 private val BodyFontSize = 16.sp
 
@@ -86,6 +90,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
         var titleHeightPx by remember { mutableIntStateOf(0) }
+        var titleBandHeightPx by remember { mutableIntStateOf(0) }
         val listState = rememberLazyListState()
         val titleInsetPx = with(LocalDensity.current) {
             TitleBandVerticalPadding.roundToPx()
@@ -97,11 +102,12 @@ data class EventDetailScreen(val eventId: Int) : Screen {
             }
         }
         val titleBandColor = AppTheme.colors.themeColorSecond
-        val bodyBackgroundColor = AppTheme.colors.screenBackground
+        val bodyBackgroundColor = EventDetailBackground
 
         Box(modifier = Modifier.fillMaxSize()) {
             PushScreenScaffold(
                 title = uiState.eventDetail?.eventName.orEmpty(),
+                modifier = Modifier.background(bodyBackgroundColor),
                 titleVisible = headerTitleVisible && !uiState.isLoading && uiState.error == null,
                 lazyListState = listState,
                 onBack = { navigationController.requestPop() },
@@ -109,7 +115,11 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                 contentTopPadding = false,
                 headerEdgeFade = false,
                 contentBackground = {
-                    BounceBackground(titleBandColor, bodyBackgroundColor)
+                    if (!uiState.isLoading && uiState.eventDetail != null && uiState.error == null) {
+                        val visibleBandHeight = if (listState.firstVisibleItemIndex == 0)
+                            titleBandHeightPx - listState.firstVisibleItemScrollOffset else 0
+                        BounceBackground(titleBandColor, bodyBackgroundColor, visibleBandHeight.coerceAtLeast(0).toFloat())
+                    }
                 },
             ) {
                 item {
@@ -148,6 +158,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                 attendingGatheringIds = uiState.attendingGatheringIds,
                                 onOpenMap = { isMapVisible = true },
                                 onTitleHeightChanged = { titleHeightPx = it },
+                                onTitleBandHeightChanged = { titleBandHeightPx = it },
                             )
                         }
                     }
@@ -168,6 +179,7 @@ private fun EventDetailContent(
     attendingGatheringIds: Set<Int>,
     onOpenMap: () -> Unit,
     onTitleHeightChanged: (Int) -> Unit,
+    onTitleBandHeightChanged: (Int) -> Unit,
 ) {
     var now by remember { mutableIntStateOf(overviewMinute()) }
     LaunchedEffect(Unit) {
@@ -183,10 +195,11 @@ private fun EventDetailContent(
     }
     // 高さを固定せず、本文全体をLazyColumnのスクロール範囲に含める。
     // 短い本文の下側はScaffoldのcontentBackgroundが描画する。
-    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
+    Column(modifier = Modifier.fillMaxWidth().background(EventDetailBackground)) {
         EventTitleBand(
             title = event.eventName,
             onTitleHeightChanged = onTitleHeightChanged,
+            onHeightChanged = onTitleBandHeightChanged,
             status = status,
             overview = { EventOverview(event, onOpenMap) },
         )
@@ -223,6 +236,7 @@ private fun EventDetailContent(
 private fun EventTitleBand(
     title: String,
     onTitleHeightChanged: (Int) -> Unit,
+    onHeightChanged: (Int) -> Unit,
     status: String,
     overview: @Composable () -> Unit,
 ) {
@@ -230,6 +244,7 @@ private fun EventTitleBand(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .onSizeChanged { onHeightChanged(it.height) }
             .background(AppTheme.colors.themeColorSecond)
             .drawBehind {
                 val thickness = 2.dp.toPx()

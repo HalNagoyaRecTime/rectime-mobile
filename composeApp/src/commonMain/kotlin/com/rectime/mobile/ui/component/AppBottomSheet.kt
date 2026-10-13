@@ -38,7 +38,7 @@ internal fun AppBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = { SheetDragHandle() },
-        containerColor = AppTheme.colors.screenBackground,
+        containerColor = AppTheme.colors.commonBackground,
         shape = RoundedCornerShape(topStart = AppTheme.radius.sheet, topEnd = AppTheme.radius.sheet),
         content = { content(close) },
     )

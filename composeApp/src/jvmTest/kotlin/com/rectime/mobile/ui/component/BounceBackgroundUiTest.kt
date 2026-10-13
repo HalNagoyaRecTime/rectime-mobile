@@ -31,6 +31,24 @@ class BounceBackgroundUiTest {
         assertEquals(Color.Blue, pixels[pixels.width / 2, pixels.height - 20])
     }
 
+    @Test fun shortTitleBandDoesNotPaintBlueBelowBody() = runComposeUiTest {
+        setContent {
+            Box(Modifier.requiredSize(320.dp, 600.dp)) {
+                BounceBackground(Color.Red, Color.Blue, topHeightPx = 100f)
+            }
+        }
+        val pixels = onRoot().captureToImage().toPixelMap()
+        assertEquals(Color.Red, pixels[pixels.width / 2, 20])
+        assertEquals(Color.Blue, pixels[pixels.width / 2, 200])
+        assertEquals(Color.Blue, pixels[pixels.width / 2, pixels.height - 20])
+    }
+
+    @Test fun scrolledAwayTitleBandLeavesOnlyBodyBackground() = runComposeUiTest {
+        setContent { BounceBackground(Color.Red, Color.Blue, topHeightPx = 0f) }
+        val pixels = onRoot().captureToImage().toPixelMap()
+        assertEquals(Color.Blue, pixels[pixels.width / 2, 20])
+    }
+
     @Test fun downwardBounceKeepsTopBackground() = checkOffset(120f)
     @Test fun upwardBounceKeepsBottomBackground() = checkOffset(-120f)
 }

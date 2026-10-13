@@ -22,8 +22,8 @@ class ScreenScaffoldBackgroundUiTest {
         var expected = Color.Red
         setContent {
             AppTheme(ThemeStateHolder()) {
-                if (!custom) expected = AppTheme.colors.screenBackground
-                Box(Modifier.requiredSize(320.dp, 600.dp)) {
+                if (!custom) expected = AppTheme.colors.commonBackground
+                Box(Modifier.requiredSize(320.dp, 600.dp).background(AppTheme.colors.commonBackground)) {
                     val modifier = if (custom) Modifier.background(Color.Red) else Modifier
                     if (push) PushScreenScaffold("詳細", onBack = {}, modifier = modifier) {}
                     else RootScreenScaffold("設定", modifier = modifier) {}
