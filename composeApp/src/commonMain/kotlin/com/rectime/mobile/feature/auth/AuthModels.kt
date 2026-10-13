@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.auth
 
+import kotlinx.serialization.Serializable
+
 data class AuthUser(
     val id: String,
     val email: String,
@@ -9,8 +11,27 @@ data class AuthUser(
     val studentIdNumber: String? = null,
     val classRoomName: String? = null,
     val teamId: Int? = null,
-    val role: Role? = null,
     val classCode: String? = null,
+    val isStudent: Boolean = false,
+    val isStaff: Boolean = false,
+    val isTeacher: Boolean = false,
+    val teacher: AuthTeacher? = null,
+) {
+    val role: Role?
+        get() = Role.fromCategories(isStudent, isStaff, isTeacher)
+}
+
+@Serializable
+data class AuthTeacher(
+    val teacherId: Int,
+    val classRooms: List<AuthTeacherClassRoom> = emptyList(),
+)
+
+@Serializable
+data class AuthTeacherClassRoom(
+    val classRoomId: Int,
+    val classCode: String,
+    val classRoomName: String,
 )
 
 data class AuthSession(

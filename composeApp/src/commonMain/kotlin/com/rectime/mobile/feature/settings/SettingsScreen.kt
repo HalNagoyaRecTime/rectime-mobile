@@ -9,7 +9,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import org.jetbrains.compose.resources.painterResource
@@ -62,14 +60,12 @@ import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.core.haptics.LocalHapticPreference
-import com.rectime.mobile.core.haptics.HapticCapability
-import com.rectime.mobile.core.haptics.HapticSupportStatus
 import com.rectime.mobile.core.haptics.AppHapticEvent
 import com.rectime.mobile.core.haptics.rememberPlatformHapticFeedback
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.ui.component.UserAvatar
+import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.core.platform.openInAppBrowser
-import com.rectime.mobile.core.config.contactFormUrl
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.NotificationPermissionStatus
@@ -93,6 +89,7 @@ class SettingsScreen(
     @Composable
     override fun Content(navigationController: NavigationController) {
         var showAppInformation by remember { mutableStateOf(false) }
+        var showContactDetails by remember { mutableStateOf(false) }
         var showLogoutConfirmation by remember { mutableStateOf(false) }
         var notificationPermissionStatus by remember {
             mutableStateOf(NotificationPermissionStatus.Unavailable)
@@ -101,7 +98,6 @@ class SettingsScreen(
         val hapticPreference = LocalHapticPreference.current
         val hapticFeedback = rememberPlatformHapticFeedback()
         val hapticEnabled by hapticPreference.enabled.collectAsState()
-        val hapticStatus by HapticCapability.status.collectAsState()
         val lifecycleOwner = LocalLifecycleOwner.current
         val refreshNotificationPermission = {
             notificationPermissionStartup?.let { startup ->
@@ -111,8 +107,6 @@ class SettingsScreen(
             }
         }
 
-        LaunchedEffect(Unit) { HapticCapability.load() }
-
         LaunchedEffect(notificationPermissionStartup) {
             notificationPermissionStatus = notificationPermissionStartup?.getStatus()
                 ?: NotificationPermissionStatus.Unavailable
@@ -121,7 +115,6 @@ class SettingsScreen(
             val observer = LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
                     refreshNotificationPermission()
-                    scope.launch { HapticCapability.load() }
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
@@ -139,8 +132,8 @@ class SettingsScreen(
                 Brush.verticalGradient(
                     0f to AppTheme.colors.themeColorSecond,
                     0.5f to AppTheme.colors.themeColorSecond,
-                    0.5f to AppTheme.colors.screenBackground,
-                    1f to AppTheme.colors.screenBackground,
+                    0.5f to AppTheme.colors.settingBackground,
+                    1f to AppTheme.colors.settingBackground,
                 ),
             ),
             horizontalPadding = false,
@@ -153,13 +146,12 @@ class SettingsScreen(
                     userId = session.user.id,
                     displayName = session.user.displayName,
                     email = session.user.email,
-                    studentIdNumber = session.user.studentIdNumber,
-                    classCode = session.user.classCode,
+                    details = accountProfileDetails(session.user),
                 )
             }
 
             item {
-                Column(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
                     Spacer(Modifier.height(AppTheme.spacing.xl))
                     Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
                         SettingsSection(title = "アプリ") {
@@ -176,53 +168,47 @@ class SettingsScreen(
                                     notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
                                 onClick = { notificationPermissionStartup?.openSystemSettings() },
                             )
-                            if (hapticStatus.showSetting) {
-                                SettingsSeparator()
-                                SettingsRow(
-                                    title = "振動",
-                                    icon = SettingsIcon.Haptic,
-                                    enabled = hapticStatus.canVibrate,
-                                    subtitle = if (hapticStatus == HapticSupportStatus.Failed)
-                                        "振動の対応状況を確認できません" else null,
-                                    trailingContent = {
-                                        Switch(
-                                            checked = hapticEnabled,
-                                            enabled = hapticStatus.canVibrate,
-                                            colors = SwitchDefaults.colors(
-                                                checkedTrackColor = AppTheme.colors.themeColorSecond,
-                                                checkedBorderColor = AppTheme.colors.themeColorSecond,
-                                                checkedThumbColor = AppTheme.colors.textThemeColorSecond,
-                                                uncheckedTrackColor = AppTheme.colors.borderSubtle,
-                                                uncheckedBorderColor = AppTheme.colors.borderStrong,
-                                                uncheckedThumbColor = AppTheme.colors.textMuted,
-                                            ),
-                                            onCheckedChange = { enabled ->
-                                                // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
-                                                hapticFeedback.perform(
-                                                    if (enabled) AppHapticEvent.PreferenceEnabled
-                                                    else AppHapticEvent.PreferenceDisabled,
-                                                )
-                                                scope.launch {
-                                                    hapticPreference.setEnabled(enabled)
-                                                }
-                                            },
-                                        )
-                                    },
-                                )
-                            }
+                            SettingsSeparator()
+                            SettingsRow(
+                                title = "振動",
+                                icon = SettingsIcon.Haptic,
+                                trailingContent = {
+                                    Switch(
+                                        checked = hapticEnabled,
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = AppTheme.colors.themeColorSecond,
+                                            checkedBorderColor = AppTheme.colors.themeColorSecond,
+                                            checkedThumbColor = AppTheme.colors.textThemeColorSecond,
+                                            uncheckedTrackColor = AppTheme.colors.borderSubtle,
+                                            uncheckedBorderColor = AppTheme.colors.borderStrong,
+                                            uncheckedThumbColor = AppTheme.colors.textMuted,
+                                        ),
+                                        onCheckedChange = { enabled ->
+                                            // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
+                                            hapticFeedback.perform(
+                                                if (enabled) AppHapticEvent.PreferenceEnabled
+                                                else AppHapticEvent.PreferenceDisabled,
+                                            )
+                                            scope.launch {
+                                                hapticPreference.setEnabled(enabled)
+                                            }
+                                        },
+                                    )
+                                },
+                            )
                         }
                     }
                 }
             }
             item {
-                Column(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
                     Spacer(Modifier.height(AppTheme.spacing.xl))
                     Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
                         SettingsSection(title = "ヘルプ") {
                             SettingsRow(
                                 title = "お問い合わせ",
                                 icon = SettingsIcon.Contact,
-                                onClick = { scope.launch { openInAppBrowser(contactFormUrl) } },
+                                onClick = { showContactDetails = true },
                             )
                             SettingsSeparator()
                             AccountDeletionSection { enabled, showConfirmation ->
@@ -260,7 +246,7 @@ class SettingsScreen(
                 }
             }
             item {
-                Box(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
+                Box(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
                     Button(
                         onClick = { showLogoutConfirmation = true },
                         shape = RoundedCornerShape(SettingsCornerRadius),
@@ -291,13 +277,23 @@ class SettingsScreen(
                     Modifier
                         .fillMaxWidth()
                         .height(bottomPadding)
-                        .background(AppTheme.colors.screenBackground),
+                        .background(AppTheme.colors.settingBackground),
                 )
             }
         }
 
         if (showAppInformation) {
             AppInformationSheet(onDismiss = { showAppInformation = false })
+        }
+
+        if (showContactDetails) {
+            SettingsModal(
+                title = "お問い合わせ",
+                onDismiss = { showContactDetails = false },
+                dismissText = "閉じる",
+            ) {
+                ContactSection()
+            }
         }
 
         if (showLogoutConfirmation) {
@@ -321,8 +317,7 @@ private fun UserInfoHeader(
     userId: String,
     displayName: String,
     email: String,
-    studentIdNumber: String?,
-    classCode: String?,
+    details: List<AccountProfileDetail>,
     modifier: Modifier = Modifier,
 ) {
     val preference = remember(userId) { AvatarPreference(userId) }
@@ -364,16 +359,16 @@ private fun UserInfoHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        color = AppTheme.colors.screenBackground,
+                        color = AppTheme.colors.settingBackground,
                         shape = RoundedCornerShape(
                             topStart = SettingsCornerRadius,
                             topEnd = SettingsCornerRadius,
                         ),
                     )
                     .padding(
-                        start = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                        start = AppTheme.layout.screenHorizontalPadding,
                         top = ProfileAvatarSize / 2 + AppTheme.spacing.sm,
-                        end = AppTheme.layout.screenHorizontalPadding + ExtraHorizontalMargin,
+                        end = AppTheme.layout.screenHorizontalPadding,
                         bottom = AppTheme.spacing.md / 2,
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -398,27 +393,15 @@ private fun UserInfoHeader(
                     fontSize = 13.sp,
                     color = AppTheme.colors.textSecondary,
                 )
-                Spacer(Modifier.height(AppTheme.spacing.md))
-                BoxWithConstraints(Modifier.fillMaxWidth()) {
-                    val detailGap = 12.dp
-                    val maxDetailWidth = (maxWidth - detailGap) / 2
-                    Row(
+                if (details.isNotEmpty()) {
+                    Spacer(Modifier.height(AppTheme.spacing.md))
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(
-                            detailGap,
-                            Alignment.CenterHorizontally,
-                        ),
+                        verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                     ) {
-                        ProfileDetailRow(
-                            label = "学籍番号",
-                            value = studentIdNumber.orEmpty(),
-                            modifier = Modifier.widthIn(max = maxDetailWidth),
-                        )
-                        ProfileDetailRow(
-                            label = "所属クラス",
-                            value = classCode.orEmpty(),
-                            modifier = Modifier.widthIn(max = maxDetailWidth),
-                        )
+                        details.forEach { detail ->
+                            ProfileDetailRow(detail.label, detail.value, Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }
@@ -439,7 +422,6 @@ private fun UserInfoHeader(
                 sportOverride = selection.sport,
                 usePhoto = selection.sport == null,
                 colorIndex = selection.colorIndex,
-                borderColor = AppTheme.colors.screenBackground,
             )
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)
@@ -471,17 +453,38 @@ private fun ProfileDetailRow(label: String, value: String, modifier: Modifier = 
             fontSize = 12.sp,
             color = AppTheme.colors.textMuted,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = value.ifBlank { "-" },
+            text = value,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             color = AppTheme.colors.textPrimary,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/**
+ * お問い合わせ先セクション
+ */
+@Composable
+private fun ContactSection(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "レ・クリエイション実行委員会　アプリ開発班",
+            fontSize = 13.sp,
+            color = AppTheme.colors.textSettingModalBody,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = "担当教官：高橋真広先生",
+            fontSize = 13.sp,
+            color = AppTheme.colors.textSettingModalBody,
+            textAlign = TextAlign.Center,
         )
     }
 }

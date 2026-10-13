@@ -165,7 +165,10 @@ private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
         classRoomName = classRoomName,
         teamId = teamId,
         classCode = classCode,
-        role = Role.fromCategories(isStudent = isStudent, isStaff = isStaff, isTeacher = isTeacher),
+        isStudent = isStudent,
+        isStaff = isStaff,
+        isTeacher = isTeacher,
+        teacher = teacher.takeIf { isTeacher },
     )
 }
 
@@ -219,4 +222,5 @@ private data class AuthUserResponse(
     val isStudent: Boolean = false,
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
+    val teacher: AuthTeacher? = null,
 )

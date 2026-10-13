@@ -15,8 +15,5 @@ enum class Role {
             isStudent -> Student
             else -> null
         }
-
-        // ローカル永続化（AuthSessionCodec）に保存した enum 名を復元する用途。
-        fun fromStoredName(name: String?): Role? = entries.firstOrNull { it.name == name }
     }
 }

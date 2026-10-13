@@ -31,7 +31,6 @@ class AuthViewModel(
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
     val photoRepository: ProfilePhotoRepository? = null,
-    private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
@@ -67,19 +66,6 @@ class AuthViewModel(
     private fun restoreSession() {
         sessionCheckJob = viewModelScope.launch {
             try {
-                if (devAuthBypassEnabled) {
-                    SessionTokenHolder.accessToken = "dev-bypass-token"
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isRestoringSession = false,
-                            session = createDevSession(),
-                            message = "DEV_BYPASS_AUTH enabled",
-                        )
-                    }
-                    return@launch
-                }
-
                 _uiState.update { it.copy(isLoading = true, message = "Restoring session...") }
 
                 // 認証途中で終了した場合も、起動後のコールバックを受け付けられるよう復元する。
@@ -134,7 +120,7 @@ class AuthViewModel(
 
     /** 前面復帰時も画面を維持し、起動時と同じ確認を裏で行う。 */
     fun onForeground() {
-        if (devAuthBypassEnabled || loggingOut || sessionCheckJob?.isActive == true) return
+        if (loggingOut || sessionCheckJob?.isActive == true) return
         val stored = _uiState.value.session ?: return
         sessionCheckJob = viewModelScope.launch {
             try {
@@ -228,19 +214,6 @@ class AuthViewModel(
 
     fun startLogin() {
         viewModelScope.launch {
-            if (devAuthBypassEnabled) {
-                SessionTokenHolder.accessToken = "dev-bypass-token"
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = null,
-                        session = createDevSession(),
-                        message = "DEV_BYPASS_AUTH enabled",
-                    )
-                }
-                return@launch
-            }
-
             _uiState.update {
                 it.copy(isLoading = true, error = null, message = "Opening Microsoft login...")
             }
@@ -444,10 +417,8 @@ class AuthViewModel(
                         } && preparationSucceeded && stored.isSuccess
                     }
                 }
-                if (!devAuthBypassEnabled) {
-                    pushTokenLifecycle.logout(targetSession) { fcmToken ->
-                        api.logout(targetSession, fcmToken)
-                    }
+                pushTokenLifecycle.logout(targetSession) { fcmToken ->
+                    api.logout(targetSession, fcmToken)
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
@@ -734,20 +705,6 @@ private fun Throwable.isUnauthorizedAuthError(): Boolean =
 // 例外messageが空の場合も、デバッグログに最低限の原因を残す。
 private fun Throwable.describe(): String =
     message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "unknown error"
-
-private fun createDevSession() = AuthSession(
-    accessToken = "dev-bypass-token",
-    refreshTokenId = "dev-bypass-refresh",
-    expiresIn = 3600L,
-    user = AuthUser(
-        id = "dev-user",
-        email = "dev@local",
-        displayName = "Dev User",
-        studentIdNumber = "55000",
-        classRoomName = "IA12A203",
-        classCode = "IA12A203",
-    ),
-)
 
 private fun readQueryValue(url: String, key: String): String? {
     val queryStart = url.indexOf('?')

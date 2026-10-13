@@ -1,24 +1,95 @@
 package com.rectime.mobile.feature.auth
 
-private const val PROFILE_SCHEMA = "profile-v2"
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
-fun encodeAuthSession(session: AuthSession): String =
-    listOf(
-        session.accessToken,
-        session.refreshTokenId,
-        session.expiresIn.toString(),
-        session.user.id,
-        session.user.email,
-        session.user.displayName,
-        session.user.avatarUrl ?: "",
-        session.user.avatarUpdatedAt ?: "",
-        session.user.studentIdNumber ?: "",
-        session.user.classRoomName ?: "",
-        session.user.role?.name ?: "",
-        PROFILE_SCHEMA,
-        session.user.classCode ?: "",
-        session.user.teamId?.toString() ?: "",
-    ).joinToString(separator = ".") { it.encodeToByteArray().toBase64Url() }
+private const val SESSION_VERSION = 1
+
+@OptIn(ExperimentalSerializationApi::class)
+private val sessionJson = Json {
+    ignoreUnknownKeys = true
+    explicitNulls = false
+}
+
+@Serializable
+private data class StoredAuthSession(
+    val version: Int,
+    val accessToken: String,
+    val refreshTokenId: String,
+    val expiresIn: Long,
+    val user: StoredAuthUser,
+)
+
+@Serializable
+private data class StoredAuthUser(
+    val id: String,
+    val email: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
+    val avatarUpdatedAt: String? = null,
+    val studentIdNumber: String? = null,
+    val classRoomName: String? = null,
+    val teamId: Int? = null,
+    val classCode: String? = null,
+    val isStudent: Boolean = false,
+    val isStaff: Boolean = false,
+    val isTeacher: Boolean = false,
+    val teacher: AuthTeacher? = null,
+)
+
+fun encodeAuthSession(session: AuthSession): String = sessionJson.encodeToString(
+    StoredAuthSession(
+        version = SESSION_VERSION,
+        accessToken = session.accessToken,
+        refreshTokenId = session.refreshTokenId,
+        expiresIn = session.expiresIn,
+        user = StoredAuthUser(
+            id = session.user.id,
+            email = session.user.email,
+            displayName = session.user.displayName,
+            avatarUrl = session.user.avatarUrl,
+            avatarUpdatedAt = session.user.avatarUpdatedAt,
+            studentIdNumber = session.user.studentIdNumber,
+            classRoomName = session.user.classRoomName,
+            teamId = session.user.teamId,
+            classCode = session.user.classCode,
+            isStudent = session.user.isStudent,
+            isStaff = session.user.isStaff,
+            isTeacher = session.user.isTeacher,
+            teacher = session.user.teacher.takeIf { session.user.isTeacher },
+        ),
+    ),
+)
+
+fun decodeAuthSession(value: String): AuthSession? = runCatching {
+    val stored = sessionJson.decodeFromString<StoredAuthSession>(value)
+    if (stored.version != SESSION_VERSION) return@runCatching null
+    AuthSession(
+        accessToken = stored.accessToken,
+        refreshTokenId = stored.refreshTokenId,
+        expiresIn = stored.expiresIn,
+        user = AuthUser(
+            id = stored.user.id,
+            email = stored.user.email,
+            displayName = stored.user.displayName,
+            avatarUrl = stored.user.avatarUrl,
+            avatarUpdatedAt = stored.user.avatarUpdatedAt,
+            studentIdNumber = stored.user.studentIdNumber,
+            classRoomName = stored.user.classRoomName,
+            teamId = stored.user.teamId,
+            classCode = stored.user.classCode,
+            isStudent = stored.user.isStudent,
+            isStaff = stored.user.isStaff,
+            isTeacher = stored.user.isTeacher,
+            teacher = stored.user.teacher.takeIf { stored.user.isTeacher },
+        ),
+    ).takeIf { session ->
+        session.accessToken.isNotBlank() && session.refreshTokenId.isNotBlank()
+    }
+}.getOrNull()
 
 fun encodePendingAuth(pending: PendingAuth): String =
     listOf(pending.state, pending.codeVerifier)
@@ -32,67 +103,6 @@ fun decodePendingAuth(value: String): PendingAuth? {
             state = parts[0].decodeBase64UrlToString(),
             codeVerifier = parts[1].decodeBase64UrlToString(),
         )
-    }.getOrNull()
-}
-
-fun decodeAuthSession(value: String): AuthSession? {
-    val parts = value.split(".")
-    if (parts.size !in setOf(6, 8, 9, 11, 12, 14)) return null
-
-    return runCatching {
-        if (parts.size == 14 && parts[11].decodeBase64UrlToString() != PROFILE_SCHEMA) return null
-        val avatarUrl = if (parts.size >= 8) {
-            val s = parts[6].decodeBase64UrlToString()
-            if (s.isEmpty()) null else s
-        } else null
-        val avatarUpdatedAt = if (parts.size >= 8) {
-            val s = parts[7].decodeBase64UrlToString()
-            if (s.isEmpty()) null else s
-        } else null
-        val studentIdNumber = if (parts.size >= 11) {
-            val s = parts[8].decodeBase64UrlToString()
-            if (s.isEmpty()) null else s
-        } else null
-        val classRoomName = if (parts.size >= 11) {
-            val s = parts[9].decodeBase64UrlToString()
-            if (s.isEmpty()) null else s
-        } else null
-        // developとdevelop-v2の旧12要素形式は末尾がclassCode/teamIdで衝突する。
-        // 数字はどちらか判定できないため、認証情報を維持して/auth/meで再取得する。
-        val classCode = when (parts.size) {
-            14 -> parts[12].decodeBase64UrlToString().ifEmpty { null }
-            12 -> parts[11].decodeBase64UrlToString()
-                .takeIf { it.isNotEmpty() && it.toIntOrNull() == null }
-            else -> null
-        }
-        val teamId = if (parts.size == 14) {
-            parts[13].decodeBase64UrlToString().ifEmpty { null }?.toInt()
-        } else null
-        val role = when (parts.size) {
-            9 -> Role.fromStoredName(parts[8].decodeBase64UrlToString().ifEmpty { null })
-            11, 12, 14 -> Role.fromStoredName(parts[10].decodeBase64UrlToString().ifEmpty { null })
-            else -> null
-        }
-
-        AuthSession(
-            accessToken = parts[0].decodeBase64UrlToString(),
-            refreshTokenId = parts[1].decodeBase64UrlToString(),
-            expiresIn = parts[2].decodeBase64UrlToString().toLong(),
-            user = AuthUser(
-                id = parts[3].decodeBase64UrlToString(),
-                email = parts[4].decodeBase64UrlToString(),
-                displayName = parts[5].decodeBase64UrlToString(),
-                avatarUrl = avatarUrl,
-                avatarUpdatedAt = avatarUpdatedAt,
-                studentIdNumber = studentIdNumber,
-                classRoomName = classRoomName,
-                classCode = classCode,
-                teamId = teamId,
-                role = role,
-            ),
-        ).takeIf { session ->
-            session.accessToken.isNotBlank() && session.refreshTokenId.isNotBlank()
-        }
     }.getOrNull()
 }
 
