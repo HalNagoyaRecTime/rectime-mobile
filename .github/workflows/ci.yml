@@ -56,8 +56,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Setup iOS Config
-        run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
 
       - name: Test splash scene playback
         run: |
@@ -87,13 +85,18 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      # 実物はsecretだが、dependabotのPRはsecretを読めない。
-      # 依存更新でAndroidビルドが壊れたときこそ検知したいので、placeholderで組む。
-      - name: Setup google-services.json
-        run: cp composeApp/google-services.json.example composeApp/google-services.json
+      # 通常CIはFirebaseへ接続しない。Git管理するCI専用dummyを実ファイル名へコピーし、
+      # google-services Gradle PluginによるJSON形式とapplicationIdの整合性を検証する。
+      - name: Setup CI Firebase config
+        run: cp composeApp/google-services.ci.json composeApp/google-services.json
 
       - name: Assemble debug APK
         run: ./gradlew :composeApp:assembleDebug
+
+      # 署名はRelease配布手順で行う。通常CIではRelease用の設定・コードが
+      # bundle生成まで成立することを確認する。
+      - name: Build release AAB
+        run: ./gradlew :composeApp:bundleRelease
 
   build-ios:
     name: Build (iOS)
@@ -125,13 +128,10 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Setup iOS Config
-        run: cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
 
       # GoogleService-Info.plist が無い場合は実行時に FCM を無効化する作りのため、ビルド検証では配置しない。
-      # 署名しないため、entitlements や署名設定はこのジョブでは検証されない。
-      - name: Build app for iOS Simulator
-        id: build-ios-app
+      # 署名しないため、entitlements やProvisioning Profile自体はこのジョブでは検証されない。
+      - name: Build app for iOS Simulator (Debug)
         run: |
           xcodebuild build \
             -project iosApp/iosApp.xcodeproj \
@@ -139,13 +139,32 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             -disableAutomaticPackageResolution \
-            -resultBundlePath build/ios-build.xcresult \
+            -resultBundlePath build/ios-debug-build.xcresult \
             CODE_SIGNING_ALLOWED=NO
 
-      # xcresult はビルドステップで生成されるため、ビルドステップが失敗した場合のみ保存する
+      - name: Verify iOS Release settings
+        run: |
+          settings="$(xcodebuild -showBuildSettings \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release)"
+          echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime"
+          echo "$settings" | grep -F "API_BASE_URL = https://rectime-api.rectime-project.workers.dev"
+
+      - name: Build app for iOS Simulator (Release)
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -disableAutomaticPackageResolution \
+            -resultBundlePath build/ios-release-build.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
       - uses: actions/upload-artifact@v7
-        if: failure() && steps.build-ios-app.outcome == 'failure'
+        if: failure()
         with:
           name: ios-build-result
-          path: build/ios-build.xcresult
+          path: build/*.xcresult
           retention-days: 7

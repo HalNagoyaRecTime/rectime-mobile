@@ -14,7 +14,7 @@ const val productionWebOrigin: String = "https://recwatch.pages.dev"
  */
 const val developWebOrigin: String = "https://develop.recwatch.pages.dev"
 
-/** Public entry point for starting the RecTime account deletion process. */
+/** Public entry point for starting the RE:CREATION account deletion process. */
 const val accountDeletionPath: String = "/account-deletion"
 
 /** Web origin for the current build type: develop for debug, production for release. */

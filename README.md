@@ -33,26 +33,31 @@ cd rectime-mobile
 
 ### Firebase Android設定
 
-Android版のビルドには、Firebase Consoleから取得した設定ファイルが必要です。
-プロジェクト管理者から安全な方法で共有されたファイルを、次の場所へ配置してください。
+Android版をFirebaseへ接続して実行する場合は、Firebase Consoleから取得した設定ファイルを次の場所へ配置してください。
 
 ```text
 composeApp/google-services.json
 ```
 
 `composeApp/google-services.json`はGitの管理対象外です。コミットしないでください。
-CIでAndroid版をビルドする場合は、Repository Secretなどに保存した内容からビルド時に同じパスへ生成してください。
+`composeApp/google-services.ci.json` はGit管理するCI専用のdummy設定で、`google-services.json` のJSON形式と `applicationId` の整合性をビルドで確認するために使います。本番Firebase設定のテンプレートではなく、ローカル実行や配布用ビルドには使用しません。
+配布用ビルドでは対象Firebase projectから取得した実ファイルを使用してください。
 
 ### iOSローカル設定
 
-`iosApp/Configuration/Config.xcconfig.example` を `iosApp/Configuration/Config.xcconfig` へコピーして使用します。
+iOSの共通設定はGit管理された `iosApp/Configuration/Config.xcconfig` を使用します。
+Bundle ID、バージョン、Release API URLはRepositoryを正とし、ローカルファイルへ複製しません。
 
-```shell
-cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
+実機デバッグなどで開発者固有の値が必要な場合だけ、
+Git管理対象外の `iosApp/Configuration/Local.xcconfig` を作成してください。
+
+```xcconfig
+TEAM_ID = <Apple Developer Team ID>
+DEBUG_API_BASE_URL = http:/$()/<MacのIP>:8787
 ```
 
-実機デバッグ時は `Config.xcconfig` 内の `API_BASE_URL`（例: `http://<MacのIP>:8787`）や `TEAM_ID`（Apple Developer Team ID）を各自の環境に合わせて設定してください。
-`Config.xcconfig` はGit管理対象外です。
+`Local.xcconfig` は任意です。未作成の場合、Debug APIは `http://localhost:8787` を使用します。
+Release API URLは `Config.xcconfig` の本番URLから変更しません。
 
 詳細なセットアップ手順は [`setup/README.md`](setup/README.md) を参照。
 
