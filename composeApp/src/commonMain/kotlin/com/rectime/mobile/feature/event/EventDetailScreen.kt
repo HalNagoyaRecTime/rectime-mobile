@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -101,6 +102,15 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 
         Box(modifier = Modifier.fillMaxSize()) {
             PushScreenScaffold(
+                // 設定と同様、バウンスで見える背面も上は青・下は本文背景にする。
+                modifier = Modifier.background(
+                    Brush.verticalGradient(
+                        0f to titleBandColor,
+                        0.5f to titleBandColor,
+                        0.5f to bodyBackgroundColor,
+                        1f to bodyBackgroundColor,
+                    ),
+                ),
                 title = uiState.eventDetail?.eventName.orEmpty(),
                 titleVisible = headerTitleVisible && !uiState.isLoading && uiState.error == null,
                 lazyListState = listState,
