@@ -47,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +74,7 @@ import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.NotificationPermissionStatus
 import com.rectime.mobile.ui.component.LogoutConfirmationModal
 import com.rectime.mobile.ui.component.RootScreenScaffold
+import com.rectime.mobile.ui.component.BounceBackground
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
@@ -135,14 +135,9 @@ class SettingsScreen(
         // 両端のバウンスでスクロール背面が見えても、上は青・下は設定背景にする。
         RootScreenScaffold(
             title = "設定",
-            modifier = Modifier.background(
-                Brush.verticalGradient(
-                    0f to AppTheme.colors.themeColorSecond,
-                    0.5f to AppTheme.colors.themeColorSecond,
-                    0.5f to AppTheme.colors.screenBackground,
-                    1f to AppTheme.colors.screenBackground,
-                ),
-            ),
+            contentBackground = {
+                BounceBackground(AppTheme.colors.themeColorSecond, AppTheme.colors.screenBackground)
+            },
             horizontalPadding = false,
             contentTopPadding = false,
             contentBottomPadding = false,
