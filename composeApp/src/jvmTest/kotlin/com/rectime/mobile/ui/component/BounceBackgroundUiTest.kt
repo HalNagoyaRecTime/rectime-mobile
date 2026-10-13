@@ -22,7 +22,7 @@ class BounceBackgroundUiTest {
         setContent {
             Box(Modifier.requiredSize(320.dp, 600.dp).background(Color.Magenta)) {
                 Box(Modifier.fillMaxSize().graphicsLayer { translationY = offset }) {
-                    BounceBackground(Color.Red, Color.Blue, 150f)
+                    BounceBackground(Color.Red, Color.Blue)
                 }
             }
         }
