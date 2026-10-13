@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.event
 
+import com.rectime.mobile.feature.schedule.TimelineEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -90,6 +91,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         }
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onForeground() }
         val uiState by viewModel.uiState.collectAsState()
+        val surroundingEvents by viewModel.surroundingEvents.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
         var titleBandHeightPx by remember { mutableIntStateOf(0) }
         val titleBandColor = AppTheme.colors.themeColorSecond
@@ -151,6 +153,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                             EventDetailContent(
                                 event = event,
                                 gatherings = uiState.gatherings,
+                                surroundingEvents = surroundingEvents,
                                 attendingGatheringIds = uiState.attendingGatheringIds,
                                 onOpenMap = { isMapVisible = true },
                                 onTitleBandHeightChanged = { titleBandHeightPx = it },
@@ -171,6 +174,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 private fun EventDetailContent(
     event: EventDetail,
     gatherings: List<Gathering>,
+    surroundingEvents: List<TimelineEvent>,
     attendingGatheringIds: Set<Int>,
     onOpenMap: () -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
@@ -207,7 +211,7 @@ private fun EventDetailContent(
             }
 
             if (gatherings.isNotEmpty()) {
-                EventRoundPreviews(event, gatherings, attendingGatheringIds)
+                EventRoundPreviews(event, gatherings, attendingGatheringIds, surroundingEvents)
                 DetailSection(heading = "集合時間・集合場所", onInfoClick = onOpenMap) {
                     GatheringList(
                         gatherings = gatherings,

@@ -1,42 +1,45 @@
 package com.rectime.mobile.feature.event
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.core.model.EventDetail
 import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.feature.settings.SettingsCornerRadius
+import com.rectime.mobile.feature.schedule.TimelineEvent
+import com.rectime.mobile.feature.schedule.assignLanes
 import com.rectime.mobile.ui.theme.AppTheme
+import com.rectime.mobile.ui.component.EventCard
 import kotlinx.coroutines.delay
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.ceil
 import kotlin.time.Clock
-import org.jetbrains.compose.resources.painterResource
-import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.ic_notification_outline
 
 // APIの呼び出し時刻追加までの画面比較用。通信・保存データは変更しない。
 private const val PrototypeCallLeadMinutes = 10
@@ -59,7 +62,7 @@ private fun minuteOf(value: String): Int? {
 
 /** 比較用の2案。登録時刻を使い、未取得の通知先行時間は推測しない。 */
 @Composable
-internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>, attendingIds: Set<Int>) {
+internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>, attendingIds: Set<Int>, surroundingEvents: List<TimelineEvent>) {
     if (gatherings.isEmpty()) return
     val rounds = remember(gatherings) {
         gatherings.byRound().map { RoundPreview(it.key, it.value) }
@@ -80,8 +83,6 @@ internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>,
         current != null -> "第${current.number}ラウンドの開始時刻を経過"
         else -> "開始前"
     }
-    var selected by remember(event.eventId) { mutableStateOf<Int?>(null) }
-    val selectedRound = rounds.firstOrNull { it.number == selected } ?: current ?: rounds.firstOrNull()
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("全${rounds.size}ラウンド", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = AppTheme.colors.textDetailsScreenBody)
         Text(status, color = AppTheme.colors.textDetailsScreenBody, fontSize = 14.sp)
@@ -90,76 +91,84 @@ internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>,
         if (mine.isNotEmpty()) {
             Text("自分の出場：" + mine.joinToString(" / ") { "第${it.number} · 呼出 ${it.callTime} / 開始 ${it.time}" }, color = AppTheme.colors.themeColorFirst, fontSize = 14.sp)
         }
-        selectedRound?.let { round ->
-            val timeLabel = if (round.isMine(attendingIds)) "呼出 ${round.callTime} / 開始 ${round.time}" else "開始 ${round.time}"
-            Text("第${round.number}ラウンド · $timeLabel", fontWeight = FontWeight.Bold, color = AppTheme.colors.textDetailsScreenBody)
-        }
         Text("案A", fontWeight = FontWeight.Bold, color = AppTheme.colors.textDetailsScreenBody)
-        CalendarPreview(event, rounds, attendingIds, now) { selected = it }
+        CalendarPreview(event, rounds, attendingIds, now, surroundingEvents)
         Text("案B", fontWeight = FontWeight.Bold, color = AppTheme.colors.textDetailsScreenBody)
         PreviewFrame {
-            SnakePreview(rounds, attendingIds, now) { selected = it }
+            SnakePreview(rounds, attendingIds, now)
         }
     }
 }
 
-/** イベント帯の上に、開始の丸と呼び出しのベルを実時刻で重ねる。 */
+/** ラウンド間の余白を保てる縮尺で、開始・呼出時刻をイベント帯に表示する。 */
 @Composable
-private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids: Set<Int>, now: Int, onSelect: (Int) -> Unit) {
+private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids: Set<Int>, now: Int, surroundingEvents: List<TimelineEvent>) {
     var expanded by remember(event.eventId) { mutableStateOf(false) }
     val timed = rounds.filter { it.minute != null }
     val eventStart = minuteOf(event.startTime)
     val eventEnd = minuteOf(event.endTime)
-    val firstStart = eventStart ?: timed.firstOrNull()?.minute ?: 0
-    val firstCall = timed.filter { it.isMine(ids) }.mapNotNull { it.callMinute }.minOrNull()
-    val first = minOf(firstStart, firstCall ?: firstStart)
-    var tagWidths by remember(event.eventId) { mutableStateOf<Map<Int, Int>>(emptyMap()) }
+    val timeline = remember(event, surroundingEvents) {
+        if (eventStart == null || eventEnd == null || eventEnd <= eventStart) emptyList() else {
+            val target = TimelineEvent(event.eventId, event.eventName, event.venues, eventStart,
+                eventEnd - eventStart, 0, 1, displayMinute(eventStart), displayMinute(eventEnd))
+            assignLanes(surroundingEvents.filter { it.eventId != event.eventId }
+                .filter { it.durationMinutes > 0 } + target)
+                .flatMap { item ->
+                    if (item.overflowCount == 0) listOf(item)
+                    else item.overflowEvents.map { it.copy(lane = item.lane, laneCount = item.laneCount) }
+                }
+        }
+    }
+    val target = timeline.firstOrNull { it.eventId == event.eventId }
+    val first = eventStart ?: timed.firstOrNull()?.minute ?: 0
+    val roundHeight = 44.dp
+    val roundGap = 6.dp
     val last = maxOf(eventEnd ?: first + 60, timed.lastOrNull()?.minute ?: first + 60, first + 1)
     val axisStart = first / 30 * 30
     val axisEnd = ((last + 29) / 30 * 30).coerceAtLeast(axisStart + 30)
     val smallestGap = timed.mapNotNull { it.minute }.distinct().zipWithNext { a, b -> b - a }.minOrNull() ?: 30
-    val minuteScale = maxOf(2f, 44f / smallestGap.coerceAtLeast(1))
-    val fullHeight = ((axisEnd - axisStart) * minuteScale + 40).dp
+    val minuteScale = maxOf(2f, (roundHeight + roundGap).value / smallestGap.coerceAtLeast(1))
+    val topPadding = 72.dp
+    val fullHeight = ((axisEnd - axisStart) * minuteScale).dp + topPadding + 20.dp
     val visibleHeight = if (expanded) fullHeight else 180.dp
-    fun position(minute: Int) = (20 + (minute - axisStart) * minuteScale).dp
-    val focus = timed.firstOrNull { it.isMine(ids) }?.callMinute ?: timed.firstOrNull()?.minute ?: first
-    val shift = if (expanded) 0.dp else (position(focus) - 42.dp).coerceIn(0.dp, (fullHeight - 180.dp).coerceAtLeast(0.dp))
+    fun position(minute: Int) = topPadding + ((minute - axisStart) * minuteScale).dp
+    val focus = timed.firstOrNull { it.isMine(ids) }?.minute ?: timed.firstOrNull()?.minute ?: first
+    val shift by animateDpAsState(
+        targetValue = if (expanded) 0.dp else (position(focus) - topPadding).coerceIn(0.dp, (fullHeight - 180.dp).coerceAtLeast(0.dp)),
+        animationSpec = tween(250), label = "roundViewportOffset",
+    )
     val grid = AppTheme.colors.textScheduleTimeLine
     val accent = AppTheme.colors.themeColorFirst
     val progress = Color.DarkGray.copy(alpha = 0.85f)
-    val pending = Color.DarkGray.copy(alpha = 0.5f)
     val live = AppTheme.colors.themeColorSecond
-    val band = live.copy(alpha = 0.22f)
+    val band = live.copy(alpha = 0.3f)
     val current = timed.lastOrNull { it.minute!! <= now }?.takeIf { eventEnd == null || now < eventEnd }
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(SettingsCornerRadius))
         .background(Color.White).border(1.dp, grid.copy(alpha = 0.35f), RoundedCornerShape(SettingsCornerRadius))
-        .animateContentSize().height(visibleHeight).previewClick { expanded = !expanded }) {
+        .animateContentSize(animationSpec = tween(250)).height(visibleHeight).previewClick { expanded = !expanded }) {
         BoxWithConstraints(Modifier.fillMaxWidth().wrapContentHeight(Alignment.Top, unbounded = true).height(fullHeight).offset(y = -shift).padding(horizontal = 12.dp)) {
+            val viewportWidth = maxWidth
             val labelWidth = 42.dp
-            val laneWidth = ((maxWidth - labelWidth) / 2).coerceAtLeast(1.dp)
-            val tagWidth = (laneWidth - 6.dp).coerceAtLeast(1.dp)
+            val targetLaneStart = target?.let { it.lane.toFloat() / it.laneCount } ?: 0f
+            val targetLaneWidth = target?.let { 1f / it.laneCount } ?: 1f
+            val sideEvents = timeline.filter { it.eventId != event.eventId && eventStart != null && eventEnd != null &&
+                it.startMinuteOfDay < eventEnd && it.startMinuteOfDay + it.durationMinutes > eventStart }
+            val leftPeek = if (sideEvents.any { (it.lane + 1f) / it.laneCount <= targetLaneStart }) 18.dp else 0.dp
+            val rightPeek = if (sideEvents.any { it.lane.toFloat() / it.laneCount >= targetLaneStart + targetLaneWidth }) 18.dp else 0.dp
+            val targetLeft = labelWidth + leftPeek
+            val targetWidth = (viewportWidth - targetLeft - rightPeek).coerceAtLeast(1.dp)
             Canvas(Modifier.fillMaxSize()) {
                 for (minute in axisStart..axisEnd step 30) {
                     val y = position(minute).toPx()
                     drawLine(grid.copy(alpha = 0.45f), Offset(labelWidth.toPx(), y), Offset(size.width, y), 1.dp.toPx())
                 }
                 if (eventStart != null && eventEnd != null && eventEnd > eventStart) {
-                    drawRoundRect(band, topLeft = Offset(labelWidth.toPx(), position(eventStart).toPx()),
-                        size = androidx.compose.ui.geometry.Size(size.width - labelWidth.toPx(), ((eventEnd - eventStart) * minuteScale).dp.toPx()),
+                    drawRoundRect(band, topLeft = Offset(targetLeft.toPx(), position(eventStart).toPx()),
+                        size = androidx.compose.ui.geometry.Size(targetWidth.toPx(), ((eventEnd - eventStart) * minuteScale).dp.toPx()),
                         cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()))
-                }
-                // 呼び出しから対象の開始タグへ、時刻の差を保った線をつなぐ。
-                timed.filter { it.isMine(ids) }.groupBy { it.minute!! }.forEach { (minute, group) ->
-                    val color = accent
-                    val callY = position(minute - PrototypeCallLeadMinutes).toPx()
-                    val startY = position(minute).toPx()
-                    val callX = (labelWidth + laneWidth).toPx()
-                    val startX = labelWidth.toPx() + (tagWidths[minute]?.toFloat() ?: tagWidth.toPx())
-                    val path = Path().apply {
-                        moveTo(callX, callY)
-                        cubicTo(startX, callY, callX, startY, startX, startY)
-                    }
-                    drawPath(path, color.copy(alpha = 0.55f), style = Stroke(2.dp.toPx()))
+                    drawRoundRect(live.copy(alpha = 0.65f), topLeft = Offset(targetLeft.toPx(), position(eventStart).toPx()),
+                        size = androidx.compose.ui.geometry.Size(targetWidth.toPx(), ((eventEnd - eventStart) * minuteScale).dp.toPx()),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx()), style = Stroke(1.dp.toPx()))
                 }
                 if (now in axisStart..axisEnd) {
                     val y = position(now).toPx()
@@ -167,39 +176,68 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                     drawCircle(live, 3.dp.toPx(), Offset(labelWidth.toPx(), y))
                 }
             }
+            // 予定カードは実サイズで配置し、上・左右にはみ出す部分を窓で切り抜く。
+            Box(Modifier.offset(x = labelWidth).width((viewportWidth - labelWidth).coerceAtLeast(1.dp))
+                .height(position(eventEnd ?: axisEnd).coerceAtLeast(1.dp)).clipToBounds()) {
+                timeline.filter { it.eventId != event.eventId }.forEach { neighbor ->
+                    if (target != null && neighbor.lane == target.lane && neighbor.laneCount == target.laneCount &&
+                        neighbor.startMinuteOfDay < target.startMinuteOfDay + target.durationMinutes &&
+                        neighbor.startMinuteOfDay + neighbor.durationMinutes > target.startMinuteOfDay) return@forEach
+                    val top = position(neighbor.startMinuteOfDay)
+                    val bottom = position(neighbor.startMinuteOfDay + neighbor.durationMinutes)
+                    val left = targetLeft + targetWidth * ((neighbor.lane.toFloat() / neighbor.laneCount - targetLaneStart) / targetLaneWidth)
+                    val width = targetWidth / (neighbor.laneCount * targetLaneWidth)
+                    if (bottom <= 0.dp || top >= position(eventEnd ?: axisEnd) || left >= viewportWidth || left + width <= labelWidth) return@forEach
+                    val cardWidth = width - roundGap
+                    val cardHeight = bottom - top - roundGap
+                    if (cardWidth <= 0.dp || cardHeight <= 0.dp) return@forEach
+                    EventCard(
+                        time = "${neighbor.startTimeLabel}-${neighbor.endTimeLabel}", title = neighbor.title,
+                        venues = neighbor.venues.map { it.venueName },
+                        isLive = now in neighbor.startMinuteOfDay..(neighbor.startMinuteOfDay + neighbor.durationMinutes),
+                        isParticipating = neighbor.isParticipating,
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.offset(x = left - labelWidth + roundGap / 2, y = top + roundGap / 2)
+                            .wrapContentSize(Alignment.TopStart, unbounded = true).size(cardWidth, cardHeight),
+                    )
+                }
+            }
             for (minute in axisStart..axisEnd step 30) {
                 Text(displayMinute(minute), modifier = Modifier.offset(y = position(minute) - 8.dp).width(labelWidth), fontSize = 10.sp, color = Color.DarkGray)
             }
             // 同時刻のラウンドは1つのタグにまとめる。
             timed.groupBy { it.minute!! }.forEach { (minute, group) ->
+                val top = position(minute) - roundHeight / 2
                 val mine = group.any { it.isMine(ids) }
-                val label = group.joinToString("・") { "${it.number}" } + "R"
                 val isCurrent = group.any { it.number == current?.number }
-                val tagColor = when {
+                val markerColor = when {
                     mine -> accent
                     isCurrent -> live
                     minute <= now -> progress
-                    else -> Color(0xFFE1E5E7)
+                    else -> grid
                 }
-                val tagText = if (mine || isCurrent || minute <= now) Color.White else Color.DarkGray
-                val onTap = { onSelect(group.first().number); expanded = true }
-                Box(Modifier.offset(x = labelWidth, y = position(minute) - 22.dp)
-                    .width(tagWidth).height(44.dp).clip(RoundedCornerShape(8.dp)).previewClick(onClick = onTap), contentAlignment = Alignment.CenterStart) {
-                    Text("$label ${displayMinute(minute)}〜", modifier = Modifier
-                        .onSizeChanged { if (tagWidths[minute] != it.width) tagWidths = tagWidths + (minute to it.width) }
-                        .background(tagColor, CircleShape).padding(horizontal = 7.dp, vertical = 3.dp),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, color = tagText, fontWeight = FontWeight.Bold)
+                val label = buildAnnotatedString {
+                    withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                        append("第${group.joinToString("・") { "${it.number}" }}ラウンド")
+                    }
+                    append("｜開始${displayMinute(minute)}〜")
+                    if (mine) append(" / 呼出${displayMinute(minute - PrototypeCallLeadMinutes)}")
                 }
-                if (mine) {
-                    val callColor = accent
-                    Row(Modifier.offset(x = labelWidth + laneWidth, y = position(minute - PrototypeCallLeadMinutes) - 22.dp)
-                        .width(tagWidth).height(44.dp).clip(RoundedCornerShape(8.dp)).previewClick(onClick = onTap), verticalAlignment = Alignment.CenterVertically) {
-                        Row(Modifier.background(Color.White, CircleShape).border(1.dp, callColor, CircleShape)
-                            .padding(horizontal = 5.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(painterResource(Res.drawable.ic_notification_outline), contentDescription = "呼び出し", modifier = Modifier.size(13.dp), tint = callColor)
-                            Spacer(Modifier.width(3.dp))
-                            Text("呼出 ${displayMinute(minute - PrototypeCallLeadMinutes)}", maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                fontSize = 10.sp, color = callColor, fontWeight = FontWeight.Bold)
+                Row(Modifier.offset(x = targetLeft + roundGap, y = top)
+                    .width((targetWidth - roundGap * 2).coerceAtLeast(1.dp)).height(roundHeight),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(5.dp).background(markerColor, RoundedCornerShape(50)))
+                    Spacer(Modifier.width(4.dp))
+                    Row(Modifier.weight(1f).background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
+                        .border(1.dp, markerColor.copy(alpha = if (mine) 0.65f else 0.2f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 7.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            fontSize = 12.sp, color = AppTheme.colors.textDetailsScreenBody)
+                        if (mine) {
+                            Spacer(Modifier.width(6.dp))
+                            Text("出場", modifier = Modifier.background(accent, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                                fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }
@@ -211,7 +249,7 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
 
 /** 行ごとに方向を反転する連続経路。幅に収まる列数を選び横スクロールしない。 */
 @Composable
-private fun SnakePreview(rounds: List<RoundPreview>, ids: Set<Int>, now: Int, onSelect: (Int) -> Unit) {
+private fun SnakePreview(rounds: List<RoundPreview>, ids: Set<Int>, now: Int) {
     val pending = AppTheme.colors.textDetailsScreenBody.copy(alpha = 0.18f)
     val progress = AppTheme.colors.textDetailsScreenBody.copy(alpha = 0.65f)
     val accent = AppTheme.colors.themeColorFirst
@@ -261,7 +299,7 @@ private fun SnakePreview(rounds: List<RoundPreview>, ids: Set<Int>, now: Int, on
                 val elapsed = round.minute?.let { now >= it } == true
                 val mine = round.isMine(ids)
                 Column(Modifier.offset(x = center.x.dp - cellWidth / 2, y = center.y.dp - 22.dp)
-                    .width(cellWidth).height(cellHeight).clip(RoundedCornerShape(8.dp)).previewClick { onSelect(round.number) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    .width(cellWidth).height(cellHeight), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.height(44.dp), contentAlignment = Alignment.Center) {
                         Text("${round.number}", color = if (mine || elapsed) Color.White else AppTheme.colors.textDetailsScreenBody, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
@@ -289,7 +327,7 @@ private fun PreviewFrame(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().border(1.dp, AppTheme.colors.textDetailsScreenBody.copy(alpha = 0.15f), RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
 }
 
-/** 比較用の図は波紋を出さず、選択内容の変化で反応を示す。 */
+/** 図の展開・折りたたみは波紋を出さずに切り替える。 */
 @Composable
 private fun Modifier.previewClick(onClick: () -> Unit): Modifier = clickable(
     interactionSource = remember { MutableInteractionSource() },
