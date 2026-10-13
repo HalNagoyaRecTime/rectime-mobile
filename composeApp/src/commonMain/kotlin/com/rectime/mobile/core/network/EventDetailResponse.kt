@@ -36,7 +36,11 @@ fun EventDetailResponse.toModel(): EventDetail {
 }
 
 @Serializable
-data class EventRoundResponse(val round: Int, val gatherings: List<EventRoundGatheringResponse>)
+data class EventRoundResponse(
+    val round: Int,
+    val gatherings: List<EventRoundGatheringResponse>,
+    @SerialName("start_time") val startTime: String? = null,
+)
 
 @Serializable
 data class EventRoundGatheringResponse(
@@ -57,7 +61,7 @@ fun EventDetailResponse.toGatherings(): List<com.rectime.mobile.core.model.Gathe
         round.gatherings.sortedWith(compareBy({ it.gatheringTime }, { it.gatheringId })).map {
             com.rectime.mobile.core.model.Gathering(
                 it.gatheringId, eventId, it.gatheringSpot.id, it.gatheringTime,
-                round.round, eventName, it.gatheringSpot.name,
+                round.round, eventName, it.gatheringSpot.name, roundStartTime = round.startTime,
             )
         }
     }

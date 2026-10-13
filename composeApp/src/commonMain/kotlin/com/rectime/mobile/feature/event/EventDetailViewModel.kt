@@ -21,8 +21,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import io.ktor.client.HttpClient
-import com.rectime.mobile.feature.schedule.TimelineEvent
-import com.rectime.mobile.feature.schedule.toTimelineEvent
 
 class EventDetailViewModel internal constructor(
     private val eventId: Int,
@@ -40,9 +38,6 @@ class EventDetailViewModel internal constructor(
     private val _uiState = MutableStateFlow(EventDetailUiState(isLoading = true))
     val uiState: StateFlow<EventDetailUiState> = _uiState.asStateFlow()
 
-    private val _surroundingEvents = MutableStateFlow<List<TimelineEvent>>(emptyList())
-    val surroundingEvents: StateFlow<List<TimelineEvent>> = _surroundingEvents.asStateFlow()
-
     private var loadJob: Job? = null
     private var hasEnteredForeground = false
 
@@ -58,18 +53,6 @@ class EventDetailViewModel internal constructor(
 
     private fun fetchEventDetail() {
         if (loadJob?.isActive == true) return
-        // 周囲の予定は一覧キャッシュから読み、詳細の表示を待たせない。
-        viewModelScope.launch {
-            val request = CacheRequestGeneration()
-            val events = eventCache.loadEventsEntry()?.data?.events.orEmpty()
-            val participatingIds = scheduleStore.cachedParticipatingEventIds().orEmpty()
-            if (request.isCurrent) {
-                _surroundingEvents.value = events.mapNotNull { response ->
-                    runCatching { response.toTimelineEvent() }.getOrNull()
-                        ?.copy(isParticipating = response.eventId in participatingIds)
-                }
-            }
-        }
         loadJob = viewModelScope.launch {
             val request = CacheRequestGeneration()
             if (!contentSession.isCurrent || _uiState.value.eventDetail == null) {

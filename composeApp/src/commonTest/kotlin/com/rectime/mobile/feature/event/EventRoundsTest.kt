@@ -13,10 +13,10 @@ class EventRoundsTest {
         assertEquals(listOf(1, 2, 3), groups.values.flatten().map { it.gatheringId })
     }
 
-    @Test fun equalTimesAreOrderedByGatheringIdAndTimesRemainGatheringTimes() {
-        val rows = listOf(gathering(20, 2, "09:00"), gathering(10, 2, "09:00")).byRound().getValue(2)
+    @Test fun gatheringNumbersDetermineOrderEvenWhenTimesDiffer() {
+        val rows = listOf(gathering(20, 2, "09:00"), gathering(10, 2, "09:10")).byRound().getValue(2)
         assertEquals(listOf(10, 20), rows.map { it.gatheringId })
-        assertEquals(listOf("09:00", "09:00"), rows.map { it.gatheringTime })
+        assertEquals(listOf("09:10", "09:00"), rows.map { it.gatheringTime })
     }
 
     @Test fun missingGatheringsDoNotProduceSyntheticRounds() {
