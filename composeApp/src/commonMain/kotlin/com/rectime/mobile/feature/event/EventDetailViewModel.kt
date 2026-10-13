@@ -7,7 +7,6 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
-import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.createAppHttpClient
@@ -15,6 +14,8 @@ import com.rectime.mobile.core.network.toGatherings
 import com.rectime.mobile.core.network.toModel
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,17 +38,33 @@ class EventDetailViewModel internal constructor(
     private val _uiState = MutableStateFlow(EventDetailUiState(isLoading = true))
     val uiState: StateFlow<EventDetailUiState> = _uiState.asStateFlow()
 
+    private var loadJob: Job? = null
+    private var hasEnteredForeground = false
+
     init {
         fetchEventDetail()
     }
 
-    private fun fetchEventDetail() {
-        viewModelScope.launch {
-            val request = CacheRequestGeneration()
-            _uiState.value = EventDetailUiState(isLoading = true)
+    fun onForeground() {
+        // 初回表示と最初のON_RESUMEでは取得を重ねない。
+        if (hasEnteredForeground) fetchEventDetail()
+        hasEnteredForeground = true
+    }
 
+    private fun fetchEventDetail() {
+        if (loadJob?.isActive == true) return
+        loadJob = viewModelScope.launch {
+            val request = CacheRequestGeneration()
+            if (!contentSession.isCurrent || _uiState.value.eventDetail == null) {
+                _uiState.value = EventDetailUiState(isLoading = true)
+            } else {
+                _uiState.value = _uiState.value.copy(error = null)
+            }
+            val cacheRequest = eventCache.beginRequest()
+            // 詳細本文の取得成否にかかわらず、参加情報も再取得する。
+            val participation = async { refreshParticipation() }
+            var displayedDetail: EventDetailResponse? = null
             try {
-                val cacheRequest = eventCache.beginRequest()
                 when (
                     val result = fetchWithCacheFirst(
                         fetchLive = {
@@ -59,7 +76,7 @@ class EventDetailViewModel internal constructor(
                         onCached = { saved ->
                             val gatherings = saved.toGatherings().orEmpty()
                             val attending = loadAttendingGatheringIdsFromCache()
-                            if (request.isCurrent) {
+                            if (request.isCurrent && _uiState.value.eventDetail == null) {
                                 _uiState.value = EventDetailUiState(
                                     eventDetail = saved.toModel(), gatherings = gatherings,
                                     attendingGatheringIds = attending,
@@ -75,24 +92,9 @@ class EventDetailViewModel internal constructor(
                         val gatherings = latest.toGatherings().orEmpty()
                         _uiState.value = _uiState.value.copy(
                             isLoading = false, eventDetail = latest.toModel(), gatherings = gatherings,
+                            isOffline = false,
                         )
-                        val (attendingIds, participationIsOffline) = resolvePersonalGatherings(gatherings, request)
-                        if (!request.isCurrent) {
-                            _uiState.value = EventDetailUiState()
-                            return@launch
-                        }
-                        val attending = attendingIds
-                        // 参加情報を待つ間に別の取得が完了した場合も、最新の保存内容を使う。
-                        val finalDetail = eventCache.reconcileDetail(latest, cacheRequest)
-                        if (!request.isCurrent) return@launch
-                        val finalGatherings = finalDetail.toGatherings().orEmpty()
-                        _uiState.value = EventDetailUiState(
-                            isLoading = false,
-                            eventDetail = finalDetail.toModel(),
-                            gatherings = finalGatherings,
-                            attendingGatheringIds = attending.intersect(finalGatherings.map { it.gatheringId }.toSet()),
-                            isOffline = participationIsOffline,
-                        )
+                        displayedDetail = latest
                     }
 
                     is CachedFetchResult.Cached -> {
@@ -108,10 +110,11 @@ class EventDetailViewModel internal constructor(
                                 error = "イベントを表示する権限がありません",
                             )
                             else -> {
-                                // 本文と全ラウンドを保存済み詳細から復元し、参加情報もキャッシュを使う。
+                                // 本文と全ラウンドを保存済み詳細から復元する。
                                 val latest = eventCache.reconcileDetail(result.value, cacheRequest)
                                 val gatherings = latest.toGatherings().orEmpty()
                                 val attending = loadAttendingGatheringIdsFromCache()
+                                displayedDetail = latest
                                 if (!request.isCurrent) {
                                     _uiState.value = EventDetailUiState()
                                     return@launch
@@ -134,17 +137,39 @@ class EventDetailViewModel internal constructor(
                         result.error.printStackTrace()
                         if (_uiState.value.eventDetail != null && request.canRetainDisplayedContent(result.error, contentSession)) {
                             _uiState.value = _uiState.value.copy(isLoading = false, error = null, isOffline = true)
-                            return@launch
+                        } else {
+                            _uiState.value = EventDetailUiState(
+                                isLoading = false,
+                                error = when ((result.error as? HttpStatusException)?.status) {
+                                    HttpStatusCode.NotFound -> "イベントが見つかりません"
+                                    HttpStatusCode.Forbidden -> "イベントを表示する権限がありません"
+                                    else -> "イベント情報の取得に失敗しました"
+                                },
+                            )
                         }
-                        _uiState.value = EventDetailUiState(
-                            isLoading = false,
-                            error = when ((result.error as? HttpStatusException)?.status) {
-                                HttpStatusCode.NotFound -> "イベントが見つかりません"
-                                HttpStatusCode.Forbidden -> "イベントを表示する権限がありません"
-                                else -> "イベント情報の取得に失敗しました"
-                            },
-                        )
                     }
+                }
+                val participationIsOffline = participation.await()
+                val attendingIds = loadAttendingGatheringIdsFromCache()
+                if (!request.isCurrent) {
+                    _uiState.value = EventDetailUiState()
+                    return@launch
+                }
+                val current = _uiState.value
+                if (current.eventDetail != null && current.error == null) {
+                    // 参加情報を待つ間の詳細更新も反映する。
+                    val latest = displayedDetail?.let { eventCache.reconcileDetail(it, cacheRequest) }
+                    if (!request.isCurrent) {
+                        _uiState.value = EventDetailUiState()
+                        return@launch
+                    }
+                    val gatherings = latest?.toGatherings() ?: current.gatherings
+                    _uiState.value = current.copy(
+                        eventDetail = latest?.toModel() ?: current.eventDetail,
+                        gatherings = gatherings,
+                        attendingGatheringIds = attendingIds.intersect(gatherings.map { it.gatheringId }.toSet()),
+                        isOffline = current.isOffline || participationIsOffline,
+                    )
                 }
             } catch (e: CancellationException) {
                 if (!request.isCurrent) _uiState.value = EventDetailUiState()
@@ -163,23 +188,13 @@ class EventDetailViewModel internal constructor(
         }
     }
 
-    private suspend fun resolvePersonalGatherings(
-        gatherings: List<Gathering>,
-        request: CacheRequestGeneration,
-    ): Pair<Set<Int>, Boolean> {
-        val saved = scheduleStore.cachedParticipation()
-        var isOffline = false
-        val participation = try {
-            scheduleStore.refreshParticipation()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            isOffline = true
-            saved
-        }
-        if (!request.isCurrent) return emptySet<Int>() to isOffline
-        val ids = participation?.firstOrNull { it.eventId == eventId }?.gatheringIds.orEmpty().toSet()
-        return ids.intersect(gatherings.map { it.gatheringId }.toSet()) to isOffline
+    private suspend fun refreshParticipation(): Boolean = try {
+        scheduleStore.refreshParticipation()
+        false
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        true
     }
 
     private suspend fun loadAttendingGatheringIdsFromCache(): Set<Int> =
