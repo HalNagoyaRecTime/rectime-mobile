@@ -12,6 +12,8 @@ internal const val NotificationHistoryLimit = 100
 private const val HistoryCacheKey = "notifications_v1"
 private val historyMutex = Mutex()
 
+internal fun notificationDetailCacheKey(id: Int) = "notification_detail_v1_$id"
+
 // 一覧と詳細で同じ保存先を使い、詳細を開くたびに保存件数が増え続けるのを防ぐ。
 internal class NotificationHistoryCache(private val cache: LocalCache) {
     suspend fun load(): List<UserNotification>? = loadEntry()?.data
@@ -40,13 +42,22 @@ internal class NotificationHistoryCache(private val cache: LocalCache) {
         historyMutex.withLock {
             val fetchedAt = if (refreshFetchedAt) cache.fetchedNow()
                 else cache.loadEntry<List<UserNotification>>(HistoryCacheKey)?.fetchedAt
-            if (request.isCurrent) cache.saveEntry(HistoryCacheKey, values.distinctBy { it.id }.take(NotificationHistoryLimit), fetchedAt)
+            if (request.isCurrent) {
+                val bounded = values.distinctBy { it.id }.take(NotificationHistoryLimit)
+                // 開いている詳細も一覧の更新を受け取る。全件分の詳細キャッシュは作らない。
+                bounded.forEach { notification ->
+                    val key = notificationDetailCacheKey(notification.id)
+                    if (cache.hasMemoryEntry(key)) cache.saveMemory(key, notification)
+                }
+                cache.saveEntry(HistoryCacheKey, bounded, fetchedAt)
+            }
         }
     }
 
     suspend fun saveDetail(notification: UserNotification) {
         val request = CacheRequestGeneration()
         historyMutex.withLock {
+            if (request.isCurrent) cache.saveMemory(notificationDetailCacheKey(notification.id), notification)
             val saved = cache.loadEntry<List<UserNotification>>(HistoryCacheKey)
             val old = saved?.data.orEmpty()
             // 最新100件の一覧に含まれる通知だけ更新する。個別取得では順位を確定できない。

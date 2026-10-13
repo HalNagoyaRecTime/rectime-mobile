@@ -5,6 +5,7 @@ import com.rectime.mobile.core.network.MyEventsGateway
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
@@ -16,7 +17,6 @@ import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -100,7 +100,7 @@ class NotificationsViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private var loadJob: Job? = null
+    private val refreshQueue = CacheRefreshQueue()
 
     init {
         loadNotifications()
@@ -121,15 +121,12 @@ class NotificationsViewModel(
     }
 
     private fun loadNotifications(source: NotificationRefreshSource? = null) {
-        // 取得状態はストアだけが管理し、画面は手動更新のアニメーションのみを担当する。
-        if (refreshSource.value != null || loadJob?.isActive == true ||
-            feedStore.status.value.isUpdating || feedStore.status.value.isLoadingMore
-        ) return
-        refreshSource.value = source
-        loadJob = viewModelScope.launch {
+        refreshQueue.launch(viewModelScope, afterCurrent = source != null) {
+            refreshSource.value = source
             try {
                 val result = withMinimumRefreshDuration(source != null) {
-                    feedStore.load(force = source != null)
+                    if (source != null) feedStore.refreshAfterCurrentRequest()
+                    feedStore.load()
                 }
                 when (result) {
                     is CachedFetchResult.Cached -> result.error.printStackTrace()
@@ -179,10 +176,37 @@ class NotificationDetailViewModel internal constructor(
 
     private val history = NotificationHistoryCache(cache)
 
-    private var loadJob: Job? = null
+    private val refreshQueue = CacheRefreshQueue()
     private val detailSession = CacheRequestGeneration()
 
     init {
+        viewModelScope.launch {
+            this@NotificationDetailViewModel.scheduleStore.participationChanges.collect { participation ->
+                if (participation == null && detailSession.isCurrent) return@collect
+                val eventId = _uiState.value.notification?.relatedEvent?.id
+                _uiState.update { it.copy(isParticipatingInRelatedEvent = participation.orEmpty().any { p -> p.eventId == eventId }) }
+            }
+        }
+        viewModelScope.launch {
+            cache.observe<List<UserNotification>>("notifications_v1").collect { notifications ->
+                val latest = notifications?.firstOrNull { it.id == notificationId }
+                if (latest != null) publishCachedNotification(latest)
+                else if (!detailSession.isCurrent) _uiState.value = NotificationDetailUiState(isLoading = false)
+            }
+        }
+        viewModelScope.launch {
+            cache.observe<UserNotification>(notificationDetailCacheKey(notificationId)).collect { latest ->
+                if (latest != null) publishCachedNotification(latest)
+                else if (!detailSession.isCurrent) _uiState.value = NotificationDetailUiState(isLoading = false)
+            }
+        }
+        if (feedStore != null) viewModelScope.launch {
+            feedStore.notifications.collect { notifications ->
+                notifications.firstOrNull { it.id == notificationId }?.let { latest ->
+                    publishCachedNotification(latest)
+                }
+            }
+        }
         loadNotification(force = refreshOnOpen)
     }
 
@@ -199,14 +223,12 @@ class NotificationDetailViewModel internal constructor(
     }
 
     private fun loadNotification(force: Boolean) {
-        if (loadJob?.isActive == true) return
-
-        _uiState.value = _uiState.value.copy(
-            isLoading = _uiState.value.notification == null,
-            isUpdating = true,
-            error = null,
-        )
-        loadJob = viewModelScope.launch {
+        refreshQueue.launch(viewModelScope, afterCurrent = force) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = _uiState.value.notification == null,
+                isUpdating = true,
+                error = null,
+            )
             val request = CacheRequestGeneration()
             try {
                 var available = _uiState.value.notification ?: feedStore?.findNotification(notificationId)
@@ -217,12 +239,21 @@ class NotificationDetailViewModel internal constructor(
                             if (!force && available != null) requireNotNull(available)
                             else {
                                 fetched = true
-                                gateway.getNotification(notificationId)
+                                cache.requests.run("notification:$notificationId") {
+                                    gateway.getNotification(notificationId)
+                                }
                             }
                         },
                         loadCache = {
-                            available = available ?: history.load()?.firstOrNull { it.id == notificationId }
+                            available = cache.load<UserNotification>(notificationDetailCacheKey(notificationId))
+                                ?: available ?: history.load()?.firstOrNull { it.id == notificationId }
                             available
+                        },
+                        invalidateCache = {
+                            cache.invalidateMemory(notificationDetailCacheKey(notificationId))
+                            val remaining = history.load()?.filterNot { it.id == notificationId }
+                            if (remaining != null) history.saveList(remaining, refreshFetchedAt = false)
+                            feedStore?.removeNotification(notificationId)
                         },
                         saveCache = {
                             if (fetched) {
@@ -262,10 +293,18 @@ class NotificationDetailViewModel internal constructor(
                             _uiState.value = NotificationDetailUiState(isLoading = false)
                             return@launch
                         }
+                        val latest = _uiState.value.notification ?: result.value
+                        val latestParticipation = if (latest.relatedEvent?.id == result.value.relatedEvent?.id) {
+                            isParticipating
+                        } else cachedParticipation(latest)
+                        if (!request.isCurrent) {
+                            _uiState.value = NotificationDetailUiState(isLoading = false)
+                            return@launch
+                        }
                         _uiState.value = NotificationDetailUiState(
-                            notification = result.value,
+                            notification = latest,
                             isLoading = false,
-                            isParticipatingInRelatedEvent = isParticipating,
+                            isParticipatingInRelatedEvent = latestParticipation,
                         )
                     }
 
@@ -318,6 +357,14 @@ class NotificationDetailViewModel internal constructor(
         }
     }
 
+    private suspend fun publishCachedNotification(notification: UserNotification) {
+        val participating = cachedParticipation(notification)
+        if (detailSession.isCurrent && _uiState.value.error == null) {
+            _uiState.update { it.copy(notification = notification, isLoading = false,
+                isParticipatingInRelatedEvent = participating) }
+        }
+    }
+
     private suspend fun cachedParticipation(notification: UserNotification): Boolean {
         val eventId = notification.relatedEvent?.id ?: return false
         return try {
@@ -342,7 +389,7 @@ class NotificationDetailViewModel internal constructor(
 
     override fun onCleared() {
         super.onCleared()
-        gateway.close()
+        cache.requests.afterRequests { gateway.close() }
         if (ownsScheduleStore) scheduleStore.close()
     }
 }

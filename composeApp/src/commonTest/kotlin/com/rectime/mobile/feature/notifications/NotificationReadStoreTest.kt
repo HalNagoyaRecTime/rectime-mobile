@@ -59,7 +59,7 @@ class NotificationReadStoreTest {
         store.markRead(15)
 
         // ログアウト・ユーザー切替でLocalCacheごと消える状況
-        keyValueStore.clear()
+        LocalCache(keyValueStore).clearAll()
         store.restore()
 
         assertTrue(store.readIds.value.isEmpty())

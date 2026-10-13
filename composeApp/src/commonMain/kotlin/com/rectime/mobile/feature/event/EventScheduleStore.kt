@@ -2,6 +2,7 @@ package com.rectime.mobile.feature.event
 
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.FetchedCache
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.apiErrorException
@@ -17,15 +18,6 @@ import com.rectime.mobile.core.network.MyEventsApi
 import com.rectime.mobile.core.network.MyEventsGateway
 import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /** 詳細と本人参加情報を共有する。全イベントの詳細を起動時に取得しない。 */
 internal class EventScheduleStore(
@@ -34,35 +26,20 @@ internal class EventScheduleStore(
     private val myEvents: MyEventsGateway = MyEventsApi(client = client),
     private val baseUrl: String = apiBaseUrl,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val mutex = Mutex()
-    private var session = CacheRequestGeneration()
-    private var participation: FetchedCache<List<MyEventParticipation>>? = null
-    private val requests = mutableMapOf<String, Deferred<Any>>()
-
     companion object {
         val shared: EventScheduleStore by lazy { EventScheduleStore() }
-        private const val ParticipationKey = "event_participation_v1"
+        internal const val ParticipationKey = "event_participation_v1"
     }
 
-    private fun checkSession() {
-        if (session.isCurrent) return
-        requests.values.forEach { it.cancel() }
-        requests.clear()
-        participation = null
-        session = CacheRequestGeneration()
-    }
+    val participationChanges = cache.observe<List<MyEventParticipation>>(ParticipationKey)
 
     suspend fun cachedParticipation(): List<MyEventParticipation>? = cachedParticipationEntry()?.data
 
     suspend fun cachedParticipationEntry(): FetchedCache<List<MyEventParticipation>>? {
-        checkSession()
         val request = CacheRequestGeneration()
-        val saved = participation ?: loadEntryOrNull<List<MyEventParticipation>>(ParticipationKey)
+        val saved = loadEntryOrNull<List<MyEventParticipation>>(ParticipationKey)
         if (!request.isCurrent) return null
-        // 保存読み込み中に最新応答が届いた場合はメモリの最新値を優先する。
-        if (participation == null) participation = saved
-        return participation
+        return saved
     }
 
     /** 更新前のIDキャッシュは出場表示の復元にだけ使い、集合情報を捏造しない。 */
@@ -79,12 +56,22 @@ internal class EventScheduleStore(
         return event.gatheringIds.toSet()
     }
 
-    suspend fun refreshParticipation(): List<MyEventParticipation> = sharedRequest("participation") {
+    suspend fun refreshParticipation(): List<MyEventParticipation> = cache.requests.run(ParticipationKey) {
         val request = CacheRequestGeneration()
-        val latest = myEvents.getMyEvents()
+        val latest = try { myEvents.getMyEvents() }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (request.isCurrent && e.invalidatesDisplayedContent()) {
+                // 閲覧拒否・削除が確定した本人情報も、他の取得と同じ方針で失効する。
+                saveOrIgnore(ParticipationKey, FetchedCache(emptyList<MyEventParticipation>(), null), request)
+                try { cache.invalidate(MY_EVENTS_CACHE_KEY) }
+                catch (cancel: CancellationException) { throw cancel }
+                catch (_: Exception) { }
+            }
+            throw e
+        }
         if (!request.isCurrent) throw CancellationException("参加情報のセッションが変わりました")
         val entry = FetchedCache(latest, cache.fetchedNow())
-        participation = entry
         saveOrIgnore(ParticipationKey, entry, request)
         latest
     }
@@ -94,7 +81,7 @@ internal class EventScheduleStore(
 
     /** 同時に開かれた詳細や将来のLive Activityも、イベントごとに通信を共有できる。 */
     suspend fun refreshDetail(eventId: Int): EventDetailResponse =
-        sharedRequest("detail:$eventId") {
+        cache.requests.run("event_detail_v1_$eventId") {
             val request = CacheRequestGeneration()
             val eventCache = EventCache(cache)
             val cacheRequest = eventCache.beginRequest()
@@ -105,25 +92,6 @@ internal class EventScheduleStore(
             if (!request.isCurrent) throw CancellationException("イベントのセッションが変わりました")
             eventCache.saveDetail(detail, cacheRequest)
         }
-
-    @Suppress("UNCHECKED_CAST")
-    private suspend fun <T : Any> sharedRequest(key: String, fetch: suspend () -> T): T {
-        val request = CacheRequestGeneration()
-        val pending = mutex.withLock {
-            checkSession()
-            requests[key]?.takeUnless { it.isCompleted }
-                ?: scope.async(start = CoroutineStart.LAZY) { fetch() }.also { requests[key] = it }
-        }
-        try {
-            val result = pending.await()
-            if (!request.isCurrent) throw CancellationException("予定情報のセッションが変わりました")
-            return result as T
-        } finally {
-            mutex.withLock {
-                if (pending.isCompleted && requests[key] === pending) requests.remove(key)
-            }
-        }
-    }
 
     private suspend inline fun <reified T> loadEntryOrNull(key: String): FetchedCache<T>? = try {
         cache.loadEntry<T>(key)
@@ -143,5 +111,5 @@ internal class EventScheduleStore(
     }
 
     // 画面固有のテスト用Storeだけを破棄する。sharedは画面遷移で破棄しない。
-    fun close() { scope.cancel(); myEvents.close(); client.close() }
+    fun close() { cache.requests.afterRequests { myEvents.close(); client.close() } }
 }

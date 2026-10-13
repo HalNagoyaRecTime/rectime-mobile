@@ -169,6 +169,20 @@ class EventDetailViewModelTest {
     }
 
     @Test
+    fun cacheRestoredBeforeRefreshStartsIsVisibleWithoutWaitingForNetwork() = runTest(testDispatcher) {
+        Dispatchers.setMain(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler))
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(1, cache)
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/events/1"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("100m走", viewModel.uiState.value.eventDetail?.eventName)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
     fun freshEventBodyIsVisibleBeforeParticipationRequestCompletes() = runTest(testDispatcher) {
         val gate = CompletableDeferred<Unit>()
         val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/me/events"),

@@ -5,14 +5,14 @@ import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.FetchedCache
 import com.rectime.mobile.core.cache.PlatformKeyValueStore
+import com.rectime.mobile.core.network.HttpStatusException
+import io.ktor.http.HttpStatusCode
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.feature.schedule.EventResponse
 import com.rectime.mobile.feature.schedule.EventsResponse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
 
 // 一覧と詳細は別のViewModel・LocalCacheから呼ばれるため、保存先ごとに更新順を共有する。
 private val eventCacheMutex = Mutex()
@@ -20,6 +20,8 @@ private val eventCacheStates = mutableMapOf<Any, EventCacheState>()
 private object PlatformEventCacheKey
 private class EventCacheState(val generation: Int) {
     var revision = 0L
+    var listRevision = 0L
+    val invalidations = mutableMapOf<Int, Pair<Long, Exception>>()
     val writes = mutableMapOf<Int, EventCacheWrite>()
     val roundRevisions = mutableMapOf<Int, Long>()
 }
@@ -31,7 +33,6 @@ internal class EventCacheRequest internal constructor(
 )
 
 /** 一覧と詳細を新旧比較して共有する。詳細のラウンド情報は一覧の更新でも保持する。 */
-@OptIn(ExperimentalTime::class)
 internal class EventCache(private val cache: LocalCache) {
     private val key: Any = if (cache.store is PlatformKeyValueStore) PlatformEventCacheKey else cache.store
 
@@ -45,6 +46,19 @@ internal class EventCache(private val cache: LocalCache) {
     /** 通信開始前に保存順を記録する。同じ秒に更新された応答も、後から開始した取得結果を巻き戻さない。 */
     suspend fun beginRequest(): EventCacheRequest = eventCacheMutex.withLock {
         EventCacheRequest(++state().revision, CacheRequestGeneration())
+    }
+
+    suspend fun invalidateDetail(eventId: Int, error: Exception = HttpStatusException(HttpStatusCode.NotFound)) = eventCacheMutex.withLock {
+        val revision = ++state().revision
+        state().invalidations[eventId] = revision to error
+        state().listRevision = revision
+        try { cache.invalidate("event_detail_v1_$eventId") }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) { e.printStackTrace() }
+        val saved = loadEntryOrNull<EventsResponse>("schedule_events_v1") ?: return@withLock
+        val remaining = saved.data.events.filterNot { it.eventId == eventId }
+        saveOrIgnore("schedule_events_v1", saved.data.copy(events = remaining, total = remaining.size),
+            EventCacheRequest(revision, CacheRequestGeneration()), saved.fetchedAt)
     }
 
     suspend fun loadEvents(): EventsResponse? = loadEventsEntry()?.data
@@ -66,13 +80,16 @@ internal class EventCache(private val cache: LocalCache) {
         eventCacheMutex.withLock {
             if (!request.generation.isCurrent) return@withLock events
             val savedEvents = loadOrNull<EventsResponse>("schedule_events_v1")
-            val merged = events.copy(events = events.events.map { incoming ->
+            if (savedEvents != null && state().listRevision > request.revision) return@withLock savedEvents
+            val available = events.events.filterNot { (state().invalidations[it.eventId]?.first ?: 0L) > request.revision }
+            val merged = events.copy(total = available.size, events = available.map { incoming ->
                 val saved = savedDetail(incoming.eventId, savedEvents)?.data
-                if (saved != null && keepSaved(saved.updatedAt, incoming.updatedAt, incoming.eventId, request)) {
+                if (saved != null && keepSaved(incoming.eventId, request)) {
                     incoming.withDetail(saved)
                 } else incoming
             })
             if (persist && saveOrIgnore("schedule_events_v1", merged, request, cache.fetchedNow())) {
+                state().listRevision = request.revision
                 merged.events.forEach { recordWrite(it.eventId, detail = false, request) }
             }
             // 保存に失敗しても、通信結果と統合した内容は画面へ返す。
@@ -97,11 +114,12 @@ internal class EventCache(private val cache: LocalCache) {
     private suspend fun mergeDetail(detail: EventDetailResponse, request: EventCacheRequest, persist: Boolean): EventDetailResponse =
         eventCacheMutex.withLock {
             if (!request.generation.isCurrent) return@withLock detail
+            state().invalidations[detail.eventId]?.takeIf { it.first > request.revision }?.let { throw it.second }
             val savedEvents = loadEntryOrNull<EventsResponse>("schedule_events_v1")
             val events = savedEvents?.data
             val savedEntry = savedDetail(detail.eventId, events)
             val saved = savedEntry?.data
-            val retained = saved?.takeIf { keepSaved(it.updatedAt, detail.updatedAt, detail.eventId, request) }
+            val retained = saved?.takeIf { keepSaved(detail.eventId, request) }
             // ラウンドは詳細APIだけが返すため、一覧やEvent本体の更新時刻と比較しない。
             val keepRounds = detail.rounds == null ||
                 (state().roundRevisions[detail.eventId] ?: 0L) > request.revision
@@ -140,41 +158,20 @@ internal class EventCache(private val cache: LocalCache) {
             listed == null -> detailed
             detailed == null -> listed
             else -> {
-                val comparison = compareTime(detailed.updatedAt, listed.updatedAt)
-                when {
-                    comparison != null && comparison > 0 -> detailed
-                    comparison != null && comparison < 0 -> listed
-                    state().writes[eventId]?.detail == true -> detailed
-                    else -> listed
-                }
+                if (state().writes[eventId]?.detail == true) detailed else listed
             }
         } ?: return null
         // 一覧から本文を補っても、詳細APIの取得時刻を一覧の時刻で代用しない。
         return FetchedCache(value, saved?.fetchedAt)
     }
 
-    private fun keepSaved(savedAt: String?, incomingAt: String?, eventId: Int, request: EventCacheRequest): Boolean {
-        val comparison = compareTime(savedAt, incomingAt)
-        if (comparison != null && comparison != 0) return comparison > 0
-        // updated_atは秒単位で、旧キャッシュには存在しない場合もある。
-        // 判別できないときは、後から開始した取得の内容を優先する。
-        return (state().writes[eventId]?.revision ?: 0L) > request.revision
-    }
+    // updated_atはDB復元や集合だけの変更で単調増加しない。取得順だけで競合を防ぐ。
+    private fun keepSaved(eventId: Int, request: EventCacheRequest): Boolean =
+        (state().writes[eventId]?.revision ?: 0L) > request.revision
 
     private fun recordWrite(eventId: Int, detail: Boolean, request: EventCacheRequest) {
         val state = state()
         state.writes[eventId] = EventCacheWrite(maxOf(state.writes[eventId]?.revision ?: 0L, request.revision), detail)
-    }
-
-    private fun compareTime(first: String?, second: String?): Int? {
-        fun parse(value: String?): Instant? = value?.let {
-            // SQLiteのUTC日時とISO 8601の両方を比較できるようにする。
-            val normalized = if (it.matches(Regex("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}"))) it.replace(' ', 'T') + "Z" else it
-            runCatching { Instant.parse(normalized) }.getOrNull()
-        }
-        val a = parse(first) ?: return null
-        val b = parse(second) ?: return null
-        return a.compareTo(b)
     }
 
     private suspend inline fun <reified T> saveOrIgnore(key: String, value: T, request: EventCacheRequest, fetchedAt: String?): Boolean {
@@ -186,7 +183,7 @@ internal class EventCache(private val cache: LocalCache) {
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            false
+            request.generation.isCurrent
         }
     }
 
