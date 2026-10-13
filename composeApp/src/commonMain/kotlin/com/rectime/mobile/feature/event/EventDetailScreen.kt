@@ -204,6 +204,7 @@ private fun EventDetailContent(
             }
 
             if (gatherings.isNotEmpty()) {
+                EventRoundPreviews(event, gatherings, attendingGatheringIds)
                 DetailSection(heading = "集合時間・集合場所", onInfoClick = onOpenMap) {
                     GatheringList(
                         gatherings = gatherings,
