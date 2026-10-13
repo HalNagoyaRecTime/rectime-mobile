@@ -7,15 +7,14 @@ internal data class RoundDisplayTimes(
     val gatheringMinute: Int?,
 )
 
-/** 仮計算はUI検討時だけ。公開時は取得できた項目だけを表示する。 */
+/** 未取得の開始時刻は集合時刻から推測しない。 */
 internal fun resolveRoundDisplayTimes(
     gatheringTime: String?,
     startTime: String?,
-    prototype: Boolean,
 ): RoundDisplayTimes {
     val gathering = gatheringTime?.let(::minuteOf)
     return RoundDisplayTimes(
-        startMinute = startTime?.let(::minuteOf) ?: if (prototype) gathering?.plus(10) else null,
+        startMinute = startTime?.let(::minuteOf),
         gatheringMinute = gathering,
     )
 }

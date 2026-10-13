@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rectime.mobile.ui.graphics.drawTimelineSeparator
+import com.rectime.mobile.ui.component.TimelineTimeLabel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.event.EventDetailScreen
@@ -236,20 +237,7 @@ private fun ScheduleScreenUI(
 
                     repeat(totalHours + 1) { index ->
                         val y = topPadPx + (index * step) - lazyListState.firstVisibleItemScrollOffset
-                        drawRect(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    separatorLineColor.copy(alpha = 0.8f),
-                                    separatorLineColor.copy(alpha = 0.8f),
-                                    Color.Transparent
-                                ),
-                                startX = contentLeft,
-                                endX = size.width
-                            ),
-                            topLeft = Offset(contentLeft, y),
-                            size = Size(size.width - contentLeft, 1.dp.toPx())
-                        )
+                        drawTimelineSeparator(y, contentLeft, separatorLineColor)
                     }
                 }
 
@@ -397,20 +385,10 @@ private fun ScheduleScreenUI(
                                 val index = hour - hourStart
                                 val yOffset = step * index
 
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .offset(y = yOffset - 10.dp)
-                                        .padding(end = 6.dp),
-                                    contentAlignment = Alignment.TopEnd
-                                ) {
-                                    Text(
-                                        text = "$hour:00",
-                                        color = AppTheme.colors.textScheduleTimeBar,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Normal
-                                    )
-                                }
+                                TimelineTimeLabel(
+                                    text = "$hour:00",
+                                    modifier = Modifier.fillMaxWidth().offset(y = yOffset - 10.dp),
+                                )
                             }
                         }
                     }

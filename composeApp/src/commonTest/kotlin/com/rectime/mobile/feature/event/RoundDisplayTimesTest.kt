@@ -4,23 +4,23 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class RoundDisplayTimesTest {
-    @Test fun prototypeSeparatesStartAndGathering() {
-        assertEquals(RoundDisplayTimes(670, 660), resolveRoundDisplayTimes("1100", null, prototype = true))
+    @Test fun missingStartIsNeverInferredFromGathering() {
+        assertEquals(RoundDisplayTimes(null, 660), resolveRoundDisplayTimes("1100", null))
     }
 
     @Test fun publishedDisplayDoesNotInventMissingTimes() {
-        val times = resolveRoundDisplayTimes("1100", null, prototype = false)
+        val times = resolveRoundDisplayTimes("1100", null)
         assertEquals(RoundDisplayTimes(null, 660), times)
     }
 
-    @Test fun receivedTimesOverridePrototypeOffsets() {
-        assertEquals(RoundDisplayTimes(680, 660), resolveRoundDisplayTimes("1100", "1120", prototype = true))
+    @Test fun receivedStartAndGatheringRemainIndependent() {
+        assertEquals(RoundDisplayTimes(680, 660), resolveRoundDisplayTimes("1100", "1120"))
     }
 
     @Test fun missingGatheringDoesNotHideReceivedStart() {
-        val times = resolveRoundDisplayTimes("99:59", "0900", prototype = false)
+        val times = resolveRoundDisplayTimes("99:59", "0900")
         assertEquals(RoundDisplayTimes(540, null), times)
-        assertEquals(RoundDisplayTimes(null, null), resolveRoundDisplayTimes(null, null, prototype = true))
+        assertEquals(RoundDisplayTimes(null, null), resolveRoundDisplayTimes(null, null))
     }
     @Test fun displayedTimesDoNotPadHours() {
         assertEquals("9:00", displayMinute(540))
