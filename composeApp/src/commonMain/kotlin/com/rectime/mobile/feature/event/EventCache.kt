@@ -177,7 +177,7 @@ internal class EventCache(private val cache: LocalCache) {
         return FetchedCache(value, saved?.fetchedAt)
     }
 
-    private suspend fun loadInvalidatedIds(): Set<Int> = cache.load<Set<Int>>(InvalidatedEventsKey).orEmpty()
+    private suspend fun loadInvalidatedIds(): Set<Int> = loadOrNull<Set<Int>>(InvalidatedEventsKey).orEmpty()
 
     // updated_atはDB復元や集合だけの変更で単調増加しない。取得順だけで競合を防ぐ。
     private fun keepSaved(eventId: Int, request: EventCacheRequest): Boolean =
