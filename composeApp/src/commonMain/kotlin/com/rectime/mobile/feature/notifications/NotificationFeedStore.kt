@@ -46,7 +46,7 @@ class NotificationFeedStore(
     private var total = NotificationHistoryLimit
     private var visibleCount = NotificationPageSize
     private var verifiedCount = 0
-    private val detailUpdates = mutableMapOf<Int, UserNotification>()
+    private val updateOrder = NotificationUpdateOrder(cache)
     private val mutex = Mutex()
     private var inFlight: Deferred<CachedFetchResult<List<UserNotification>>>? = null
     private var pageInFlight: Deferred<Unit>? = null
@@ -104,11 +104,11 @@ class NotificationFeedStore(
             // 未読バッジ・一覧・手動更新が同時に要求された場合は、進行中の同じ取得を共有する。
             val request = CacheRequestGeneration()
             val requestRevision = revision
+            val contentRequest = updateOrder.beginRequest()
             inFlight?.takeIf { it.isActive } ?: async {
                 if (!request.isCurrent || requestRevision != revision) {
                     return@async request.validate(CachedFetchResult.Failed(IllegalStateException("通知の取得が取り消されました")))
                 }
-                detailUpdates.clear()
                 lastResult = null
                 _status.value = _status.value.copy(isUpdating = true, error = null, pageError = null)
                 val result = try {
@@ -118,7 +118,7 @@ class NotificationFeedStore(
                                 gateway.getNotifications(limit = NotificationHistoryLimit, offset = 0)
                             }
                             val received = page.notifications.take(NotificationHistoryLimit)
-                            val newest = applyDetailUpdates(received.distinctBy { it.id })
+                            val newest = updateOrder.acceptList(received.distinctBy { it.id }, contentRequest)
                             val previousVisible = _cachedNotifications.value.orEmpty()
                             val values = if (visibleCount > NotificationHistoryLimit && received.isNotEmpty() && received.size < page.total) {
                                 // 画面に出した履歴は残し、次の無限スクロールで順番に再検証する。
@@ -141,7 +141,7 @@ class NotificationFeedStore(
                                 _notifications.value.takeIf { _cachedNotifications.value != null }
                             }
                         },
-                        saveCache = { history.saveList(applyDetailUpdates(it)) },
+                        saveCache = { history.saveList(applyDetailUpdates(it), contentRequest = contentRequest) },
                         invalidateCache = { cache.invalidate("notifications_v1") },
                         onCached = {
                             if (request.isCurrent && requestRevision == revision) {
@@ -219,6 +219,7 @@ class NotificationFeedStore(
             if (_status.value.isOffline) return@coroutineScope
             val request = CacheRequestGeneration()
             val requestRevision = revision
+            val contentRequest = updateOrder.beginRequest()
             _status.value = _status.value.copy(isLoadingMore = true, pageError = null)
             // 通信中はロックを保持せず、ログアウト・ユーザー切り替えを即時に受け付ける。
             async {
@@ -226,7 +227,6 @@ class NotificationFeedStore(
                     if (requestRevision == revision) clearMemory()
                     return@async
                 }
-                detailUpdates.clear()
                 try {
                     // オンラインの無限スクロールは保存先の状態に依存させない。
                     val page = cache.requests.run("notifications_page:$nextOffset:$NotificationPageSize") {
@@ -238,7 +238,7 @@ class NotificationFeedStore(
                     }
                     total = page.total.coerceAtLeast(0)
                     val received = page.notifications.take(NotificationPageSize)
-                    val values = applyDetailUpdates(received)
+                    val values = updateOrder.acceptList(received, contentRequest)
                     val followingOffset = nextOffset + received.size
                     // APIで確認した先頭部分の後ろに挿入し、保持している履歴より前の欠落を埋める。
                     val updates = values.associateBy { it.id }
@@ -249,7 +249,7 @@ class NotificationFeedStore(
                     try {
                         // 最新100件だけ保存し、それより古い取得分は永続化しない。
                         // 追加ページの取得で、先頭一覧の取得時刻を新しくしない。
-                        history.saveList(applyDetailUpdates(combined), refreshFetchedAt = false)
+                        history.saveList(applyDetailUpdates(combined), refreshFetchedAt = false, contentRequest = contentRequest)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -292,21 +292,21 @@ class NotificationFeedStore(
     internal fun findNotification(id: Int): UserNotification? =
         if (session.isCurrent) _notifications.value.firstOrNull { it.id == id } else null
 
-    internal fun removeNotification(id: Int) {
-        detailUpdates.remove(id)
+    internal fun removeNotification(id: Int, contentRequest: Long? = null) {
+        if (!updateOrder.remove(id, contentRequest ?: updateOrder.beginRequest())) return
         publish(_notifications.value.filterNot { it.id == id })
     }
 
     internal fun updateNotification(notification: UserNotification) {
         if (!session.isCurrent) return
-        detailUpdates[notification.id] = notification
+        updateOrder.acceptDetail(notification, updateOrder.beginRequest())
         if (_notifications.value.none { it.id == notification.id }) return
         publish(_notifications.value.map { if (it.id == notification.id) notification else it })
     }
 
     // 通信開始後に詳細で取得できた内容を、遅い一覧応答で古い内容に戻さない。
     private fun applyDetailUpdates(values: List<UserNotification>): List<UserNotification> =
-        values.map { notification -> detailUpdates[notification.id] ?: notification }
+        updateOrder.reconcile(values)
 
     private fun publish(notifications: List<UserNotification>) {
         _notifications.value = notifications
@@ -331,7 +331,6 @@ class NotificationFeedStore(
         total = NotificationHistoryLimit
         visibleCount = NotificationPageSize
         verifiedCount = 0
-        detailUpdates.clear()
         _status.value = NotificationFeedStatus()
     }
 

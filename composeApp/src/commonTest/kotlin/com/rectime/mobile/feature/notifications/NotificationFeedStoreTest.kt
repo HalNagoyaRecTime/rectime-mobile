@@ -7,6 +7,8 @@ import com.rectime.mobile.core.cache.LocalCache
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.Dispatchers
@@ -179,6 +181,93 @@ class NotificationFeedStoreTest {
         store.load()
 
         assertTrue(gateway.requestedOffsets.size > callsAfterFirstLoad)
+    }
+
+    @Test
+    fun deletedNotificationCannotReturnFromAnOlderInflightList() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val store = NotificationFeedStore(FakeGateway { limit, offset ->
+            gate.await(); page(listOf(notification(1)), 1, limit, offset)
+        }, cache)
+        val loading = async { store.load(force = true) }
+        runCurrent()
+        store.removeNotification(1)
+        gate.complete(Unit)
+        loading.await()
+        assertTrue(store.notifications.value.isEmpty())
+        assertEquals(emptyList(), cache.load<List<UserNotification>>("notifications_v1"))
+    }
+
+    @Test
+    fun newerListPreventsDelayedDetailFromRollingBackSharedContent() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val old = notification(1)
+        val fresh = old.copy(body = "更新後")
+        val gateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int) = page(listOf(fresh), 1, limit, offset)
+            override suspend fun getNotification(notificationId: Int): UserNotification { gate.await(); return old }
+        }
+        val feed = NotificationFeedStore(gateway, cache)
+        val detail = NotificationDetailViewModel(1, gateway = gateway, cache = cache, refreshOnOpen = true, feedStore = feed)
+        try {
+            runCurrent()
+            feed.load(force = true)
+            gate.complete(Unit)
+            runCurrent()
+            assertEquals("更新後", detail.uiState.value.notification?.body)
+            assertEquals("更新後", feed.notifications.value.single().body)
+            assertEquals("更新後", cache.load<List<UserNotification>>("notifications_v1")?.single()?.body)
+        } finally { detail.viewModelScope.cancel() }
+    }
+
+    @Test
+    fun newerListPreventsDelayedNotFoundFromRemovingReconfirmedNotification() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val old = notification(1)
+        val fresh = old.copy(body = "更新後")
+        val gateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int) = page(listOf(fresh), 1, limit, offset)
+            override suspend fun getNotification(notificationId: Int): UserNotification { gate.await(); throw com.rectime.mobile.core.network.HttpStatusException(io.ktor.http.HttpStatusCode.NotFound) }
+        }
+        val feed = NotificationFeedStore(gateway, cache)
+        val detail = NotificationDetailViewModel(1, gateway = gateway, cache = cache, refreshOnOpen = true, feedStore = feed)
+        try {
+            runCurrent()
+            feed.load(force = true)
+            gate.complete(Unit)
+            runCurrent()
+            assertEquals("更新後", detail.uiState.value.notification?.body)
+            assertEquals("更新後", feed.notifications.value.single().body)
+            assertEquals("更新後", cache.load<List<UserNotification>>("notifications_v1")?.single()?.body)
+        } finally { detail.viewModelScope.cancel() }
+    }
+
+    @Test
+    fun joiningAnOlderDetailRequestDoesNotMakeItsResponseNewerThanTheList() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val old = notification(1)
+        val fresh = old.copy(body = "更新後")
+        var calls = 0
+        val gateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int) = page(listOf(fresh), 1, limit, offset)
+            override suspend fun getNotification(notificationId: Int): UserNotification { calls++; gate.await(); return old }
+        }
+        val feed = NotificationFeedStore(gateway, cache)
+        val first = NotificationDetailViewModel(1, gateway = gateway, cache = cache, refreshOnOpen = true, feedStore = feed)
+        runCurrent()
+        feed.load(force = true)
+        val second = NotificationDetailViewModel(1, gateway = gateway, cache = cache, refreshOnOpen = true, feedStore = feed)
+        try {
+            runCurrent(); gate.complete(Unit); runCurrent()
+            assertEquals(1, calls)
+            assertEquals("更新後", first.uiState.value.notification?.body)
+            assertEquals("更新後", second.uiState.value.notification?.body)
+            assertEquals("更新後", cache.load<List<UserNotification>>("notifications_v1")?.single()?.body)
+        } finally { first.viewModelScope.cancel(); second.viewModelScope.cancel() }
     }
 
     private fun page(

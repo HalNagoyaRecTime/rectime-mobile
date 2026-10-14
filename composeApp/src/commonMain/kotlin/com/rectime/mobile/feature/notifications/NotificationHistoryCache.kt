@@ -16,6 +16,7 @@ internal fun notificationDetailCacheKey(id: Int) = "notification_detail_v1_$id"
 
 // 一覧と詳細で同じ保存先を使い、詳細を開くたびに保存件数が増え続けるのを防ぐ。
 internal class NotificationHistoryCache(private val cache: LocalCache) {
+    private val updateOrder = NotificationUpdateOrder(cache)
     suspend fun load(): List<UserNotification>? = loadEntry()?.data
 
     suspend fun loadEntry(): FetchedCache<List<UserNotification>>? {
@@ -23,7 +24,7 @@ internal class NotificationHistoryCache(private val cache: LocalCache) {
         return historyMutex.withLock {
             val saved = cache.loadEntry<List<UserNotification>>(HistoryCacheKey) ?: return@withLock null
             val old = saved.data
-            val bounded = old.distinctBy { it.id }.take(NotificationHistoryLimit)
+            val bounded = updateOrder.reconcile(old).distinctBy { it.id }.take(NotificationHistoryLimit)
             if (bounded.size != old.size && request.isCurrent) {
                 try {
                     cache.saveEntry(HistoryCacheKey, bounded, saved.fetchedAt)
@@ -37,13 +38,13 @@ internal class NotificationHistoryCache(private val cache: LocalCache) {
         }
     }
 
-    suspend fun saveList(values: List<UserNotification>, refreshFetchedAt: Boolean = true) {
+    suspend fun saveList(values: List<UserNotification>, refreshFetchedAt: Boolean = true, contentRequest: Long = updateOrder.beginRequest()) {
         val request = CacheRequestGeneration()
         historyMutex.withLock {
             val fetchedAt = if (refreshFetchedAt) cache.fetchedNow()
                 else cache.loadEntry<List<UserNotification>>(HistoryCacheKey)?.fetchedAt
             if (request.isCurrent) {
-                val bounded = values.distinctBy { it.id }.take(NotificationHistoryLimit)
+                val bounded = updateOrder.acceptList(values, contentRequest).distinctBy { it.id }.take(NotificationHistoryLimit)
                 // 開いている詳細も一覧の更新を受け取る。全件分の詳細キャッシュは作らない。
                 bounded.forEach { notification ->
                     val key = notificationDetailCacheKey(notification.id)
@@ -54,15 +55,17 @@ internal class NotificationHistoryCache(private val cache: LocalCache) {
         }
     }
 
-    suspend fun saveDetail(notification: UserNotification) {
+    suspend fun saveDetail(notification: UserNotification, contentRequest: Long = updateOrder.beginRequest()) {
         val request = CacheRequestGeneration()
         historyMutex.withLock {
-            if (request.isCurrent) cache.saveMemory(notificationDetailCacheKey(notification.id), notification)
+            if (!request.isCurrent) return@withLock
+            val accepted = updateOrder.acceptDetail(notification, contentRequest) ?: return@withLock
+            if (request.isCurrent) cache.saveMemory(notificationDetailCacheKey(notification.id), accepted)
             val saved = cache.loadEntry<List<UserNotification>>(HistoryCacheKey)
             val old = saved?.data.orEmpty()
             // 最新100件の一覧に含まれる通知だけ更新する。個別取得では順位を確定できない。
             if (old.none { it.id == notification.id }) return@withLock
-            val values = old.map { if (it.id == notification.id) notification else it }
+            val values = old.map { if (it.id == notification.id) accepted else it }
             if (request.isCurrent) cache.saveEntry(HistoryCacheKey, values.distinctBy { it.id }.take(NotificationHistoryLimit), saved?.fetchedAt)
         }
     }
