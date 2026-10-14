@@ -15,6 +15,7 @@ struct RecreationActivityAttributes: ActivityAttributes {
         let end: Date
         let rounds: [Round]
         let roundCount: Int
+        let timelineRounds: [Round]?
     }
     struct Gathering: Codable, Hashable {
         let eventId: Int
@@ -24,6 +25,8 @@ struct RecreationActivityAttributes: ActivityAttributes {
         let time: Date
         let spot: String
         let roundStart: Date?
+        let venue: String?
+        let eventEnd: Date?
     }
     struct ContentState: Codable, Hashable {
         let accountId: String
@@ -35,6 +38,10 @@ struct RecreationActivityAttributes: ActivityAttributes {
         let fetchedAt: Date?
         let isCached: Bool
         let notice: String
+        let remainingGatheringCount: Int?
+        let personalState: String?
+        let presentationUntil: Date?
+        let displayMode: String?
     }
     let accountId: String
 }

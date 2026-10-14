@@ -33,6 +33,7 @@ internal data class LiveMatch(
     val end: Long,
     val rounds: List<LiveRound> = emptyList(),
     val roundCount: Int = 0,
+    val timelineRounds: List<LiveRound> = emptyList(),
 )
 
 @Serializable
@@ -44,6 +45,8 @@ internal data class LiveGathering(
     val time: Long,
     val spot: String,
     val roundStart: Long?,
+    val venue: String = "",
+    val eventEnd: Long? = null,
 )
 
 @Serializable
@@ -57,6 +60,10 @@ internal data class LiveActivityState(
     val fetchedAt: Long?,
     val isCached: Boolean,
     val notice: String = LiveActivityNotice,
+    val remainingGatheringCount: Int? = null,
+    val personalState: String = "unknown",
+    val presentationUntil: Long? = null,
+    val displayMode: String = "schedule",
 )
 
 /** 開催日はAPI値だけを使う。端末の今日へ毎日読み替えない。時刻は詳細と同じHHmm/HH:mmの解釈を使う。 */
@@ -98,9 +105,10 @@ internal fun buildLiveActivityState(
         val latestStarted = markers.filter { it.start != null && it.start <= now }.maxByOrNull { it.start!! }
         val preferred = (upcomingOwn + listOfNotNull(latestStarted) + markers.filter { it.start != null && it.start > now }.take(2) +
             markers.takeLast(1) + markers.take(1) + markers).distinctBy { it.number }.take(7).sortedBy { it.number }
+        val timelineMarkers = (preferred + markers).distinctBy { it.number }.take(24).sortedBy { it.number }
         LiveMatch(event.eventId, event.eventName.activityText(60), venueDisplayText(event.venues.map { it.toModel() }).activityText(40),
             requireNotNull(activityTime(schedule.eventDate, event.startTime)), requireNotNull(activityTime(schedule.eventDate, event.endTime)),
-            preferred, rounds.size)
+            preferred, rounds.size, timelineMarkers)
     }.distinctBy { it.id }.sortedWith(compareBy<LiveMatch> { it.start }.thenBy { it.id })
     val active = matches.filter { it.start <= now && now < it.end }
         .sortedWith(compareBy<LiveMatch> { it.id !in own }.thenBy { it.start }.thenBy { it.id })
@@ -112,7 +120,7 @@ internal fun buildLiveActivityState(
                 // 過去の集合は開始予定まで保持する。親ラウンドが開始済みでも未来の集合は消さない。
                 if (time > now + LiveActivityHorizonSeconds || (time < now && (roundStart ?: event.end) <= now)) return@mapNotNull null
                 LiveGathering(event.id, event.title, gathering.gatheringId, round.round, time,
-                    gathering.gatheringSpot.name.activityText(60), roundStart)
+                    gathering.gatheringSpot.name.activityText(60), roundStart, event.venue, event.end)
             }
         }
     }.distinctBy { it.number }
@@ -125,8 +133,45 @@ internal fun buildLiveActivityState(
     // サーバー側の変更は自動検出できないので、境界か取得から15分で「更新待ち」にする。
     val freshnessEnd = fetchedAt?.plus(15 * 60) ?: now
     val until = minOf(boundaries.filter { it > now }.minOrNull() ?: now + LiveActivityHorizonSeconds, freshnessEnd)
-    return LiveActivityState(accountId, active.take(3), active.size, next, upcoming?.copy(rounds = emptyList()),
-        until, fetchedAt, isCached || freshnessEnd <= now)
+    // 全本人イベントの詳細が揃うまでは「予定なし」や残件数を断定しない。
+    val personalKnown = participation != null && own.keys.all { id ->
+        details[id]?.rounds != null && schedule.events.any { it.eventId == id }
+    }
+    val pendingOwnIds = if (personalKnown) details.flatMap { (eventId, detail) ->
+        val event = schedule.events.firstOrNull { it.eventId == eventId }
+        val end = event?.let { activityTime(schedule.eventDate, it.endTime) }
+        detail.rounds.orEmpty().flatMap { round ->
+            val start = activityTime(schedule.eventDate, round.startTime)
+            round.gatherings.mapNotNull { gathering ->
+                if (gathering.gatheringId !in own[eventId].orEmpty()) return@mapNotNull null
+                val time = activityTime(schedule.eventDate, gathering.gatheringTime) ?: return@mapNotNull null
+                gathering.gatheringId.takeIf { end != null && end > now && (time >= now || (start ?: end) > now) }
+            }
+        }
+    }.toSet() else emptySet()
+    val personalState = when {
+        participation == null -> "unknown"
+        own.isEmpty() -> "none"
+        !personalKnown -> "unknown"
+        pendingOwnIds.isEmpty() -> "noUpcoming"
+        else -> "available"
+    }
+    // 主表示以外のラウンドを抑え、詳細な丸とActivityKitの容量上限を両立する。
+    val displayed = active.take(3).mapIndexed { index, match ->
+        if (index == 0) match else match.copy(timelineRounds = emptyList())
+    }
+    val nextEvent = upcoming?.let { match ->
+        match.copy(rounds = emptyList(), timelineRounds = if (active.isEmpty()) match.timelineRounds else emptyList())
+    }
+    val presentationUntil = listOfNotNull(
+        (displayed.firstOrNull() ?: nextEvent)?.end,
+        next?.let { gathering -> gathering.roundStart?.takeIf { it > gathering.time } ?: gathering.eventEnd },
+    ).minOrNull()
+    return LiveActivityState(accountId, displayed, active.size, next, nextEvent,
+        until, fetchedAt, isCached || freshnessEnd <= now,
+        remainingGatheringCount = if (personalKnown && next != null) (pendingOwnIds.size - 1).coerceAtLeast(0) else null,
+        personalState = personalState,
+        presentationUntil = presentationUntil)
 }
 
 internal fun activitySummaryLines(state: LiveActivityState): List<String> = buildList {
@@ -157,4 +202,29 @@ private fun String.activityText(limit: Int): String = take(limit).let { text ->
 
 // Swift側で必須の既定値・空配列も省略せず、同じOS間契約を使う。
 private val liveActivityJson = Json { encodeDefaults = true }
-internal fun encodeLiveActivityState(state: LiveActivityState): String = liveActivityJson.encodeToString(state)
+internal fun encodeLiveActivityState(state: LiveActivityState): String {
+    // Swiftで再エンコードする属性分も残し、丸の追加で4KBを超えないよう表示だけを絞る。
+    var display = state
+    var encoded = liveActivityJson.encodeToString(display)
+    while (encoded.encodeToByteArray().size > 3_500) {
+        display = when {
+            display.matches.size > 1 -> display.copy(matches = display.matches.dropLast(1))
+            display.matches.firstOrNull()?.timelineRounds.orEmpty().size > 2 -> {
+                val match = display.matches.first()
+                val markers = trimTimelineMarkers(match.timelineRounds)
+                display.copy(matches = listOf(match.copy(timelineRounds = markers)))
+            }
+            display.nextEvent?.timelineRounds.orEmpty().size > 2 -> {
+                val event = requireNotNull(display.nextEvent)
+                display.copy(nextEvent = event.copy(timelineRounds = trimTimelineMarkers(event.timelineRounds)))
+            }
+            else -> break
+        }
+        encoded = liveActivityJson.encodeToString(display)
+    }
+    return encoded
+}
+
+private fun trimTimelineMarkers(markers: List<LiveRound>): List<LiveRound> =
+    (markers.filter { it.participating }.take(2) + markers.take(1) + markers.takeLast(1) + markers)
+        .distinctBy { it.number }.take(markers.size - 1).sortedBy { it.number }

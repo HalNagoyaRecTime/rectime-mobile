@@ -74,7 +74,8 @@ final class LiveActivityCoordinator {
             else { await activity.end(nil, dismissalPolicy: .immediate) }
         }
         guard version == revision else { return }
-        let content = ActivityContent(state: state, staleDate: state.validUntil)
+        // 取得から15分ではなく、このカードが案内できる予定の区切りで再確認を促す。
+        let content = ActivityContent(state: state, staleDate: state.presentationUntil ?? state.validUntil)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
         let date = calendar.startOfDay(for: state.nextEvent?.start ?? state.matches.first?.start ?? state.nextGathering?.time ?? Date())
