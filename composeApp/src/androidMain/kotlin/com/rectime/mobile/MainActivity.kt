@@ -33,12 +33,17 @@ import com.rectime.mobile.feature.notifications.createAndroidNotificationPermiss
 import com.rectime.mobile.feature.splash.RecreationSplashView
 import com.rectime.mobile.ui.component.ImageSaveViewModel
 import com.rectime.mobile.ui.component.LocalImageSaveLauncher
+import com.rectime.mobile.ui.component.LocalAttachmentSaveLauncher
 
 class MainActivity : ComponentActivity() {
     private val imageSaveViewModel: ImageSaveViewModel by viewModels()
     // ビューアの表示有無にかかわらず、同じ順序で毎回登録して保存結果を受け取る。
     private val imageSaveLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("image/png"),
+    ) { uri -> imageSaveViewModel.complete(applicationContext, uri) }
+
+    private val attachmentSaveLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/pdf"),
     ) { uri -> imageSaveViewModel.complete(applicationContext, uri) }
 
     private var showSplash by mutableStateOf(true)
@@ -79,7 +84,14 @@ class MainActivity : ComponentActivity() {
         RectimeNotificationChannel.create(this)
 
         setContent {
-            CompositionLocalProvider(LocalImageSaveLauncher provides { file ->
+            CompositionLocalProvider(LocalAttachmentSaveLauncher provides { file, name ->
+                if (imageSaveViewModel.begin(file)) {
+                    runCatching { attachmentSaveLauncher.launch(name); true }.getOrElse {
+                        imageSaveViewModel.cancel()
+                        false
+                    }
+                } else false
+            }, LocalImageSaveLauncher provides { file ->
                 if (imageSaveViewModel.begin(file)) {
                     runCatching { imageSaveLauncher.launch("image.png") }.onFailure {
                         imageSaveViewModel.cancel()

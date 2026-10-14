@@ -132,10 +132,14 @@ class LocalCache(
     suspend fun clearAll() {
         val memory = memory()
         CacheGeneration.bump()
-        // 消去に失敗した保存先から、次のユーザーへ旧データを復元しない。
-        memory.mutex.withLock {
-            store.clear()
-            memory.ignoreSaved = false
+        try {
+            com.rectime.mobile.core.attachment.AttachmentCaches.clearAll()
+        } finally {
+            // 添付の消去失敗でも、APIデータの消去は試みる。
+            memory.mutex.withLock {
+                store.clear()
+                memory.ignoreSaved = false
+            }
         }
     }
 }
