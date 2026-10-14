@@ -86,7 +86,10 @@ fun ImageViewerDialog(
     Dialog(onDismissRequest = { closeRequested = true }, properties = imageViewerDialogProperties()) {
         ModalScrimController(dimAmount = 0f)
         ImageViewerWindowController()
-        val painter = rememberCachedImagePainter(imageUrl)
+        var retryAttempt by remember(imageUrl) { mutableStateOf(0) }
+        val downloadProgress = remember(imageUrl) { kotlinx.coroutines.flow.MutableStateFlow(com.rectime.mobile.core.attachment.AttachmentProgress()) }
+        val received by downloadProgress.collectAsState()
+        val painter = rememberCachedImagePainter(imageUrl, attempt = retryAttempt, progress = downloadProgress)
         val state by painter.state.collectAsState()
         val openActions = rememberImageActions()
         val scope = rememberCoroutineScope()
@@ -123,10 +126,10 @@ fun ImageViewerDialog(
                 state is AsyncImagePainter.State.Error -> Text(
                     text = "再読み込み",
                     color = Color.White,
-                    modifier = Modifier.clickable { painter.restart() },
+                    modifier = Modifier.clickable { retryAttempt++ },
                 )
                 state is AsyncImagePainter.State.Empty || state is AsyncImagePainter.State.Loading ->
-                    Text("読み込み中", color = Color.White)
+                    Text(received.total?.takeIf { it > 0 }?.let { "読み込み中 ${received.bytes * 100 / it}%" } ?: "読み込み中", color = Color.White)
             }
         }
     }

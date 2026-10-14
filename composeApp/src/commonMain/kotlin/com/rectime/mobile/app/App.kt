@@ -18,17 +18,12 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
-import coil3.disk.DiskCache
-import coil3.network.cachecontrol.CacheControlCacheStrategy
-import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
 import com.rectime.mobile.core.haptics.HapticPreference
 import com.rectime.mobile.core.haptics.HapticCapability
 import com.rectime.mobile.core.haptics.LocalHapticPreference
-import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
-import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
@@ -48,7 +43,6 @@ import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
-import okio.Path.Companion.toPath
 import kotlinx.coroutines.launch
 
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
@@ -73,30 +67,16 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
 
     LaunchedEffect(Unit) { HapticCapability.load() }
 
+    val attachmentContext = coil3.compose.LocalPlatformContext.current
+    remember(attachmentContext) {
+        com.rectime.mobile.core.attachment.AttachmentCaches.configure(getCacheDir(attachmentContext) + "/attachments")
+        Unit
+    }
+    // リモート画像の本体は添付キャッシュで取得する。Coilはローカルファイルの描画のみ。
     setSingletonImageLoaderFactory { context ->
-        ImageLoader.Builder(context)
-            .components {
-                add(
-                    KtorNetworkFetcherFactory(
-                        httpClient = {
-                            createHttpClient().config {
-                                install(MobileAuthHeadersPlugin)
-                            }
-                        },
-                        // 既定のCacheStrategyはディスクキャッシュがあれば無条件に返すため、
-                        // 差し替えた画像が二度と反映されない。Cache-ControlとETagを見て
-                        // 再検証させる。
-                        cacheStrategy = { CacheControlCacheStrategy() },
-                    )
-                )
-            }
-            .diskCache {
-                DiskCache.Builder()
-                    .directory((getCacheDir(context) + "/image_cache").toPath())
-                    .maxSizePercent(0.02)
-                    .build()
-            }
-            .build()
+        ImageLoader.Builder(context).diskCache(null).build().also { loader ->
+            com.rectime.mobile.core.attachment.AttachmentCaches.clearImageMemory = { loader.memoryCache?.clear() }
+        }
     }
 
     val navigationController = remember { NavigationController() }

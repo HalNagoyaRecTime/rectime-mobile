@@ -11,6 +11,14 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.findRootCoordinates
+import com.rectime.mobile.core.attachment.attachmentKind
+import com.rectime.mobile.core.attachment.AttachmentKind
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +74,14 @@ fun AppMarkdown(
     bodyStyle: TextStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
 ) {
     var selectedImage by remember(content) { mutableStateOf<Pair<String, String?>?>(null) }
+    var selectedDocument by remember(content) { mutableStateOf<String?>(null) }
+    val originalUriHandler = LocalUriHandler.current
+    val attachmentUriHandler = remember(originalUriHandler, content) { object : UriHandler {
+        override fun openUri(uri: String) {
+            if ((uri.startsWith("https://") || uri.startsWith("http://")) && attachmentKind(uri) == AttachmentKind.PDF) selectedDocument = uri
+            else originalUriHandler.openUri(uri)
+        }
+    } }
     val body = bodyStyle
     val markdownState = rememberMarkdownState(content)
     val markdownBackground = MaterialTheme.colorScheme.onBackground.copy(alpha = .1f)
@@ -74,12 +90,19 @@ fun AppMarkdown(
         override fun transform(link: String): ImageData? {
             val url = runCatching { Url(link) }.getOrNull()
             if (url == null || url.host.isBlank() || url.protocol.name !in setOf("https", "http")) return null
-            val painter = rememberCachedImagePainter(link)
+            var requested by remember(link) { mutableStateOf(false) }
+            val painter = rememberCachedImagePainter(link, requested)
             return ImageData(
                 painter = painter,
                 contentDescription = imageTitle ?: "説明画像",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp, max = 360.dp)
+                    .onGloballyPositioned { coordinates ->
+                        val bounds = coordinates.boundsInWindow(clipBounds = false)
+                        val height = coordinates.findRootCoordinates().size.height
+                        // 表示後は保持し、スクロール外で画像の高さが変わるのを防ぐ。
+                        if (bounds.bottom > -160f && bounds.top < height + 160f) requested = true
+                    }
                     .clickable(onClickLabel = "画像を拡大") {
                         selectedImage = link to imageTitle
                     },
@@ -95,68 +118,71 @@ fun AppMarkdown(
             return painter.intrinsicSize
         }
     }
-    SelectionContainer {
-        Markdown(
-            markdownState = markdownState,
-            modifier = modifier.fillMaxWidth(),
-            colors = markdownColor(
-                text = AppTheme.colors.textDetailsScreenBody,
-                codeBackground = markdownBackground,
-                inlineCodeBackground = markdownBackground,
-                tableBackground = markdownBackground,
-            ),
-            dimens = markdownDimens(
-                tableCornerSize = MarkdownBlockCornerSize,
-                codeBackgroundCornerSize = MarkdownBlockCornerSize,
-                tableCellPadding = 12.dp,
-            ),
-            components = markdownComponents(checkbox = { model ->
-                // 表のカスタマイズ時も、Materialの閲覧専用チェックボックスを維持する。
-                MarkdownCheckBox(model.content, model.node, model.typography.text,
-                    checkedIndicator = { checked, indicatorModifier ->
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = null,
-                            modifier = indicatorModifier.semantics {
-                                role = Role.Checkbox
-                                stateDescription = if (checked) "チェック済み" else "未チェック"
-                            },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = AppTheme.colors.themeColorSecond,
-                                checkmarkColor = AppTheme.colors.textThemeColorSecond,
-                            ),
-                        )
-                    },
-                )
-            }, table = { model ->
-                // 背景だけでなくスクロールする内容も同じ角丸で切り抜く。
-                Box(Modifier.clip(RoundedCornerShape(MarkdownBlockCornerSize))) {
-                    MarkdownTable(model.content, model.node, model.typography.table,
-                        headerBlock = { text, node, width, style ->
-                            MarkdownTableHeader(text, node, width, style, maxLines = Int.MAX_VALUE, overflow = TextOverflow.Clip)
-                        },
-                        rowBlock = { text, node, width, style ->
-                            MarkdownTableRow(text, node, width, style, maxLines = Int.MAX_VALUE, overflow = TextOverflow.Clip)
+    CompositionLocalProvider(LocalUriHandler provides attachmentUriHandler) {
+        SelectionContainer {
+            Markdown(
+                markdownState = markdownState,
+                modifier = modifier.fillMaxWidth(),
+                colors = markdownColor(
+                    text = AppTheme.colors.textDetailsScreenBody,
+                    codeBackground = markdownBackground,
+                    inlineCodeBackground = markdownBackground,
+                    tableBackground = markdownBackground,
+                ),
+                dimens = markdownDimens(
+                    tableCornerSize = MarkdownBlockCornerSize,
+                    codeBackgroundCornerSize = MarkdownBlockCornerSize,
+                    tableCellPadding = 12.dp,
+                ),
+                components = markdownComponents(checkbox = { model ->
+                    // 表のカスタマイズ時も、Materialの閲覧専用チェックボックスを維持する。
+                    MarkdownCheckBox(model.content, model.node, model.typography.text,
+                        checkedIndicator = { checked, indicatorModifier ->
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = null,
+                                modifier = indicatorModifier.semantics {
+                                    role = Role.Checkbox
+                                    stateDescription = if (checked) "チェック済み" else "未チェック"
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = AppTheme.colors.themeColorSecond,
+                                    checkmarkColor = AppTheme.colors.textThemeColorSecond,
+                                ),
+                            )
                         },
                     )
-                }
-            }),
-            typography = markdownTypography(
-                text = body, paragraph = body, ordered = body, bullet = body, list = body,
-                h1 = body.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold),
-                h2 = body.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                h3 = body.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-            ),
-            imageTransformer = imageTransformer,
-            annotator = appMarkdownAnnotator,
-            extendedSpans = markdownExtendedSpans {
-                remember { ExtendedSpans(RoundedCornerSpanPainter(cornerRadius = 4.sp)) }
-            },
-            // 解釈中や解釈不能でも保存済み本文を消さない。
-            loading = { Text(content, color = AppTheme.colors.textDetailsScreenBody, style = body) },
-            error = { Text(content, color = AppTheme.colors.textDetailsScreenBody, style = body) },
-        )
+                }, table = { model ->
+                    // 背景だけでなくスクロールする内容も同じ角丸で切り抜く。
+                    Box(Modifier.clip(RoundedCornerShape(MarkdownBlockCornerSize))) {
+                        MarkdownTable(model.content, model.node, model.typography.table,
+                            headerBlock = { text, node, width, style ->
+                                MarkdownTableHeader(text, node, width, style, maxLines = Int.MAX_VALUE, overflow = TextOverflow.Clip)
+                            },
+                            rowBlock = { text, node, width, style ->
+                                MarkdownTableRow(text, node, width, style, maxLines = Int.MAX_VALUE, overflow = TextOverflow.Clip)
+                            },
+                        )
+                    }
+                }),
+                typography = markdownTypography(
+                    text = body, paragraph = body, ordered = body, bullet = body, list = body,
+                    h1 = body.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+                    h2 = body.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                    h3 = body.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+                ),
+                imageTransformer = imageTransformer,
+                annotator = appMarkdownAnnotator,
+                extendedSpans = markdownExtendedSpans {
+                    remember { ExtendedSpans(RoundedCornerSpanPainter(cornerRadius = 4.sp)) }
+                },
+                // 解釈中や解釈不能でも保存済み本文を消さない。
+                loading = { Text(content, color = AppTheme.colors.textDetailsScreenBody, style = body) },
+                error = { Text(content, color = AppTheme.colors.textDetailsScreenBody, style = body) },
+            )
+        }
     }
+    selectedDocument?.let { AttachmentViewerDialog(it) { selectedDocument = null } }
     selectedImage?.let { (url, title) ->
         ImageViewerDialog(
             imageUrl = url,
