@@ -829,6 +829,47 @@ class AuthViewModelTest {
         assertNull(viewModel.uiState.value.session)
     }
 
+    @Test
+    fun confirmedUserChangeClearsSharedPrivateCache() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("private-data", 123)
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            respond(meBody.replace("\"id\":\"6\"", "\"id\":\"7\""), HttpStatusCode.OK, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("7", viewModel.uiState.value.session?.user?.id)
+        assertNull(cache.load<Int>("private-data"))
+    }
+
+    @Test
+    fun userChangeDoesNotRestorePreviousCacheWhenDiskClearFails() = runTest(testDispatcher) {
+        val values = mutableMapOf("unopened-private-data" to "456")
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String) = values[key]
+            override suspend fun putString(key: String, value: String) { values[key] = value }
+            override suspend fun clear() { throw IllegalStateException("disk unavailable") }
+        })
+        cache.save("private-data", 123)
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            respond(meBody.replace("\"id\":\"6\"", "\"id\":\"7\""), HttpStatusCode.OK, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(storedSession.user.id, viewModel.uiState.value.session?.user?.id)
+        assertEquals(storedSession.user.id, store.session?.user?.id)
+        assertNull(cache.load<Int>("private-data"))
+        assertNull(cache.load<Int>("unopened-private-data"))
+        val restartedStorage = object : KeyValueStore {
+            override suspend fun getString(key: String) = values[key]
+            override suspend fun putString(key: String, value: String) { values[key] = value }
+            override suspend fun clear() { values.clear() }
+        }
+        // プロセス内のメモリを共有しない再起動でも、保存値の本人へだけ復元する。
+        assertEquals(456, LocalCache(restartedStorage).load<Int>("unopened-private-data"))
+        assertEquals(storedSession.user.id, store.session?.user?.id)
+    }
+
     // ---- restoreSession 異常系 ----
 
     @Test

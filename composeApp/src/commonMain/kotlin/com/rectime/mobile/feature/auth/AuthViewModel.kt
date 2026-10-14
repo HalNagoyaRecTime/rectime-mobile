@@ -158,6 +158,9 @@ class AuthViewModel(
                     it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
                 } == true) {
                     if (user.id != stored.user.id) {
+                        // 成功した本人確認で利用者が変わった場合だけ、旧利用者の共有データを失効する。
+                        // 永続領域を消せない場合は切替を確定しない。再起動後もSessionと保存値の本人を揃える。
+                        cache.clearAll()
                         photoFetchJob?.cancel()
                         photoRepository?.clear()
                         photoRepository?.restore(user.id)
