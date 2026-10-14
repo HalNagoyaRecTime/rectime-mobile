@@ -130,10 +130,10 @@ class ScheduleViewModelTest {
         assertEquals(1, calls)
         viewModel.onEnter()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(1, calls)
+        assertEquals(2, calls)
         viewModel.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(2, calls)
+        assertEquals(3, calls)
     }
 
     @Test
@@ -146,7 +146,7 @@ class ScheduleViewModelTest {
         assertEquals(2, viewModel.events.value.size)
         viewModel.onEnter()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(1, calls)
+        assertEquals(2, calls)
     }
 
     @Test
@@ -272,7 +272,7 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun returningToScheduleDoesNotFetchAgainAndManualRefreshStillWorks() = runTest(testDispatcher) {
+    fun returningToScheduleFetchesAgainWithoutClearingContent() = runTest(testDispatcher) {
         var calls = 0
         val viewModel = buildViewModel(mockClient {
             calls++
@@ -281,12 +281,12 @@ class ScheduleViewModelTest {
         viewModel.onEnter()
         testDispatcher.scheduler.advanceUntilIdle()
         viewModel.onEnter()
-        testDispatcher.scheduler.runCurrent()
-        assertEquals(1, calls)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
         assertFalse(viewModel.isUpdating)
         viewModel.refresh()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(2, calls)
+        assertEquals(3, calls)
         assertFalse(viewModel.isRefreshing)
     }
 

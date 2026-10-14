@@ -110,13 +110,14 @@ class ScheduleViewModel internal constructor(
         }
     }
 
-    /** タブへ戻るだけでは再取得せず、ログインが切り替わった場合は初回取得する。 */
+    /** 保存済み表示を維持し、画面を開いたタイミングで共有データを再取得する。 */
     suspend fun onEnter() {
         if (enteredSession?.isCurrent == true) {
             eventCache.loadEvents()?.let { response ->
                 displayedResponse = response
                 _events.value = toTimelineEvents(response).events
             }
+            fetchEvents()
             return
         }
         loadJob?.cancelAndJoin()

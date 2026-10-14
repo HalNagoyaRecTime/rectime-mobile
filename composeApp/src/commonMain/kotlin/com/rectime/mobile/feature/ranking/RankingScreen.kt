@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,13 +26,11 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.ui.component.AppLoadingIndicator
+import com.rectime.mobile.ui.component.AppRefreshIcon
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.theme.AppTheme
 import kotlinx.coroutines.delay
-import org.jetbrains.compose.resources.painterResource
-import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
 import kotlin.time.Duration.Companion.milliseconds
 
 // 上位3チームは下位チームより一回り大きく表示する。
@@ -54,6 +51,7 @@ object RankingScreen : Screen {
         val user = LocalUserProfile.current
         val myTeamId = user?.teamId
         val viewModel: RankingViewModel = viewModel(factory = rankingViewModelFactory())
+        LaunchedEffect(viewModel) { viewModel.onEnter() }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val hasRankingItems = uiState.rankingItems.isNotEmpty()
         val lazyListState = rememberLazyListState()
@@ -81,64 +79,50 @@ object RankingScreen : Screen {
             }
         }
 
-        RootScreenScaffold(
-            title = "ランキング",
-            horizontalPadding = false,
-            lazyListState = lazyListState,
-            isRefreshing = uiState.isRefreshing,
-            refreshEnabled = !uiState.isLoading,
-            onRefresh = { viewModel.fetchRankings(isPullRefresh = true) },
-            onTrailingClick = if (uiState.isLoading) null else {
-                { viewModel.fetchRankings() }
-            },
-            trailing = {
-                if (uiState.isLoading) {
-                    AppLoadingIndicator(
-                        modifier = Modifier.size(18.dp),
-                    )
-                } else {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_ic_refresh),
-                        contentDescription = "更新",
-                        tint = AppTheme.colors.textNavigationInactive,
-                        modifier = Modifier.size(29.dp),
-                    )
-                }
-            },
-        ) {
-            when {
-                uiState.isLoading && !hasRankingItems -> item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        AppLoadingIndicator()
-                    }
-                }
+        val showCenterLoading by viewModel.showCenterLoading.collectAsStateWithLifecycle()
+        Box(Modifier.fillMaxSize()) {
+            RootScreenScaffold(
+                title = "ランキング",
+                horizontalPadding = false,
+                lazyListState = lazyListState,
+                isRefreshing = uiState.isRefreshing,
+                refreshEnabled = !uiState.isLoading,
+                onRefresh = { viewModel.fetchRankings(isPullRefresh = true) },
+                onTrailingClick = if (uiState.isLoading) null else viewModel::refresh,
+                trailing = { AppRefreshIcon(isRefreshing = uiState.isHeaderRefreshing) },
+            ) {
+                when {
+                    uiState.isLoading && !hasRankingItems -> Unit
 
-                uiState.error != null && !hasRankingItems -> item {
-                    StatusMessage(
-                        message = uiState.error.orEmpty(),
-                        actionLabel = "再取得",
-                        onAction = { viewModel.fetchRankings() },
-                    )
-                }
-
-                // 通信自体は成功したが、まだ得点が登録されておらず一覧が空の場合。
-                // エラーではないため、上のStatusMessageとは別に空データ用の案内を出す。
-                !uiState.isLoading && !hasRankingItems -> item {
-                    StatusMessage(message = "ランキングデータはまだありません")
-                }
-
-                else -> {
-                    items(uiState.rankingItems, key = { it.teamId }) { item ->
-                        RankingRow(item = item)
-                        // 自チームのハイライトが区切り線まで途切れなく見えるようにする
-                        HorizontalDivider(
-                            thickness = 1.dp,
-                            color = AppTheme.colors.commonSeparatorLine,
+                    uiState.error != null && !hasRankingItems -> item {
+                        StatusMessage(
+                            message = uiState.error.orEmpty(),
+                            actionLabel = "再取得",
+                            onAction = viewModel::refresh,
                         )
                     }
+
+                    // 通信自体は成功したが、まだ得点が登録されておらず一覧が空の場合。
+                    // エラーではないため、上のStatusMessageとは別に空データ用の案内を出す。
+                    !uiState.isLoading && !hasRankingItems -> item {
+                        StatusMessage(message = "ランキングデータはまだありません")
+                    }
+
+                    else -> {
+                        items(uiState.rankingItems, key = { it.teamId }) { item ->
+                            RankingRow(item = item)
+                            // 自チームのハイライトが区切り線まで途切れなく見えるようにする
+                            HorizontalDivider(
+                                thickness = 1.dp,
+                                color = AppTheme.colors.commonSeparatorLine,
+                            )
+                        }
+                    }
+                }
+            }
+            if (showCenterLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    AppLoadingIndicator(modifier = Modifier.size(32.dp))
                 }
             }
         }

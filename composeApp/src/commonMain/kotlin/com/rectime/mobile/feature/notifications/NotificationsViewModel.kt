@@ -13,20 +13,18 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.util.nowMinuteStateFlow
+import com.rectime.mobile.core.util.LoadingMode
+import com.rectime.mobile.core.util.loadingVisibility
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -35,8 +33,6 @@ import kotlin.time.Clock
 
 enum class NotificationRefreshSource { Header, Pull }
 
-private enum class CenterLoadingMode { Hidden, Immediate, Delayed }
-private const val AutomaticLoadingDelayMillis = 1_000L
 
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
@@ -82,23 +78,14 @@ class NotificationsViewModel(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, NotificationsUiState(isLoading = true))
 
     // 自動更新は短い通信で点滅させず、右上更新は操作直後から表示する。
-    @OptIn(ExperimentalCoroutinesApi::class)
     val showCenterLoading: StateFlow<Boolean> = uiState.map { state ->
         when {
-            state.isHeaderRefreshing -> CenterLoadingMode.Immediate
-            state.isPullRefreshing -> CenterLoadingMode.Hidden
-            state.isLoading || state.isUpdating -> CenterLoadingMode.Delayed
-            else -> CenterLoadingMode.Hidden
+            state.isHeaderRefreshing -> LoadingMode.Immediate
+            state.isPullRefreshing -> LoadingMode.Hidden
+            state.isLoading || state.isUpdating -> LoadingMode.Delayed
+            else -> LoadingMode.Hidden
         }
-    }.distinctUntilChanged().transformLatest { mode ->
-        if (mode == CenterLoadingMode.Delayed) {
-            emit(false)
-            delay(AutomaticLoadingDelayMillis)
-            emit(true)
-        } else {
-            emit(mode == CenterLoadingMode.Immediate)
-        }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    }.loadingVisibility().stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val refreshQueue = CacheRefreshQueue()
 
@@ -106,6 +93,8 @@ class NotificationsViewModel(
         loadNotifications()
         viewModelScope.launch { readStore.restore() }
     }
+
+    fun onEnter() = loadNotifications()
 
     fun refresh() {
         loadNotifications(NotificationRefreshSource.Header)
@@ -126,7 +115,7 @@ class NotificationsViewModel(
             try {
                 val result = withMinimumRefreshDuration(source != null) {
                     if (source != null) feedStore.refreshAfterCurrentRequest()
-                    feedStore.load()
+                    feedStore.load(force = source == null)
                 }
                 when (result) {
                     is CachedFetchResult.Cached -> result.error.printStackTrace()
