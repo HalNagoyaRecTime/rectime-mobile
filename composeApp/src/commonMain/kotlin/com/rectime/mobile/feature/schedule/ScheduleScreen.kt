@@ -57,6 +57,7 @@ import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
 import com.rectime.mobile.ui.component.PullRefreshHoldDistance
 import com.rectime.mobile.ui.component.RootScreenScaffold
+import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.component.resolveEventCardShadowSpec
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.theme.AppTheme
@@ -177,8 +178,8 @@ private fun ScheduleScreenUI(
 
     val overflowCardWidth = (10f * dim.u).dp
 
-    LaunchedEffect(error) {
-        if (error != null) {
+    LaunchedEffect(error, events.isNotEmpty()) {
+        if (error != null && events.isNotEmpty()) {
             snackbarHostState.showSnackbar(error)
         }
     }
@@ -505,6 +506,21 @@ private fun ScheduleScreenUI(
                             .height(60.dp)
                     )
                 }
+            }
+        }
+
+        // 一度も表示できていない場合は、一時的なSnackbarだけで終わらせない。
+        if (error != null && events.isEmpty() && !isLoading) {
+            Box(
+                Modifier.fillMaxSize().padding(top = timelineTopPadding)
+                    .background(AppTheme.colors.commonBackground),
+            ) {
+                StatusMessage(
+                    message = error,
+                    actionLabel = "再読み込み",
+                    onAction = onRefresh,
+                    actionEnabled = !isUpdating && !isRefreshing,
+                )
             }
         }
 

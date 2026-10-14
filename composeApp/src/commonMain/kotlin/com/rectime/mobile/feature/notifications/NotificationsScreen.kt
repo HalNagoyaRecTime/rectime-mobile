@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -39,6 +38,7 @@ import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.AppRefreshIcon
+import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.modifier.outerShadow
@@ -115,18 +115,19 @@ object NotificationsScreen : Screen {
                 },
             ) {
                 when {
-                    uiState.isLoading -> Unit
+                    (uiState.isLoading || uiState.isUpdating || uiState.isRefreshing) && uiState.notifications.isEmpty() -> Unit
 
                     uiState.error != null && uiState.notifications.isEmpty() -> item {
-                        NotificationMessage(
+                        StatusMessage(
                             message = requireNotNull(uiState.error),
                             actionLabel = "再読み込み",
                             onAction = viewModel::refresh,
+                            actionEnabled = !uiState.isUpdating && !uiState.isRefreshing,
                         )
                     }
 
                     uiState.notifications.isEmpty() -> item {
-                        NotificationMessage(message = "通知はありません")
+                        StatusMessage(message = "通知はありません")
                     }
 
                     else -> {
@@ -162,10 +163,11 @@ object NotificationsScreen : Screen {
                         }
                         if (uiState.pageError != null) {
                             item {
-                                NotificationMessage(
+                                StatusMessage(
                                     message = uiState.pageError.orEmpty(),
                                     actionLabel = "再読み込み",
                                     onAction = viewModel::loadMore,
+                                    actionEnabled = !uiState.isUpdating && !uiState.isRefreshing && !uiState.isLoadingMore,
                                 )
                             }
                         }
@@ -283,31 +285,6 @@ private fun NotificationCard(
                     .padding(top = ChevronTopPadding)
                     .size(ChevronSize),
             )
-        }
-    }
-}
-
-@Composable
-private fun NotificationMessage(
-    message: String,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = message,
-            color = AppTheme.colors.textSecondary,
-        )
-        if (actionLabel != null && onAction != null) {
-            Button(onClick = onAction) {
-                Text(actionLabel)
-            }
         }
     }
 }

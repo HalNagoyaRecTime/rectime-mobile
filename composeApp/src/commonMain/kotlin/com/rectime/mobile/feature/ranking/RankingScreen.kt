@@ -97,7 +97,7 @@ object RankingScreen : Screen {
                     uiState.error != null && !hasRankingItems -> item {
                         StatusMessage(
                             message = uiState.error.orEmpty(),
-                            actionLabel = "再取得",
+                            actionLabel = "再読み込み",
                             onAction = viewModel::refresh,
                         )
                     }
