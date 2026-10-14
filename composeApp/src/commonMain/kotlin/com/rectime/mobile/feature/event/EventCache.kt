@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 // 一覧と詳細は別のViewModel・LocalCacheから呼ばれるため、保存先ごとに更新順を共有する。
+private const val InvalidatedEventsKey = "event_invalidations_v1"
 private val eventCacheMutex = Mutex()
 private val eventCacheStates = mutableMapOf<Any, EventCacheState>()
 private object PlatformEventCacheKey
@@ -49,6 +50,9 @@ internal class EventCache(private val cache: LocalCache) {
     }
 
     suspend fun invalidateDetail(eventId: Int, error: Exception = HttpStatusException(HttpStatusCode.NotFound)) = eventCacheMutex.withLock {
+        // 先に拒否・削除の記録を保存する。一覧と詳細の片方だけ保存できても復元しない。
+        val invalidated = loadInvalidatedIds() + eventId
+        cache.save(InvalidatedEventsKey, invalidated)
         val revision = ++state().revision
         state().invalidations[eventId] = revision to error
         state().listRevision = revision
@@ -65,7 +69,9 @@ internal class EventCache(private val cache: LocalCache) {
 
     suspend fun loadEventsEntry(): FetchedCache<EventsResponse>? = eventCacheMutex.withLock {
         val generation = CacheRequestGeneration()
-        loadEntryOrNull<EventsResponse>("schedule_events_v1").takeIf { generation.isCurrent }
+        val saved = loadEntryOrNull<EventsResponse>("schedule_events_v1")
+        val ids = loadInvalidatedIds()
+        saved?.copy(data = saved.data.withoutEvents(ids)).takeIf { generation.isCurrent }
     }
 
     suspend fun saveEvents(events: EventsResponse): EventsResponse = saveEvents(events, beginRequest())
@@ -80,8 +86,9 @@ internal class EventCache(private val cache: LocalCache) {
         eventCacheMutex.withLock {
             if (!request.generation.isCurrent) return@withLock events
             val savedEvents = loadOrNull<EventsResponse>("schedule_events_v1")
-            if (savedEvents != null && state().listRevision > request.revision) return@withLock savedEvents
-            val available = events.events.filterNot { (state().invalidations[it.eventId]?.first ?: 0L) > request.revision }
+            if (savedEvents != null && state().listRevision > request.revision) return@withLock savedEvents.withoutEvents(loadInvalidatedIds())
+            val invalidated = loadInvalidatedIds()
+            val available = events.events.filterNot { it.eventId in invalidated || (state().invalidations[it.eventId]?.first ?: 0L) > request.revision }
             val merged = events.copy(total = available.size, events = available.map { incoming ->
                 val saved = savedDetail(incoming.eventId, savedEvents)?.data
                 if (saved != null && keepSaved(incoming.eventId, request)) {
@@ -146,10 +153,15 @@ internal class EventCache(private val cache: LocalCache) {
                     recordWrite(detail.eventId, detail = detailSaved, request)
                 }
             }
+            if (persist && detailSaved) {
+                val ids = loadInvalidatedIds()
+                if (detail.eventId in ids) cache.save(InvalidatedEventsKey, ids - detail.eventId)
+            }
             merged
         }
 
     private suspend fun savedDetail(eventId: Int, events: EventsResponse?): FetchedCache<EventDetailResponse>? {
+        if (eventId in loadInvalidatedIds()) return null
         val listEntry = events?.events?.firstOrNull { it.eventId == eventId }?.toDetail()
         val saved = loadEntryOrNull<EventDetailResponse>("event_detail_v1_$eventId")
         val detailed = saved?.data
@@ -164,6 +176,8 @@ internal class EventCache(private val cache: LocalCache) {
         // 一覧から本文を補っても、詳細APIの取得時刻を一覧の時刻で代用しない。
         return FetchedCache(value, saved?.fetchedAt)
     }
+
+    private suspend fun loadInvalidatedIds(): Set<Int> = cache.load<Set<Int>>(InvalidatedEventsKey).orEmpty()
 
     // updated_atはDB復元や集合だけの変更で単調増加しない。取得順だけで競合を防ぐ。
     private fun keepSaved(eventId: Int, request: EventCacheRequest): Boolean =
@@ -211,3 +225,8 @@ private fun EventResponse.withDetail(detail: EventDetailResponse) = copy(
     eventName = detail.eventName, venues = detail.venues, startTime = detail.startTime,
     endTime = detail.endTime, ruleText = detail.ruleText, updatedAt = detail.updatedAt ?: updatedAt,
 )
+
+private fun EventsResponse.withoutEvents(ids: Set<Int>): EventsResponse {
+    val remaining = events.filterNot { it.eventId in ids }
+    return copy(events = remaining, total = remaining.size)
+}

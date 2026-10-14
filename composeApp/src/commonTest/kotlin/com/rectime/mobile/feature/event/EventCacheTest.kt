@@ -313,6 +313,30 @@ class EventCacheTest {
         assertEquals("restored", cache.loadDetail(1)?.eventName)
     }
 
+    @Test
+    fun invalidationSurvivesRestartWhenListCleanupFails() = runTest {
+        for (failedKey in listOf("schedule_events_v1", "event_detail_v1_1")) {
+            val storage = MemoryStore()
+            val cache = EventCache(LocalCache(storage))
+            cache.saveEvents(events("removed"))
+            cache.saveDetail(detail("removed"))
+            storage.failWriteKey = failedKey
+            cache.invalidateDetail(1)
+            // 別の保存先インスタンスで、プロセス内の共有メモリを使わずに再起動を再現する。
+            val reopened = object : KeyValueStore {
+                override suspend fun getString(key: String) = storage.getString(key)
+                override suspend fun putString(key: String, value: String) = storage.putString(key, value)
+                override suspend fun clear() = storage.clear()
+            }
+            val restored = EventCache(LocalCache(reopened))
+            assertNull(restored.loadDetail(1))
+            assertEquals(emptyList(), restored.loadEvents()?.events)
+            storage.failWriteKey = null
+            restored.saveDetail(detail("reconfirmed"))
+            assertEquals("reconfirmed", restored.loadDetail(1)?.eventName)
+        }
+    }
+
     private fun rounds(id: Int) = listOf(com.rectime.mobile.core.network.EventRoundResponse(1,
         listOf(com.rectime.mobile.core.network.EventRoundGatheringResponse(id, "08:45",
             com.rectime.mobile.core.network.EventGatheringSpotResponse(1, "体育館")))))

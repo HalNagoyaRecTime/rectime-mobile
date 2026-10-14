@@ -138,10 +138,10 @@ private fun RoundStartTime(minute: Int, color: Color, modifier: Modifier = Modif
 private fun GatheringDetails(gathering: Gathering, times: RoundDisplayTimes) {
     val colors = AppTheme.colors
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Top) {
-        times.gatheringMinute?.let { minute ->
+        run {
             Column {
                 Text("集合時刻", fontSize = 12.sp, color = colors.textMuted)
-                AppTimeText(displayMinute(minute), fontSize = 22.sp, lineHeight = 26.sp,
+                AppTimeText(times.gatheringMinute?.let(::displayMinute) ?: "未定", fontSize = 22.sp, lineHeight = 26.sp,
                     fontWeight = FontWeight.Bold, color = colors.textDetailsScreenBody)
             }
         }
