@@ -1,8 +1,6 @@
 package com.rectime.mobile.feature.liveactivity
 
 import com.rectime.mobile.feature.event.minuteOf
-import com.rectime.mobile.feature.event.displayMinute
-import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Instant
 import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.network.EventDetailResponse
@@ -172,28 +170,6 @@ internal fun buildLiveActivityState(
         remainingGatheringCount = if (personalKnown && next != null) (pendingOwnIds.size - 1).coerceAtLeast(0) else null,
         personalState = personalState,
         presentationUntil = presentationUntil)
-}
-
-internal fun activitySummaryLines(state: LiveActivityState): List<String> = buildList {
-    state.matches.forEach { event ->
-        add("${event.title} ${activityTimeLabel(event.start)}〜${activityTimeLabel(event.end)} ${event.venue}".trim())
-        if (event.rounds.isNotEmpty()) add("開始予定 " + event.rounds.joinToString(" / ") {
-            "第${it.number}ラウンド ${it.start?.let(::activityTimeLabel) ?: "時刻未定"}"
-        })
-    }
-    if (state.matchCount > state.matches.size) add("ほか${state.matchCount - state.matches.size}件")
-    if (state.matches.isEmpty()) state.nextEvent?.let { add("次の開催 ${it.title} ${activityTimeLabel(it.start)}〜") }
-    state.nextGathering?.let { next ->
-        add("次の集合 ${next.title} 第${next.round}ラウンド・集合${next.number}番")
-        add("${activityTimeLabel(next.time)} ${next.spot}".trim())
-    }
-    if (state.isCached) add("保存済みの情報です")
-    add(state.notice)
-}
-
-private fun activityTimeLabel(seconds: Long): String {
-    val time = Instant.fromEpochSeconds(seconds).toLocalDateTime(TimeZone.of("Asia/Tokyo"))
-    return displayMinute(time.hour * 60 + time.minute)
 }
 
 private fun String.activityText(limit: Int): String = take(limit).let { text ->

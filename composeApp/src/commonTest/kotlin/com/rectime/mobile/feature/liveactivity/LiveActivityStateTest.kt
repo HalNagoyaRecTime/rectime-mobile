@@ -92,14 +92,6 @@ class LiveActivityStateTest {
         assertNull(build(body = schedule(event(start = "1300", end = "1100"))))
         assertNull(buildLiveActivityState("", schedule(event()), emptyMap(), null, at("1050"), null, true))
     }
-    @Test fun standardNotificationUsesSameRealTimesNumbersAndAlwaysEndsWithNotice() {
-        val lines = activitySummaryLines(requireNotNull(build()))
-        assertTrue(lines.any { it.contains("次の集合") && it.contains("集合10番") })
-        assertTrue(lines.any { it.contains("11:00") && it.contains("体育館入口") })
-        assertEquals(LiveActivityNotice, lines.last())
-        assertFalse(lines.any { it.contains("呼出") || it.contains("集合済み") })
-    }
-
     @Test fun payloadTruncationDoesNotSplitEmojiSurrogatePairs() {
         val body = schedule(event().copy(eventName = "a".repeat(59) + "🏀"))
         val state = requireNotNull(build(now = "1100", body = body))
