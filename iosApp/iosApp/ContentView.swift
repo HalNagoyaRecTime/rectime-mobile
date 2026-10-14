@@ -17,6 +17,7 @@ struct ComposeView: UIViewControllerRepresentable {
 struct ContentView: View {
     @State private var showSplash = true
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
@@ -36,7 +37,11 @@ struct ContentView: View {
                                                       ready: notification.userInfo?["ready"] as? Bool ?? false)
             }
             .onChange(of: scenePhase, initial: true) { _, phase in
+                LiveActivityCoordinator.shared.setAppearance(dark: colorScheme == .dark)
                 LiveActivityCoordinator.shared.setActive(phase == .active)
+            }
+            .onChange(of: colorScheme, initial: true) { _, scheme in
+                LiveActivityCoordinator.shared.setAppearance(dark: scheme == .dark)
             }
             .onOpenURL { url in
                 AuthDeepLinkHandler.shared.handle(url: url.absoluteString)

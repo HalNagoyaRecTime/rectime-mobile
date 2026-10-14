@@ -10,6 +10,7 @@ final class LiveActivityCoordinator {
     private var revision = 0
     private var startedKey: String?
     private var accountId: String?
+    private var systemAppearance: String?
 
     func receive(_ json: String?, accountId: String?, ready: Bool) {
         if self.accountId != accountId { startedKey = nil }
@@ -22,7 +23,11 @@ final class LiveActivityCoordinator {
         if let json, let data = json.data(using: .utf8) {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .secondsSince1970
-            do { state = try decoder.decode(RecreationActivityAttributes.ContentState.self, from: data) }
+            do {
+                var decoded = try decoder.decode(RecreationActivityAttributes.ContentState.self, from: data)
+                decoded.systemAppearance = systemAppearance
+                state = decoded
+            }
             catch { print("[LiveActivity] Invalid state: \(error)"); return }
         } else { state = nil }
         hasReceivedState = true
@@ -31,6 +36,14 @@ final class LiveActivityCoordinator {
 
     func setActive(_ active: Bool) {
         if active { synchronize() }
+    }
+
+    func setAppearance(dark: Bool) {
+        let appearance = dark ? "dark" : "light"
+        guard systemAppearance != appearance else { return }
+        systemAppearance = appearance
+        state?.systemAppearance = appearance
+        synchronize()
     }
 
     private func synchronize() {

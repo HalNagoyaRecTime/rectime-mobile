@@ -75,8 +75,12 @@ private struct LiveActivityCard: View {
     let stale: Bool
     var island = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     private var event: RecreationActivityAttributes.Match? { state.matches.first ?? state.nextEvent }
-    private var dark: Bool { island || colorScheme == .dark }
+    // ロック画面の外観が壁紙に引かれるOSでは、本体が取得したシステム設定を使う。
+    private var dark: Bool {
+        island || isLuminanceReduced || (state.systemAppearance.map { $0 == "dark" } ?? (colorScheme == .dark))
+    }
     private var foreground: Color { dark ? .white : LivePalette.foreground }
     // ウィジェット自身が受け取る外観で解決し、UIKit側の別のtraitには依存しない。
     private var surface: Color { island ? .black : LivePalette.surface(dark: dark) }
@@ -89,7 +93,7 @@ private struct LiveActivityCard: View {
     var body: some View {
         GeometryReader { geometry in
             if state.displayMode == "finished" {
-                LiveFinishedMessage().frame(width: geometry.size.width, height: 160)
+                LiveFinishedMessage(dark: dark).frame(width: geometry.size.width, height: 160)
             } else if state.displayMode == "refresh" || requiresRefresh {
                 LiveRefreshMessage()
                     .frame(width: geometry.size.width, height: 160)
@@ -116,8 +120,8 @@ private struct LiveActivityCard: View {
             } else {
                 // 内側の角丸より下はオレンジで埋め、外枠の下端に白がのぞくのを防ぐ。
                 VStack(spacing: 0) {
-                    surface.frame(height: 102)
-                    LivePalette.orange.frame(height: 58)
+                    surface.frame(height: 106)
+                    LivePalette.orange.frame(height: 54)
                 }
             }
         }
@@ -133,12 +137,6 @@ private struct LiveEventPanel: View {
     let foreground: Color
     let surface: Color
     let dark: Bool
-    private var nextRound: RecreationActivityAttributes.Round? {
-        let dated = (event.timelineRounds ?? event.rounds).filter { $0.start != nil }
-        return dated.filter { ($0.start ?? .distantPast) > Date.now }
-            .min { ($0.start ?? .distantFuture) < ($1.start ?? .distantFuture) }
-            ?? dated.max { ($0.start ?? .distantPast) < ($1.start ?? .distantPast) }
-    }
     private var status: String { Date.now < event.start ? "開始前" : Date.now >= event.end ? "終了" : "開催中" }
 
     var body: some View {
@@ -148,22 +146,23 @@ private struct LiveEventPanel: View {
                 LiveStatusTag(text: status, personal: false, dark: dark)
             }.frame(height: 18)
             HStack(spacing: 5) {
-                Text(event.start, style: .time)
-                Text("〜")
-                Text(event.end, style: .time)
-                if event.roundCount > 0 {
-                    Text("全\(event.roundCount)ラウンド").font(.system(size: 10))
+                HStack(spacing: 3) {
+                    Text(event.start, style: .time)
+                    Text("〜")
+                    Text(event.end, style: .time)
                 }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(foreground)
                 Spacer(minLength: 2)
                 Text(event.venue).lineLimit(1).minimumScaleFactor(0.85)
             }
             .font(.system(size: 11)).monospacedDigit().foregroundStyle(LivePalette.secondary(dark: dark))
-            .frame(height: 13)
+            .frame(height: 16)
             LiveRoundTimeline(event: event, foreground: foreground, surface: surface, dark: dark)
                 .frame(height: 22)
             HStack(alignment: .center, spacing: 4) {
-                if let round = nextRound, let start = round.start {
-                    Text("次：第\(round.number)ラウンド \(LiveClock.label(start))〜")
+                if event.roundCount > 0 {
+                    Text("全\(event.roundCount)ラウンド")
                         .lineLimit(1).layoutPriority(1)
                 }
                 Spacer(minLength: 0)
@@ -173,7 +172,7 @@ private struct LiveEventPanel: View {
             .frame(maxWidth: .infinity, minHeight: 14, maxHeight: 14)
         }
         .padding(.horizontal, 14).padding(.top, 5).padding(.bottom, 2)
-        .frame(width: width, height: 80, alignment: .top)
+        .frame(width: width, height: 84, alignment: .top)
     }
 }
 
@@ -203,7 +202,7 @@ private struct LivePersonalPanel: View {
                             .multilineTextAlignment(.trailing)
                     } else {
                         // 動的な日付Textは横幅を広く取るため、接頭辞も同じTextにして右へそろえる。
-                        (Text("集合まで") + Text(next.time, style: .relative))
+                        LiveGatheringCountdown(time: next.time)
                             .monospacedDigit().font(.system(size: 14, weight: .semibold)).lineLimit(1)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -228,7 +227,7 @@ private struct LivePersonalPanel: View {
             }
         }
         .padding(.horizontal, 14).padding(.top, 6).padding(.bottom, 8)
-        .frame(width: width, height: 80)
+        .frame(width: width, height: 76)
         .foregroundStyle(.white)
         .background(LivePalette.orange, in: UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22))
     }
@@ -251,6 +250,21 @@ private struct LivePersonalPanel: View {
         Text(destination(next))
             .font(.system(size: 11, weight: .medium))
             .lineLimit(1).truncationMode(.tail)
+    }
+}
+
+private struct LiveGatheringCountdown: View {
+    let time: Date
+    var body: some View {
+        if #available(iOS 18.0, *) {
+            // 標準の時間データと有界タイマーで、最上位の一単位だけ表示し、0で止める。
+            Text("集合まで") + Text(.currentDate, format: .timer(
+                countingDownIn: min(Date.now, time)..<time,
+                showsHours: true, maxFieldCount: 1, maxPrecision: .seconds(60)
+            ).locale(Locale(identifier: "ja_JP")))
+        } else {
+            Text("集合まで") + Text(timerInterval: min(Date.now, time)...time, countsDown: true)
+        }
     }
 }
 
@@ -296,28 +310,18 @@ private struct LiveRefreshMessage: View {
 
 /// 終了時刻と保持時間の判定は後続の共通状態から受け取る。
 private struct LiveFinishedMessage: View {
+    let dark: Bool
     var body: some View {
         VStack(spacing: 10) {
             LiveAppIcon().frame(width: 25, height: 25)
             Text("本日のイベントは終了しました")
                 .font(.system(size: 14, weight: .semibold))
             Text("RE:CREATIONをご利用いただき、\nありがとうございました。")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .font(.system(size: 11)).foregroundStyle(LivePalette.secondary(dark: dark))
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity).padding(14)
     }
-}
-
-private enum LiveClock {
-    static let formatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.timeZone = TimeZone(identifier: "Asia/Tokyo")
-        formatter.dateFormat = "H:mm"
-        return formatter
-    }()
-    static func label(_ date: Date) -> String { formatter.string(from: date) }
 }
 
 /// APIの時刻を保持したまま、省略区間だけ短く配置する。番号や時刻を合成しない。

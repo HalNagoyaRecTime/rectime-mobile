@@ -42,6 +42,7 @@ struct RecreationActivityAttributes: ActivityAttributes {
         let personalState: String?
         let presentationUntil: Date?
         let displayMode: String?
+        var systemAppearance: String? = nil
     }
     let accountId: String
 }

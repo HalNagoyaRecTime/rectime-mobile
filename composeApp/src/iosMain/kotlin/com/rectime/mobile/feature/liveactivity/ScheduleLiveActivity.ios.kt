@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import platform.Foundation.NSNotificationCenter
 
+internal actual val supportsScheduleLiveActivity: Boolean = true
+
 @Composable
 internal actual fun PublishLiveActivityEffect(state: LiveActivityState?, accountId: String, ready: Boolean) {
     LaunchedEffect(state, accountId, ready) {

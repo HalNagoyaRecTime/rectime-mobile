@@ -13,6 +13,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 /** 共通ストアを購読し、OS固有の処理は表示とActivityの管理だけにする。 */
 @Composable
 internal fun ScheduleLiveActivityEffect(accountId: String, ready: Boolean, sourceOffline: Boolean = false) {
+    if (!supportsScheduleLiveActivity) return
     if (accountId.isBlank()) {
         PublishLiveActivityEffect(null, accountId, ready)
         return
@@ -29,3 +30,5 @@ internal fun ScheduleLiveActivityEffect(accountId: String, ready: Boolean, sourc
 
 @Composable
 internal expect fun PublishLiveActivityEffect(state: LiveActivityState?, accountId: String, ready: Boolean)
+
+internal expect val supportsScheduleLiveActivity: Boolean
