@@ -60,11 +60,13 @@ import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.accountdeletion.AccountDeletionSection
 import com.rectime.mobile.core.haptics.LocalHapticPreference
+import com.rectime.mobile.core.haptics.HapticCapability
+import com.rectime.mobile.core.haptics.HapticSupportStatus
+import com.rectime.mobile.core.config.contactFormUrl
 import com.rectime.mobile.core.haptics.AppHapticEvent
 import com.rectime.mobile.core.haptics.rememberPlatformHapticFeedback
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.ui.component.UserAvatar
-import com.rectime.mobile.ui.component.SettingsModal
 import com.rectime.mobile.core.platform.openInAppBrowser
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
@@ -89,7 +91,6 @@ class SettingsScreen(
     @Composable
     override fun Content(navigationController: NavigationController) {
         var showAppInformation by remember { mutableStateOf(false) }
-        var showContactDetails by remember { mutableStateOf(false) }
         var showLogoutConfirmation by remember { mutableStateOf(false) }
         var notificationPermissionStatus by remember {
             mutableStateOf(NotificationPermissionStatus.Unavailable)
@@ -98,6 +99,7 @@ class SettingsScreen(
         val hapticPreference = LocalHapticPreference.current
         val hapticFeedback = rememberPlatformHapticFeedback()
         val hapticEnabled by hapticPreference.enabled.collectAsState()
+        val hapticStatus by HapticCapability.status.collectAsState()
         val lifecycleOwner = LocalLifecycleOwner.current
         val refreshNotificationPermission = {
             notificationPermissionStartup?.let { startup ->
@@ -107,6 +109,8 @@ class SettingsScreen(
             }
         }
 
+        LaunchedEffect(Unit) { HapticCapability.load() }
+
         LaunchedEffect(notificationPermissionStartup) {
             notificationPermissionStatus = notificationPermissionStartup?.getStatus()
                 ?: NotificationPermissionStatus.Unavailable
@@ -115,6 +119,7 @@ class SettingsScreen(
             val observer = LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
                     refreshNotificationPermission()
+                    scope.launch { HapticCapability.load() }
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
@@ -132,8 +137,8 @@ class SettingsScreen(
                 Brush.verticalGradient(
                     0f to AppTheme.colors.themeColorSecond,
                     0.5f to AppTheme.colors.themeColorSecond,
-                    0.5f to AppTheme.colors.settingBackground,
-                    1f to AppTheme.colors.settingBackground,
+                    0.5f to AppTheme.colors.screenBackground,
+                    1f to AppTheme.colors.screenBackground,
                 ),
             ),
             horizontalPadding = false,
@@ -151,7 +156,7 @@ class SettingsScreen(
             }
 
             item {
-                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
                     Spacer(Modifier.height(AppTheme.spacing.xl))
                     Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
                         SettingsSection(title = "アプリ") {
@@ -168,47 +173,53 @@ class SettingsScreen(
                                     notificationPermissionStatus != NotificationPermissionStatus.Unavailable,
                                 onClick = { notificationPermissionStartup?.openSystemSettings() },
                             )
-                            SettingsSeparator()
-                            SettingsRow(
-                                title = "振動",
-                                icon = SettingsIcon.Haptic,
-                                trailingContent = {
-                                    Switch(
-                                        checked = hapticEnabled,
-                                        colors = SwitchDefaults.colors(
-                                            checkedTrackColor = AppTheme.colors.themeColorSecond,
-                                            checkedBorderColor = AppTheme.colors.themeColorSecond,
-                                            checkedThumbColor = AppTheme.colors.textThemeColorSecond,
-                                            uncheckedTrackColor = AppTheme.colors.borderSubtle,
-                                            uncheckedBorderColor = AppTheme.colors.borderStrong,
-                                            uncheckedThumbColor = AppTheme.colors.textMuted,
-                                        ),
-                                        onCheckedChange = { enabled ->
-                                            // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
-                                            hapticFeedback.perform(
-                                                if (enabled) AppHapticEvent.PreferenceEnabled
-                                                else AppHapticEvent.PreferenceDisabled,
-                                            )
-                                            scope.launch {
-                                                hapticPreference.setEnabled(enabled)
-                                            }
-                                        },
-                                    )
-                                },
-                            )
+                            if (hapticStatus.showSetting) {
+                                SettingsSeparator()
+                                SettingsRow(
+                                    title = "振動",
+                                    icon = SettingsIcon.Haptic,
+                                    enabled = hapticStatus.canVibrate,
+                                    subtitle = if (hapticStatus == HapticSupportStatus.Failed)
+                                        "振動の対応状況を確認できません" else null,
+                                    trailingContent = {
+                                        Switch(
+                                            checked = hapticEnabled,
+                                            enabled = hapticStatus.canVibrate,
+                                            colors = SwitchDefaults.colors(
+                                                checkedTrackColor = AppTheme.colors.themeColorSecond,
+                                                checkedBorderColor = AppTheme.colors.themeColorSecond,
+                                                checkedThumbColor = AppTheme.colors.textThemeColorSecond,
+                                                uncheckedTrackColor = AppTheme.colors.borderSubtle,
+                                                uncheckedBorderColor = AppTheme.colors.borderStrong,
+                                                uncheckedThumbColor = AppTheme.colors.textMuted,
+                                            ),
+                                            onCheckedChange = { enabled ->
+                                                // 設定変更の操作だけは、OFFへ切り替える時にも1回通知する。
+                                                hapticFeedback.perform(
+                                                    if (enabled) AppHapticEvent.PreferenceEnabled
+                                                    else AppHapticEvent.PreferenceDisabled,
+                                                )
+                                                scope.launch {
+                                                    hapticPreference.setEnabled(enabled)
+                                                }
+                                            },
+                                        )
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
             item {
-                Column(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                Column(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
                     Spacer(Modifier.height(AppTheme.spacing.xl))
                     Box(Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding)) {
                         SettingsSection(title = "ヘルプ") {
                             SettingsRow(
                                 title = "お問い合わせ",
                                 icon = SettingsIcon.Contact,
-                                onClick = { showContactDetails = true },
+                                onClick = { scope.launch { openInAppBrowser(contactFormUrl) } },
                             )
                             SettingsSeparator()
                             AccountDeletionSection { enabled, showConfirmation ->
@@ -246,7 +257,7 @@ class SettingsScreen(
                 }
             }
             item {
-                Box(Modifier.fillMaxWidth().background(AppTheme.colors.settingBackground)) {
+                Box(Modifier.fillMaxWidth().background(AppTheme.colors.screenBackground)) {
                     Button(
                         onClick = { showLogoutConfirmation = true },
                         shape = RoundedCornerShape(SettingsCornerRadius),
@@ -277,23 +288,13 @@ class SettingsScreen(
                     Modifier
                         .fillMaxWidth()
                         .height(bottomPadding)
-                        .background(AppTheme.colors.settingBackground),
+                        .background(AppTheme.colors.screenBackground),
                 )
             }
         }
 
         if (showAppInformation) {
             AppInformationSheet(onDismiss = { showAppInformation = false })
-        }
-
-        if (showContactDetails) {
-            SettingsModal(
-                title = "お問い合わせ",
-                onDismiss = { showContactDetails = false },
-                dismissText = "閉じる",
-            ) {
-                ContactSection()
-            }
         }
 
         if (showLogoutConfirmation) {
@@ -359,7 +360,7 @@ private fun UserInfoHeader(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        color = AppTheme.colors.settingBackground,
+                        color = AppTheme.colors.screenBackground,
                         shape = RoundedCornerShape(
                             topStart = SettingsCornerRadius,
                             topEnd = SettingsCornerRadius,
@@ -422,6 +423,7 @@ private fun UserInfoHeader(
                 sportOverride = selection.sport,
                 usePhoto = selection.sport == null,
                 colorIndex = selection.colorIndex,
+                borderColor = AppTheme.colors.screenBackground,
             )
             Box(
                 modifier = Modifier.align(Alignment.BottomEnd).size(28.dp)
@@ -464,27 +466,3 @@ private fun ProfileDetailRow(label: String, value: String, modifier: Modifier = 
     }
 }
 
-/**
- * お問い合わせ先セクション
- */
-@Composable
-private fun ContactSection(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = "レ・クリエイション実行委員会　アプリ開発班",
-            fontSize = 13.sp,
-            color = AppTheme.colors.textSettingModalBody,
-            textAlign = TextAlign.Center,
-        )
-        Text(
-            text = "担当教官：高橋真広先生",
-            fontSize = 13.sp,
-            color = AppTheme.colors.textSettingModalBody,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
