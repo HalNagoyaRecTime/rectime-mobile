@@ -23,9 +23,6 @@
       "type": "node-terminal",
       "name": "Run Desktop 🔥",
       "request": "launch",
-      "env": {
-        "DEV_BYPASS_AUTH": "true"
-      },
       "command": "./gradlew :composeApp:hotRunJvm --autoReload"
     },
     {

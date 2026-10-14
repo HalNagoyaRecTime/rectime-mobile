@@ -1746,43 +1746,6 @@ class AuthViewModelTest {
         assertNotNull(store.pendingAuth)
     }
 
-    // ---- DEV_BYPASS_AUTH ----
-
-    @Test
-    fun devBypassRestoresLocalSessionWithoutTouchingApiOrStore() = runTest(testDispatcher) {
-        val store = FakeAuthSessionStorage()
-        val viewModel = buildViewModel(
-            api = failingApi(),
-            store = store,
-            devAuthBypassEnabled = true,
-        )
-
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals(false, state.isLoading)
-        assertEquals("dev-bypass-token", state.session?.accessToken)
-        assertEquals("Dev User", state.session?.user?.displayName)
-        assertNull(store.session)
-    }
-
-    @Test
-    fun devBypassLogoutSkipsServerCall() = runTest(testDispatcher) {
-        val viewModel = buildViewModel(
-            api = failingApi(),
-            store = FakeAuthSessionStorage(),
-            devAuthBypassEnabled = true,
-        )
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.logout()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertNull(state.session)
-        assertEquals("Logged out", state.message)
-    }
-
     @Test
     fun logoutWithoutSessionDoesNotTouchPushLifecycle() = runTest(testDispatcher) {
         val events = mutableListOf<String>()
@@ -1855,7 +1818,6 @@ class AuthViewModelTest {
         api: AuthApi,
         store: FakeAuthSessionStorage,
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
-        devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
         nowMillis: () -> Long = { 1_000L },
         // 単体テストではOSの共有状態や別Dispatcherの通知処理を呼び出さない。
@@ -1866,7 +1828,6 @@ class AuthViewModelTest {
         api = api,
         sessionStore = store,
         cache = cache,
-        devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
         nowMillis = nowMillis,
         pushTokenLifecycle = pushTokenLifecycle,
@@ -2007,7 +1968,7 @@ class AuthViewModelTest {
                 id = "6",
                 email = "test@example.com",
                 displayName = "テスト太郎",
-                role = Role.Student,
+                isStudent = true,
             ),
         )
 

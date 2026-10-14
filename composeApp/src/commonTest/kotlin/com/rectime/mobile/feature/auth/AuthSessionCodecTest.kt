@@ -2,20 +2,23 @@ package com.rectime.mobile.feature.auth
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class AuthSessionCodecTest {
     @Test
     fun decodeRejectsSessionWithoutRequiredTokens() {
-        val sessionWithoutAccessToken = createTestSession(accessToken = "")
-        val sessionWithoutRefreshToken = createTestSession(refreshTokenId = "")
-
-        assertNull(decodeAuthSession(encodeAuthSession(sessionWithoutAccessToken)))
-        assertNull(decodeAuthSession(encodeAuthSession(sessionWithoutRefreshToken)))
+        assertNull(decodeAuthSession(encodeAuthSession(createTestSession(accessToken = ""))))
+        assertNull(decodeAuthSession(encodeAuthSession(createTestSession(refreshTokenId = ""))))
     }
 
     @Test
-    fun decodeRestoresAllFieldsAfterEncode() {
+    fun sessionJsonRestoresAllFields() {
+        val teacher = AuthTeacher(
+            teacherId = 12,
+            classRooms = listOf(AuthTeacherClassRoom(3, "1-A", "1年A組")),
+        )
         val original = AuthSession(
             accessToken = "token123",
             refreshTokenId = "refresh456",
@@ -30,168 +33,108 @@ class AuthSessionCodecTest {
                 classRoomName = "1年Aクラス",
                 teamId = 34,
                 classCode = "IH22A",
-                role = Role.Student,
+                isStudent = true,
+                isStaff = true,
+                isTeacher = true,
+                teacher = teacher,
             ),
         )
 
-        val encoded = encodeAuthSession(original)
-        val decoded = decodeAuthSession(encoded)
-
-        assertEquals(original, decoded)
-    }
-
-    @Test
-    fun numericClassCodeAndTeamIdRemainSeparate() {
-        val original = createTestSession().let { it.copy(user = it.user.copy(classCode = "123", teamId = 34)) }
         assertEquals(original, decodeAuthSession(encodeAuthSession(original)))
     }
 
     @Test
-    fun legacyTwelvePartClassCodeIsRestoredWhenUnambiguous() {
-        val decoded = decodeAuthSession(legacyTwelvePartSession("IH22A"))
-        assertEquals("token123", decoded?.accessToken)
-        assertEquals("IH22A", decoded?.user?.classCode)
-        assertNull(decoded?.user?.teamId)
+    fun missingOptionalFieldsUseDefaults() {
+        val encoded = """
+            {
+              "version": 1,
+              "accessToken": "token123",
+              "refreshTokenId": "refresh456",
+              "expiresIn": 3600,
+              "user": {
+                "id": "6",
+                "email": "test@example.com",
+                "displayName": "テスト太郎"
+              }
+            }
+        """.trimIndent()
+
+        val user = decodeAuthSession(encoded)?.user
+        assertNull(user?.role)
+        assertFalse(user?.isStudent ?: true)
+        assertFalse(user?.isStaff ?: true)
+        assertFalse(user?.isTeacher ?: true)
+        assertNull(user?.teacher)
     }
 
     @Test
-    fun ambiguousLegacyTwelvePartValueWaitsForCurrentUserRefresh() {
-        val decoded = decodeAuthSession(legacyTwelvePartSession("34"))
-        assertEquals("token123", decoded?.accessToken)
-        assertEquals(Role.Student, decoded?.user?.role)
-        assertNull(decoded?.user?.classCode)
-        assertNull(decoded?.user?.teamId)
-    }
+    fun unknownFieldsAreIgnoredForForwardCompatibleAdditions() {
+        val encoded = """
+            {
+              "version": 1,
+              "futureSessionField": "ignored",
+              "accessToken": "token123",
+              "refreshTokenId": "refresh456",
+              "expiresIn": 3600,
+              "user": {
+                "id": "6",
+                "email": "test@example.com",
+                "displayName": "テスト太郎",
+                "isStudent": true,
+                "futureUserField": 123
+              }
+            }
+        """.trimIndent()
 
-    @Test
-    fun unknownProfileSchemaIsRejected() {
-        val parts = encodeAuthSession(createTestSession()).split(".").toMutableList()
-        parts[11] = "unknown-profile".encodeToByteArray().toBase64Url()
-        assertNull(decodeAuthSession(parts.joinToString(".")))
-    }
-
-    @Test
-    fun legacyEightPartAvatarIsRestored() {
-        val encoded = listOf("token123", "refresh456", "3600", "6", "e", "f", "https://example.com/a.png", "2026")
-            .joinToString(".") { it.encodeToByteArray().toBase64Url() }
-        assertEquals("https://example.com/a.png", decodeAuthSession(encoded)?.user?.avatarUrl)
-    }
-
-    @Test
-    fun decodeRestoresNullableFieldsAsNullWhenEmpty() {
-        val original = AuthSession(
-            accessToken = "token123",
-            refreshTokenId = "refresh456",
-            expiresIn = 3600L,
-            user = AuthUser(
-                id = "6",
-                email = "test@example.com",
-                displayName = "テスト太郎",
-                avatarUrl = null,
-                avatarUpdatedAt = null,
-                studentIdNumber = null,
-                classRoomName = null,
-                role = null,
-            ),
-        )
-
-        val encoded = encodeAuthSession(original)
         val decoded = decodeAuthSession(encoded)
-
-        assertEquals(original, decoded)
-    }
-
-    @Test
-    fun decodeRestoresTeacherRoleCorrectly() {
-        val original = AuthSession(
-            accessToken = "token123",
-            refreshTokenId = "refresh456",
-            expiresIn = 3600L,
-            user = AuthUser(
-                id = "6",
-                email = "teacher@example.com",
-                displayName = "先生太郎",
-                studentIdNumber = null,
-                classRoomName = null,
-                role = Role.Teacher,
-            ),
-        )
-
-        val encoded = encodeAuthSession(original)
-        val decoded = decodeAuthSession(encoded)
-
-        assertEquals(original, decoded)
-    }
-
-    @Test
-    fun decodeRestoresLegacyNinePartSessionWithRoleOnly() {
-        val legacyEncoded = listOf(
-            "token123", "refresh456", "3600",
-            "6", "test@example.com", "テスト太郎",
-            "https://example.com/avatar.png", "2026-07-31",
-            "Student",
-        ).joinToString(".") { it.encodeToByteArray().toBase64Url() }
-
-        val decoded = decodeAuthSession(legacyEncoded)
-
         assertEquals("6", decoded?.user?.id)
+        assertTrue(decoded?.user?.isStudent == true)
         assertEquals(Role.Student, decoded?.user?.role)
-        assertEquals(null, decoded?.user?.studentIdNumber)
-        assertEquals(null, decoded?.user?.classRoomName)
-    }
-    @Test
-    fun decodeRestoresLegacyElevenPartSessionWithoutTeamId() {
-        val legacyEncoded = listOf(
-            "token123", "refresh456", "3600",
-            "6", "test@example.com", "テスト太郎",
-            "https://example.com/avatar.png", "2026-07-31",
-            "55024", "1年Aクラス", "Student",
-        ).joinToString(".") { it.encodeToByteArray().toBase64Url() }
-
-        val decoded = decodeAuthSession(legacyEncoded)
-
-        assertEquals("6", decoded?.user?.id)
-        assertEquals(Role.Student, decoded?.user?.role)
-        assertEquals("1年Aクラス", decoded?.user?.classRoomName)
-        assertNull(decoded?.user?.teamId)
     }
 
     @Test
-    fun decodeReturnsNullForUnsupportedPartCount() {
-        val sevenParts = listOf("a", "b", "3600", "6", "e", "f", "g")
+    fun unsupportedVersionAndLegacyDotFormatAreRejected() {
+        val unsupported = """
+            {
+              "version": 2,
+              "accessToken": "token123",
+              "refreshTokenId": "refresh456",
+              "expiresIn": 3600,
+              "user": {"id":"6","email":"e","displayName":"f"}
+            }
+        """.trimIndent()
+        val legacy = listOf("token123", "refresh456", "3600", "6", "e", "f")
             .joinToString(".") { it.encodeToByteArray().toBase64Url() }
 
-        assertNull(decodeAuthSession(sevenParts))
-        assertNull(decodeAuthSession(""))
+        assertNull(decodeAuthSession(unsupported))
+        assertNull(decodeAuthSession(legacy))
         assertNull(decodeAuthSession("garbage"))
     }
 
     @Test
-    fun decodeReturnsNullWhenExpiresInIsNotANumber() {
-        val broken = listOf("token123", "refresh456", "not-a-number", "6", "e", "f")
-            .joinToString(".") { it.encodeToByteArray().toBase64Url() }
+    fun teacherDetailsAreDroppedWhenTeacherFlagIsFalse() {
+        val encoded = """
+            {
+              "version": 1,
+              "accessToken": "token123",
+              "refreshTokenId": "refresh456",
+              "expiresIn": 3600,
+              "user": {
+                "id": "6",
+                "email": "test@example.com",
+                "displayName": "テスト太郎",
+                "isTeacher": false,
+                "teacher": {"teacherId":12,"classRooms":[]}
+              }
+            }
+        """.trimIndent()
 
-        assertNull(decodeAuthSession(broken))
-    }
-
-    @Test
-    fun decodeRestoresLegacySixPartSessionWithoutAvatar() {
-        val legacyEncoded = listOf("token123", "refresh456", "3600", "6", "test@example.com", "テスト太郎")
-            .joinToString(".") { it.encodeToByteArray().toBase64Url() }
-
-        val decoded = decodeAuthSession(legacyEncoded)
-
-        assertEquals("token123", decoded?.accessToken)
-        assertEquals(3600L, decoded?.expiresIn)
-        assertEquals("テスト太郎", decoded?.user?.displayName)
-        assertNull(decoded?.user?.avatarUrl)
-        assertNull(decoded?.user?.role)
+        assertNull(decodeAuthSession(encoded)?.user?.teacher)
     }
 
     @Test
     fun pendingAuthSurvivesEncodeDecodeRoundTrip() {
         val original = PendingAuth(state = "state-abc_123", codeVerifier = "verifier-xyz_456")
-
         assertEquals(original, decodePendingAuth(encodePendingAuth(original)))
     }
 
@@ -206,7 +149,6 @@ class AuthSessionCodecTest {
     }
 }
 
-// Test fixture only; no account or token from this helper is included in the app binary.
 private fun createTestSession(
     accessToken: String = "token123",
     refreshTokenId: String = "refresh456",
@@ -220,8 +162,3 @@ private fun createTestSession(
         displayName = "テスト太郎",
     ),
 )
-
-private fun legacyTwelvePartSession(lastValue: String): String = listOf(
-    "token123", "refresh456", "3600", "6", "test@example.com", "テスト太郎",
-    "", "", "55024", "1年Aクラス", "Student", lastValue,
-).joinToString(".") { it.encodeToByteArray().toBase64Url() }

@@ -21,6 +21,30 @@ import kotlin.test.assertTrue
 class AuthApiTest {
 
     @Test
+    fun currentUserReadsTeacherClassesAndAllCategoryFlags() = runTest {
+        val api = AuthApi(mockClient {
+            respond(
+                """{"user":{"id":"12","is_student":true,"is_staff":true,"is_teacher":true,"teacher":{"teacher_id":12,"class_rooms":[{"class_room_id":3,"class_code":"1-A","class_room_name":"1年A組"}]}}}""",
+                HttpStatusCode.OK,
+                jsonHeaders,
+            )
+        })
+        try {
+            val user = api.currentUser("token")
+            assertTrue(user.isStudent)
+            assertTrue(user.isStaff)
+            assertTrue(user.isTeacher)
+            assertEquals(Role.Teacher, user.role)
+            assertEquals(
+                AuthTeacher(12, listOf(AuthTeacherClassRoom(3, "1-A", "1年A組"))),
+                user.teacher,
+            )
+        } finally {
+            api.close()
+        }
+    }
+
+    @Test
     fun desktopAuthUrlSendsLoopbackAndRejectsApiWithDifferentRedirect() = runTest {
         val redirectUri = "http://localhost:54321/auth/callback"
         val api = AuthApi(mockClient { request ->
@@ -677,7 +701,7 @@ class AuthApiTest {
                 id = "6",
                 email = "test@example.com",
                 displayName = "テスト太郎",
-                role = Role.Student,
+                isStudent = true,
             ),
         )
 

@@ -87,7 +87,6 @@ class AuthViewModelProfilePhotoRaceTest {
             sessionStore = store,
             cache = LocalCache(InMemoryKeyValueStore()),
             photoRepository = photoRepository,
-            devAuthBypassEnabled = false,
             pushTokenLifecycle = NoOpPushTokenLifecycle,
         )
 
