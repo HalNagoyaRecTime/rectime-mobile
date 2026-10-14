@@ -1,7 +1,5 @@
 package com.rectime.mobile.feature.notifications
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,7 +30,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +37,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.ui.component.AppLoadingIndicator
+import com.rectime.mobile.ui.component.AppRefreshIcon
+import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.RootScreenScaffold
 import com.rectime.mobile.ui.modifier.outerShadow
@@ -51,10 +49,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.ic_ic_refresh
-import kotlin.math.ceil
-import kotlin.math.floor
-import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -78,6 +72,7 @@ object NotificationsScreen : Screen {
     @Composable
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel(key = key) { NotificationsViewModel() }
+        LaunchedEffect(viewModel) { viewModel.onEnter() }
         val uiState by viewModel.uiState.collectAsState()
         val showCenterLoading by viewModel.showCenterLoading.collectAsState()
         val now by produceState(Clock.System.now()) {
@@ -116,22 +111,23 @@ object NotificationsScreen : Screen {
                 modifier = Modifier.background(AppTheme.colors.notificationBackground),
                 onTrailingClick = if (uiState.isUpdating || uiState.isRefreshing || uiState.isLoadingMore) null else viewModel::refresh,
                 trailing = {
-                    NotificationRefreshIcon(isRefreshing = uiState.isHeaderRefreshing)
+                    AppRefreshIcon(isRefreshing = uiState.isHeaderRefreshing)
                 },
             ) {
                 when {
-                    uiState.isLoading -> Unit
+                    (uiState.isLoading || uiState.isUpdating || uiState.isRefreshing) && uiState.notifications.isEmpty() -> Unit
 
                     uiState.error != null && uiState.notifications.isEmpty() -> item {
-                        NotificationMessage(
+                        StatusMessage(
                             message = requireNotNull(uiState.error),
                             actionLabel = "再読み込み",
                             onAction = viewModel::refresh,
+                            actionEnabled = !uiState.isUpdating && !uiState.isRefreshing,
                         )
                     }
 
                     uiState.notifications.isEmpty() -> item {
-                        NotificationMessage(message = "通知はありません")
+                        StatusMessage(message = "通知はありません")
                     }
 
                     else -> {
@@ -167,10 +163,11 @@ object NotificationsScreen : Screen {
                         }
                         if (uiState.pageError != null) {
                             item {
-                                NotificationMessage(
+                                StatusMessage(
                                     message = uiState.pageError.orEmpty(),
                                     actionLabel = "再読み込み",
                                     onAction = viewModel::loadMore,
+                                    actionEnabled = !uiState.isUpdating && !uiState.isRefreshing && !uiState.isLoadingMore,
                                 )
                             }
                         }
@@ -185,45 +182,6 @@ object NotificationsScreen : Screen {
         }
     }
 }
-
-@Composable
-private fun NotificationRefreshIcon(isRefreshing: Boolean) {
-    val rotation = remember { Animatable(0f) }
-    LaunchedEffect(isRefreshing) {
-        if (isRefreshing) {
-            while (true) {
-                // A new request can interrupt the final turn of the previous one.
-                // Always reach a full-turn boundary before resetting the angle.
-                val endAngle = nextRefreshRotationTarget(rotation.value)
-                rotation.animateTo(
-                    endAngle,
-                    tween(refreshRotationDurationMillis(rotation.value, endAngle), easing = LinearEasing),
-                )
-                rotation.snapTo(0f)
-            }
-        } else {
-            // Finish the current turn before resetting, rather than jumping backwards.
-            val endAngle = ceil(rotation.value / 360f) * 360f
-            val remainingMillis = refreshRotationDurationMillis(rotation.value, endAngle)
-            if (remainingMillis > 0) {
-                rotation.animateTo(endAngle, tween(remainingMillis, easing = LinearEasing))
-            }
-            rotation.snapTo(0f)
-        }
-    }
-    Icon(
-        painter = painterResource(Res.drawable.ic_ic_refresh),
-        contentDescription = if (isRefreshing) "更新中" else "更新",
-        tint = AppTheme.colors.textNavigationInactive,
-        modifier = Modifier.size(29.dp).graphicsLayer { rotationZ = rotation.value },
-    )
-}
-
-internal fun nextRefreshRotationTarget(angle: Float): Float =
-    (floor(angle / 360f) + 1f) * 360f
-
-internal fun refreshRotationDurationMillis(startAngle: Float, endAngle: Float): Int =
-    ((endAngle - startAngle) / 360f * 600).roundToInt().coerceAtLeast(0)
 
 @Composable
 private fun NotificationCard(
@@ -327,31 +285,6 @@ private fun NotificationCard(
                     .padding(top = ChevronTopPadding)
                     .size(ChevronSize),
             )
-        }
-    }
-}
-
-@Composable
-private fun NotificationMessage(
-    message: String,
-    actionLabel: String? = null,
-    onAction: (() -> Unit)? = null,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = message,
-            color = AppTheme.colors.textSecondary,
-        )
-        if (actionLabel != null && onAction != null) {
-            Button(onClick = onAction) {
-                Text(actionLabel)
-            }
         }
     }
 }

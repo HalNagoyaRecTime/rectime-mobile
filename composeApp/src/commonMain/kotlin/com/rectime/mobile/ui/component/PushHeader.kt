@@ -1,6 +1,5 @@
 package com.rectime.mobile.ui.component
 
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -18,9 +17,11 @@ fun PushHeader(
     modifier: Modifier = Modifier,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    titleVisible: Boolean = true,
 ) {
     HeaderTitleBar(
         title = title,
+        titleVisible = titleVisible,
         modifier = modifier,
         onLeadingClick = onBack,
         leading = {

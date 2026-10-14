@@ -16,6 +16,7 @@ import kotlin.test.assertFalse
 import kotlinx.coroutines.CancellationException
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -64,7 +65,7 @@ class EventCacheTest {
         val storage = MemoryStore()
         val local = LocalCache(storage)
         val cache = EventCache(local)
-        cache.saveEvents(events("old"))
+        storage.putString("schedule_events_v1", Json.encodeToString(events("old")))
         storage.clearOnListRead = true
         cache.saveDetail(detail("new"))
         assertNull(cache.loadEvents())
@@ -119,18 +120,18 @@ class EventCacheTest {
     }
 
     @Test
-    fun timestampsTakePriorityOverRequestOrderAndSqlDatesAreComparable() = runTest {
+    fun freshResponsesReplaceSavedValuesEvenWhenApiTimestampMovesBackwards() = runTest {
         val cache = EventCache(LocalCache(MemoryStore()))
         cache.saveDetail(detail("B").copy(updatedAt = "2026-01-01 10:00:02"))
         cache.saveEvents(events("A").copy(events = events("A").events.map {
             it.copy(updatedAt = "2026-01-01T10:00:01Z")
         }))
-        assertEquals("B", cache.loadDetail(1)?.eventName)
+        assertEquals("A", cache.loadDetail(1)?.eventName)
         cache.saveEvents(events("C").copy(events = events("C").events.map {
             it.copy(updatedAt = "2026-01-01T10:00:03Z")
         }))
         cache.saveDetail(detail("A").copy(updatedAt = "2026-01-01T10:00:01Z"))
-        assertEquals("C", cache.loadDetail(1)?.eventName)
+        assertEquals("A", cache.loadDetail(1)?.eventName)
     }
 
     @Test
@@ -143,7 +144,7 @@ class EventCacheTest {
         val firstRequest = first.beginRequest()
         val secondRequest = second.beginRequest()
         val gate = CompletableDeferred<Unit>()
-        storage.pauseNextListRead = gate
+        storage.pauseNextListWrite = gate
         val a = async { first.saveDetail(detail("A"), firstRequest) }
         runCurrent()
         val b = async { second.saveDetail(detail("B").copy(eventId = 2), secondRequest) }
@@ -199,7 +200,7 @@ class EventCacheTest {
             storage.failWriteKey = "event_detail_v1_1"
 
             assertEquals("B", cache.saveDetail(detail("B").copy(updatedAt = timestamp)).eventName)
-            assertEquals("A", local.load<EventDetailResponse>("event_detail_v1_1")?.eventName)
+            assertEquals("B", local.load<EventDetailResponse>("event_detail_v1_1")?.eventName)
             assertEquals("B", cache.loadEvents()?.events?.single()?.eventName)
             assertEquals("B", cache.loadDetail(1)?.eventName)
             // 先に開始していた古い一覧応答が後から届いても、保存できた新しい内容を保持する。
@@ -218,7 +219,7 @@ class EventCacheTest {
             storage.failWriteKey = "schedule_events_v1"
 
             cache.saveDetail(detail("B").copy(updatedAt = timestamp))
-            assertEquals("A", cache.loadEvents()?.events?.single()?.eventName)
+            assertEquals("B", cache.loadEvents()?.events?.single()?.eventName)
             assertEquals("B", cache.loadDetail(1)?.eventName)
         }
     }
@@ -288,6 +289,54 @@ class EventCacheTest {
         assertEquals(emptyList(), cache.loadDetail(1)?.rounds)
     }
 
+    @Test
+    fun newerListMembershipIsNotRolledBackByAnOlderResponse() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val older = cache.beginRequest()
+        cache.saveEvents(events("latest").copy(events = emptyList(), total = 0))
+        assertEquals(emptyList(), cache.saveEvents(events("old"), older).events)
+        assertEquals(emptyList(), cache.reconcileEvents(events("old"), older).events)
+    }
+
+    @Test
+    fun deletedDetailCannotBeRestoredByRequestsStartedBeforeInvalidation() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        cache.saveEvents(events("old"))
+        cache.saveDetail(detail("old"))
+        val older = cache.beginRequest()
+        cache.invalidateDetail(1)
+        assertEquals(emptyList(), cache.reconcileEvents(events("old"), older).events)
+        assertTrue(runCatching { cache.saveDetail(detail("old"), older) }.isFailure)
+        assertNull(cache.loadDetail(1))
+        // 削除後に開始した取得で存在が再確認された場合は復元できる。
+        cache.saveDetail(detail("restored"))
+        assertEquals("restored", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun invalidationSurvivesRestartWhenListCleanupFails() = runTest {
+        for (failedKey in listOf("schedule_events_v1", "event_detail_v1_1")) {
+            val storage = MemoryStore()
+            val cache = EventCache(LocalCache(storage))
+            cache.saveEvents(events("removed"))
+            cache.saveDetail(detail("removed"))
+            storage.failWriteKey = failedKey
+            cache.invalidateDetail(1)
+            // 別の保存先インスタンスで、プロセス内の共有メモリを使わずに再起動を再現する。
+            val reopened = object : KeyValueStore {
+                override suspend fun getString(key: String) = storage.getString(key)
+                override suspend fun putString(key: String, value: String) = storage.putString(key, value)
+                override suspend fun clear() = storage.clear()
+            }
+            val restored = EventCache(LocalCache(reopened))
+            assertNull(restored.loadDetail(1))
+            assertEquals(emptyList(), restored.loadEvents()?.events)
+            storage.failWriteKey = null
+            restored.saveDetail(detail("reconfirmed"))
+            assertEquals("reconfirmed", restored.loadDetail(1)?.eventName)
+        }
+    }
+
     private fun rounds(id: Int) = listOf(com.rectime.mobile.core.network.EventRoundResponse(1,
         listOf(com.rectime.mobile.core.network.EventRoundGatheringResponse(id, "08:45",
             com.rectime.mobile.core.network.EventGatheringSpotResponse(1, "体育館")))))
@@ -301,6 +350,7 @@ class EventCacheTest {
         private val values = mutableMapOf<String, String>()
         var clearOnListRead = false
         var pauseNextListRead: CompletableDeferred<Unit>? = null
+        var pauseNextListWrite: CompletableDeferred<Unit>? = null
         var failWriteKey: String? = null
         override suspend fun getString(key: String): String? {
             if (key == "schedule_events_v1") {
@@ -315,6 +365,9 @@ class EventCacheTest {
             return value
         }
         override suspend fun putString(key: String, value: String) {
+            if (key == "schedule_events_v1") {
+                pauseNextListWrite?.let { gate -> pauseNextListWrite = null; gate.await() }
+            }
             if (key == failWriteKey) error("storage failed for $key")
             values[key] = value
         }

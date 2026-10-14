@@ -106,6 +106,22 @@ class EventScheduleStoreTest {
         } finally { store.close() }
     }
 
+    @Test fun confirmedParticipationRejectionClearsBothModernAndLegacyValues() = runTest(dispatcher) {
+        val cache = LocalCache(MemoryStore())
+        cache.save(EventScheduleStore.ParticipationKey, listOf(MyEventParticipation(1, listOf(10))))
+        cache.save(MY_EVENTS_CACHE_KEY, setOf(1))
+        val store = EventScheduleStore(cache, client { detailBody }, object : MyEventsGateway {
+            override suspend fun getMyEvents(): List<MyEventParticipation> =
+                throw HttpStatusException(io.ktor.http.HttpStatusCode.Forbidden)
+        })
+        try {
+            assertTrue(runCatching { store.refreshParticipation() }.isFailure)
+            assertEquals(emptyList(), store.cachedParticipation())
+            assertEquals(emptySet(), store.cachedParticipatingEventIds())
+            assertNull(cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY))
+        } finally { store.close() }
+    }
+
     @Test fun failedStorageDoesNotStopLiveDetailAndParticipation() = runTest(dispatcher) {
         val cache = LocalCache(object : KeyValueStore {
             override suspend fun getString(key: String): String? = error("read")
@@ -177,6 +193,32 @@ class EventScheduleStoreTest {
         } finally { store.close() }
     }
 
+    @Test fun detailUsesLatestSharedParticipationWhileItsBodyIsStillLoading() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        var delayDetail = false
+        var ids = listOf(10)
+        val cache = LocalCache(MemoryStore())
+        val http = client { if (delayDetail) gate.await(); detailBody }
+        val store = EventScheduleStore(cache, http, object : MyEventsGateway {
+            override suspend fun getMyEvents() = listOf(MyEventParticipation(1, ids))
+        })
+        try {
+            val vm = EventDetailViewModel(1, http, cache, store)
+            vm.onForeground()
+            advanceUntilIdle()
+            assertEquals(setOf(10), vm.uiState.value.attendingGatheringIds)
+            delayDetail = true
+            vm.onForeground()
+            runCurrent()
+            // 別画面での取得が先に完了しても、詳細は古い参加結果へ戻さない。
+            ids = listOf(30)
+            store.refreshParticipation()
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(setOf(30), vm.uiState.value.attendingGatheringIds)
+        } finally { store.close() }
+    }
+
     @Test fun scheduleUpdateRetainsDetailedRounds() = runTest(dispatcher) {
         val cache = EventCache(LocalCache(MemoryStore()))
         val detail = Json { ignoreUnknownKeys = true }.decodeFromString<EventDetailResponse>(detailBody)
@@ -185,4 +227,25 @@ class EventScheduleStoreTest {
         assertEquals("更新された競技", cache.loadDetail(1)?.eventName)
         assertEquals(detail.rounds, cache.loadDetail(1)?.rounds)
     }
+    @Test fun roundStartChangesRefreshLegacyCacheWithoutEventTimestamp() = runTest(dispatcher) {
+        val local = LocalCache(MemoryStore())
+        val cache = EventCache(local)
+        val legacyBody = detailBody.replace("\"rule_text\":null", "\"rule_text\":null,\"updated_at\":\"2026-10-08T00:00:00Z\"")
+        cache.saveDetail(Json { ignoreUnknownKeys = true }.decodeFromString<EventDetailResponse>(legacyBody))
+        assertNull(cache.loadDetail(1)?.toGatherings()?.first()?.roundStartTime)
+        var body = legacyBody
+        val store = EventScheduleStore(local, client { body })
+        try {
+            for (startTime in listOf("0900", "0910", null)) {
+                val value = startTime?.let { "\"$it\"" } ?: "null"
+                body = legacyBody.replace("\"round\":1", "\"round\":1,\"start_time\":$value")
+                store.refreshDetail(1)
+                assertEquals(startTime, cache.loadDetail(1)?.toGatherings()?.first()?.roundStartTime)
+            }
+            body = legacyBody.substringBefore(",\"rounds\"") + ",\"rounds\":[]}"
+            store.refreshDetail(1)
+            assertEquals(emptyList(), cache.loadDetail(1)?.toGatherings())
+        } finally { store.close() }
+    }
+
 }

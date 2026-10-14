@@ -8,4 +8,5 @@ data class Gathering(
     val round: Int,
     val eventName: String,
     val gatheringSpotName: String,
+    val roundStartTime: String? = null,
 )

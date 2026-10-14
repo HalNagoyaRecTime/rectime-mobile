@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rectime.mobile.ui.graphics.drawTimelineSeparator
+import com.rectime.mobile.ui.component.TimelineTimeLabel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.event.EventDetailScreen
@@ -56,6 +57,7 @@ import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
 import com.rectime.mobile.ui.component.PullRefreshHoldDistance
 import com.rectime.mobile.ui.component.RootScreenScaffold
+import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.component.resolveEventCardShadowSpec
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.theme.AppTheme
@@ -176,8 +178,8 @@ private fun ScheduleScreenUI(
 
     val overflowCardWidth = (10f * dim.u).dp
 
-    LaunchedEffect(error) {
-        if (error != null) {
+    LaunchedEffect(error, events.isNotEmpty()) {
+        if (error != null && events.isNotEmpty()) {
             snackbarHostState.showSnackbar(error)
         }
     }
@@ -236,20 +238,7 @@ private fun ScheduleScreenUI(
 
                     repeat(totalHours + 1) { index ->
                         val y = topPadPx + (index * step) - lazyListState.firstVisibleItemScrollOffset
-                        drawRect(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    separatorLineColor.copy(alpha = 0.8f),
-                                    separatorLineColor.copy(alpha = 0.8f),
-                                    Color.Transparent
-                                ),
-                                startX = contentLeft,
-                                endX = size.width
-                            ),
-                            topLeft = Offset(contentLeft, y),
-                            size = Size(size.width - contentLeft, 1.dp.toPx())
-                        )
+                        drawTimelineSeparator(y, contentLeft, separatorLineColor)
                     }
                 }
 
@@ -397,20 +386,10 @@ private fun ScheduleScreenUI(
                                 val index = hour - hourStart
                                 val yOffset = step * index
 
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .offset(y = yOffset - 10.dp)
-                                        .padding(end = 6.dp),
-                                    contentAlignment = Alignment.TopEnd
-                                ) {
-                                    Text(
-                                        text = "$hour:00",
-                                        color = AppTheme.colors.textScheduleTimeBar,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Normal
-                                    )
-                                }
+                                TimelineTimeLabel(
+                                    text = "$hour:00",
+                                    modifier = Modifier.fillMaxWidth().offset(y = yOffset - 10.dp),
+                                )
                             }
                         }
                     }
@@ -527,6 +506,21 @@ private fun ScheduleScreenUI(
                             .height(60.dp)
                     )
                 }
+            }
+        }
+
+        // 一度も表示できていない場合は、一時的なSnackbarだけで終わらせない。
+        if (error != null && events.isEmpty() && !isLoading) {
+            Box(
+                Modifier.fillMaxSize().padding(top = timelineTopPadding)
+                    .background(AppTheme.colors.commonBackground),
+            ) {
+                StatusMessage(
+                    message = error,
+                    actionLabel = "再読み込み",
+                    onAction = onRefresh,
+                    actionEnabled = !isUpdating && !isRefreshing,
+                )
             }
         }
 

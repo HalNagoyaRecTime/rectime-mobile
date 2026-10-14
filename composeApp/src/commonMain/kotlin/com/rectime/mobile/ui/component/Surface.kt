@@ -26,6 +26,7 @@ fun PressSurface(
     color: androidx.compose.ui.graphics.Color = AppTheme.colors.surfaceMuted,
     shape: RoundedCornerShape = RoundedCornerShape(16.dp),
     contentPadding: PaddingValues = PaddingValues(12.dp),
+    enabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -39,7 +40,7 @@ fun PressSurface(
         modifier = modifier
             .graphicsLayer(scaleX = scale, scaleY = scale, shape = shape, clip = true)
             .background(color)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .clickable(enabled = enabled, interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(contentPadding),
     ) {
         androidx.compose.material3.ProvideTextStyle(

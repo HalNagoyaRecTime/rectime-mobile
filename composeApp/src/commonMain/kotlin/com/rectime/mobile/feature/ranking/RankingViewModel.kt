@@ -5,12 +5,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.rectime.mobile.core.cache.CacheGeneration
+import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
+import com.rectime.mobile.core.util.LoadingMode
+import com.rectime.mobile.core.util.loadingVisibility
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.HttpStatusException
@@ -25,8 +28,10 @@ import io.ktor.client.request.parameter
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,17 +55,40 @@ class RankingViewModel(
 
     val uiState: StateFlow<RankingUiState> = _uiState.asStateFlow()
 
+    val showCenterLoading: StateFlow<Boolean> = uiState.map { state ->
+        when {
+            state.isHeaderRefreshing -> LoadingMode.Immediate
+            state.isRefreshing -> LoadingMode.Hidden
+            state.isLoading -> LoadingMode.Delayed
+            else -> LoadingMode.Hidden
+        }
+    }.loadingVisibility().stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    fun onEnter() = fetchRankings(afterCurrent = false)
+
+    fun refresh() = fetchRankings(isHeaderRefresh = true)
+
     // ログイン中のユーザーが後から解決される(セッションのユーザー情報が
     // 再取得で更新される)場合があるため、コンストラクタでの固定値ではなく
     // updateMyTeamIdで差し替え可能にしている。
     private var myTeamId: Int? = initialMyTeamId
 
     private var contentSession = CacheRequestGeneration()
-    private var fetchJob: Job? = null
+    private val refreshQueue = CacheRefreshQueue()
     private var displayedGeneration = CacheGeneration.value
 
     init {
-        fetchRankings()
+        viewModelScope.launch {
+            cache.observe<RankingsResponse>(RANKING_CACHE_KEY).collect { saved ->
+                _uiState.update { state ->
+                    if (!contentSession.isCurrent) RankingUiState()
+                    else state.copy(rankingItems = saved?.takeIf { value ->
+                        value.isComplete()
+                    }?.items?.toModelList()?.toRankingItems(myTeamId).orEmpty())
+                }
+            }
+        }
+        fetchRankings(afterCurrent = false)
     }
 
     // 所属チームIDが取得済みのランキングより後から解決した場合に、既に表示中の
@@ -85,16 +113,13 @@ class RankingViewModel(
         if (!contentSession.isCurrent) fetchRankings()
     }
 
-    fun fetchRankings(isPullRefresh: Boolean = false) {
-        // ボタン・引っ張り更新・前面復帰は同じ取得を共有する。別セッションの取得は破棄する。
-        if (fetchJob?.isActive == true && contentSession.isCurrent) return
-        fetchJob?.cancel()
+    fun fetchRankings(isPullRefresh: Boolean = false, afterCurrent: Boolean = true, isHeaderRefresh: Boolean = false) {
         val generationAtStart = CacheGeneration.value
         if (displayedGeneration != generationAtStart) {
             _uiState.value = RankingUiState(isLoading = true)
             displayedGeneration = generationAtStart
         }
-        fetchJob = viewModelScope.launch {
+        refreshQueue.launch(viewModelScope, afterCurrent = afterCurrent) {
             // キュー待ち中にログアウトした要求を開始しない。
             if (generationAtStart != CacheGeneration.value) {
                 _uiState.value = RankingUiState()
@@ -109,22 +134,29 @@ class RankingViewModel(
             // 保持したままローディング状態にする。isOfflineは今回の結果が
             // 出るまで意味を持たないため、古い表示を引きずらないようリセットする。
             _uiState.update {
-                it.copy(isLoading = true, isRefreshing = isPullRefresh, error = null, isOffline = false)
+                it.copy(isLoading = true, isRefreshing = isPullRefresh, isHeaderRefreshing = isHeaderRefresh, error = null, isOffline = false)
             }
 
             try {
                 when (
-                    val result = request.validate(withMinimumRefreshDuration(isPullRefresh) {
+                    val result = request.validate(withMinimumRefreshDuration(isPullRefresh || isHeaderRefresh) {
                         fetchWithCacheFirst(
-                            fetchLive = { fetchAllRankings(httpClient, baseUrl) },
-                            loadCache = {
-                                if (_uiState.value.rankingItems.isEmpty()) {
-                                    cache.load<RankingsResponse>(RANKING_CACHE_KEY)?.takeIf { saved ->
-                                        saved.items.map { it.teamId }.distinct().size == saved.items.size
+                            fetchLive = {
+                                cache.requests.run(RANKING_CACHE_KEY) {
+                                    fetchAllRankings(httpClient, baseUrl).also { value ->
+                                        try { cache.saveFetched(RANKING_CACHE_KEY, value) }
+                                        catch (e: CancellationException) { throw e }
+                                        catch (_: Exception) { }
                                     }
-                                } else null
+                                }
                             },
-                            saveCache = { cache.saveFetched(RANKING_CACHE_KEY, it) },
+                            loadCache = {
+                                cache.load<RankingsResponse>(RANKING_CACHE_KEY)?.takeIf { saved ->
+                                    saved.isComplete()
+                                }
+                            },
+                            saveCache = {},
+                            invalidateCache = { cache.invalidate(RANKING_CACHE_KEY) },
                             onCached = { saved ->
                                 _uiState.update {
                                     it.copy(rankingItems = saved.items.toModelList().toRankingItems(myTeamId))
@@ -136,7 +168,8 @@ class RankingViewModel(
                     is CachedFetchResult.Fresh -> {
                         _uiState.value = RankingUiState(
                             isLoading = false,
-                            rankingItems = result.value.items.toModelList().toRankingItems(myTeamId),
+                            rankingItems = (cache.load<RankingsResponse>(RANKING_CACHE_KEY) ?: result.value)
+                                .items.toModelList().toRankingItems(myTeamId),
                             isOffline = false,
                         )
                     }
@@ -167,7 +200,7 @@ class RankingViewModel(
                         result.error.printStackTrace()
                         val status = (result.error as? HttpStatusException)?.status
                         if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(result.error, contentSession)) {
-                            _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null, isOffline = true) }
+                            _uiState.update { it.copy(isLoading = false, isRefreshing = false, isHeaderRefreshing = false, error = null, isOffline = true) }
                             return@launch
                         }
                         // キャッシュ世代の変更（ログアウト等）もFailedになるため、
@@ -183,7 +216,7 @@ class RankingViewModel(
             } catch (e: Exception) {
                 e.printStackTrace()
                 if (_uiState.value.rankingItems.isNotEmpty() && request.canRetainDisplayedContent(e, contentSession)) {
-                    _uiState.update { it.copy(isLoading = false, isRefreshing = false, error = null, isOffline = true) }
+                    _uiState.update { it.copy(isLoading = false, isRefreshing = false, isHeaderRefreshing = false, error = null, isOffline = true) }
                 } else {
                     _uiState.value = RankingUiState(error = rankingErrorMessage(null))
                 }
@@ -193,7 +226,7 @@ class RankingViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        httpClient.close()
+        cache.requests.afterRequests { httpClient.close() }
     }
 }
 
@@ -234,3 +267,6 @@ private fun rankingErrorMessage(status: HttpStatusCode?): String = when (status)
 internal fun rankingViewModelFactory() = viewModelFactory {
     initializer { RankingViewModel() }
 }
+
+private fun RankingsResponse.isComplete(): Boolean =
+    offset == 0 && total == items.size && items.map { it.teamId }.distinct().size == items.size

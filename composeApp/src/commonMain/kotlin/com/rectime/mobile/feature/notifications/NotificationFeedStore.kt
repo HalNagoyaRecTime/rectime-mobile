@@ -5,6 +5,10 @@ import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
@@ -51,11 +55,31 @@ class NotificationFeedStore(
     private var revision = 0
     private var boundUserId: String? = null
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    init {
+        scope.launch {
+            cache.observe<List<UserNotification>>("notifications_v1").collect { values ->
+                if (values == null) {
+                    if (!session.isCurrent) clearMemory()
+                } else {
+                    val tail = if (values.size == NotificationHistoryLimit) {
+                        _notifications.value.drop(NotificationHistoryLimit)
+                    } else emptyList()
+                    publish((values + tail).distinctBy { it.id })
+                }
+            }
+        }
+    }
+
     suspend fun bindSession(userId: String) {
         mutex.withLock {
             if (!session.isCurrent || (boundUserId != null && boundUserId != userId)) {
                 cancelRequests()
                 clearMemory()
+                try { cache.invalidate("notifications_v1") }
+                catch (e: CancellationException) { throw e }
+                catch (_: Exception) { }
             }
             boundUserId = userId
         }
@@ -90,7 +114,9 @@ class NotificationFeedStore(
                 val result = try {
                     fetchWithCacheFirst(
                         fetchLive = {
-                            val page = gateway.getNotifications(limit = NotificationHistoryLimit, offset = 0)
+                            val page = cache.requests.run("notifications_page:0:$NotificationHistoryLimit") {
+                                gateway.getNotifications(limit = NotificationHistoryLimit, offset = 0)
+                            }
                             val received = page.notifications.take(NotificationHistoryLimit)
                             val newest = applyDetailUpdates(received.distinctBy { it.id })
                             val previousVisible = _cachedNotifications.value.orEmpty()
@@ -116,6 +142,7 @@ class NotificationFeedStore(
                             }
                         },
                         saveCache = { history.saveList(applyDetailUpdates(it)) },
+                        invalidateCache = { cache.invalidate("notifications_v1") },
                         onCached = {
                             if (request.isCurrent && requestRevision == revision) {
                                 nextOffset = it.size
@@ -169,7 +196,10 @@ class NotificationFeedStore(
             // ログアウトなどで自分も取り消された場合は、ここで停止する。
             currentCoroutineContext().ensureActive()
         }
-        if (request.isCurrent) load(force = true)
+        if (request.isCurrent) {
+            cache.requests.awaitCurrent("notifications_page:0:$NotificationHistoryLimit")
+            if (request.isCurrent) load(force = true)
+        }
     }
 
     suspend fun loadMore() = coroutineScope {
@@ -199,7 +229,9 @@ class NotificationFeedStore(
                 detailUpdates.clear()
                 try {
                     // オンラインの無限スクロールは保存先の状態に依存させない。
-                    val page = gateway.getNotifications(limit = NotificationPageSize, offset = nextOffset)
+                    val page = cache.requests.run("notifications_page:$nextOffset:$NotificationPageSize") {
+                        gateway.getNotifications(limit = NotificationPageSize, offset = nextOffset)
+                    }
                     if (!request.isCurrent || requestRevision != revision) {
                         if (requestRevision == revision) clearMemory()
                         return@async
@@ -235,12 +267,16 @@ class NotificationFeedStore(
                     lastResult = CachedFetchResult.Fresh(updated)
                     _status.value = _status.value.copy(hasMore = values.isNotEmpty() && nextOffset < total)
                 } catch (e: CancellationException) {
+                    if (!request.isCurrent || requestRevision != revision) return@async
                     throw e
                 } catch (e: Exception) {
                     if (request.isCurrent && requestRevision == revision) {
                         if (e.invalidatesNotificationCache()) {
                             clearMemory()
                             _status.value = _status.value.copy(error = e)
+                            try { cache.invalidate("notifications_v1") }
+                            catch (cancel: CancellationException) { throw cancel }
+                            catch (_: Exception) { }
                         } else {
                             _status.value = _status.value.copy(pageError = e)
                         }
@@ -256,12 +292,16 @@ class NotificationFeedStore(
     internal fun findNotification(id: Int): UserNotification? =
         if (session.isCurrent) _notifications.value.firstOrNull { it.id == id } else null
 
+    internal fun removeNotification(id: Int) {
+        detailUpdates.remove(id)
+        publish(_notifications.value.filterNot { it.id == id })
+    }
+
     internal fun updateNotification(notification: UserNotification) {
         if (!session.isCurrent) return
         detailUpdates[notification.id] = notification
         if (_notifications.value.none { it.id == notification.id }) return
         publish(_notifications.value.map { if (it.id == notification.id) notification else it })
-        lastResult = lastResult?.let { CachedFetchResult.Fresh(_notifications.value) }
     }
 
     // 通信開始後に詳細で取得できた内容を、遅い一覧応答で古い内容に戻さない。
@@ -271,6 +311,7 @@ class NotificationFeedStore(
     private fun publish(notifications: List<UserNotification>) {
         _notifications.value = notifications
         _cachedNotifications.value = notifications.take(visibleCount)
+        lastResult = lastResult?.let { CachedFetchResult.Fresh(notifications) }
     }
 
     private fun cancelRequests() {

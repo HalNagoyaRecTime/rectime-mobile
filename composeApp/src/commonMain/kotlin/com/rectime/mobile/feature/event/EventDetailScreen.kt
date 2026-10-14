@@ -1,8 +1,15 @@
 package com.rectime.mobile.feature.event
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,17 +18,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.size
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
+import com.rectime.mobile.ui.component.AppTimeText
 import com.rectime.mobile.ui.component.AppMarkdown
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,17 +39,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
@@ -49,35 +62,21 @@ import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.ui.component.AppLoadingIndicator
-import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.MapModal
 import com.rectime.mobile.ui.component.PushScreenScaffold
+import com.rectime.mobile.ui.component.BounceBackground
 import com.rectime.mobile.ui.component.headerTitleBarHeight
 import com.rectime.mobile.ui.theme.AppTheme
-import org.jetbrains.compose.resources.painterResource
-import rectime_mobile.composeapp.generated.resources.Res
-import rectime_mobile.composeapp.generated.resources.ic_info_outline
 
-// 集合時刻 99:59 は未設定を表すセンチネル値
-private const val UndecidedGatheringTime = "99:59"
-
-private val TitleBandVerticalPadding = 24.dp
+private val TitleBandVerticalPadding = 12.dp
 private val SectionSpacing = 24.dp
-private val SectionHeadingSpacing = 8.dp
-private val BodyIndent = 8.dp
-private val InfoIconSize = 16.dp
-private val GatheringRoundWidth = 32.dp
-private val GatheringTimeWidth = 60.dp
-private val GatheringBadgeWidth = 44.dp
-private val GatheringRowVerticalPadding = 6.dp
-private val GatheringRowHorizontalPadding = 12.dp
 private val ContentBottomSpacing = 48.dp
 
+// イベント詳細だけに適用する背景色。共通画面の配色は変えない。
+private val EventDetailBackground = Color(0xFFF7F7F7)
+
 private val TitleFontSize = 28.sp
-private val HeadingFontSize = 19.sp
 private val BodyFontSize = 16.sp
-private val GatheringFontSize = 15.sp
-private val GatheringLineHeight = 22.sp
 
 data class EventDetailScreen(val eventId: Int) : Screen {
     override val key: String = "event_detail_$eventId"
@@ -87,32 +86,39 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         val viewModel = viewModel(key = key) {
             EventDetailViewModel(eventId = eventId, scheduleStore = EventScheduleStore.shared)
         }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onForeground() }
         val uiState by viewModel.uiState.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
+        var titleHeightPx by remember { mutableIntStateOf(0) }
         var titleBandHeightPx by remember { mutableIntStateOf(0) }
+        val listState = rememberLazyListState()
+        val titleInsetPx = with(LocalDensity.current) {
+            TitleBandVerticalPadding.roundToPx()
+        }
+        val headerTitleVisible by remember(listState, titleInsetPx) {
+            derivedStateOf {
+                titleHeightPx > 0 && (listState.firstVisibleItemIndex > 0 ||
+                    listState.firstVisibleItemScrollOffset >= titleInsetPx + titleHeightPx)
+            }
+        }
         val titleBandColor = AppTheme.colors.themeColorSecond
-        val bodyBackgroundColor = AppTheme.colors.commonBackground
+        val bodyBackgroundColor = EventDetailBackground
 
         Box(modifier = Modifier.fillMaxSize()) {
             PushScreenScaffold(
-                title = "スケジュール詳細",
+                title = uiState.eventDetail?.eventName.orEmpty(),
+                modifier = Modifier.background(bodyBackgroundColor),
+                titleVisible = headerTitleVisible && !uiState.isLoading && uiState.error == null,
+                lazyListState = listState,
                 onBack = { navigationController.requestPop() },
                 horizontalPadding = false,
                 contentTopPadding = false,
                 headerEdgeFade = false,
                 contentBackground = {
-                    if (uiState.eventDetail != null && uiState.error == null) {
-                        // 画面の割合ではなく、実際のタイトル帯の高さで背面の色を分ける。
-                        Box(
-                            Modifier.fillMaxSize()
-                                .background(bodyBackgroundColor)
-                                .drawBehind {
-                                    drawRect(
-                                        color = titleBandColor,
-                                        size = Size(size.width, titleBandHeightPx.toFloat().coerceAtMost(size.height)),
-                                    )
-                                },
-                        )
+                    if (!uiState.isLoading && uiState.eventDetail != null && uiState.error == null) {
+                        val visibleBandHeight = if (listState.firstVisibleItemIndex == 0)
+                            titleBandHeightPx - listState.firstVisibleItemScrollOffset else 0
+                        BounceBackground(titleBandColor, bodyBackgroundColor, visibleBandHeight.coerceAtLeast(0).toFloat())
                     }
                 },
             ) {
@@ -151,6 +157,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                 gatherings = uiState.gatherings,
                                 attendingGatheringIds = uiState.attendingGatheringIds,
                                 onOpenMap = { isMapVisible = true },
+                                onTitleHeightChanged = { titleHeightPx = it },
                                 onTitleBandHeightChanged = { titleBandHeightPx = it },
                             )
                         }
@@ -171,12 +178,31 @@ private fun EventDetailContent(
     gatherings: List<Gathering>,
     attendingGatheringIds: Set<Int>,
     onOpenMap: () -> Unit,
+    onTitleHeightChanged: (Int) -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
 ) {
+    var now by remember { mutableIntStateOf(overviewMinute()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = overviewMinute()
+            delay(60_000)
+        }
+    }
+    val status = when {
+        minuteOf(event.endTime)?.let { now >= it } == true -> "終了"
+        minuteOf(event.startTime)?.let { now >= it } == true -> "開催中"
+        else -> "開催前"
+    }
     // 高さを固定せず、本文全体をLazyColumnのスクロール範囲に含める。
     // 短い本文の下側はScaffoldのcontentBackgroundが描画する。
-    Column(modifier = Modifier.fillMaxWidth().background(AppTheme.colors.commonBackground)) {
-        EventTitleBand(title = event.eventName, onHeightChanged = onTitleBandHeightChanged)
+    Column(modifier = Modifier.fillMaxWidth().background(EventDetailBackground)) {
+        EventTitleBand(
+            title = event.eventName,
+            onTitleHeightChanged = onTitleHeightChanged,
+            onHeightChanged = onTitleBandHeightChanged,
+            status = status,
+            overview = { EventOverview(event, onOpenMap) },
+        )
 
         Column(
             modifier = Modifier
@@ -187,34 +213,11 @@ private fun EventDetailContent(
                 ),
             verticalArrangement = Arrangement.spacedBy(SectionSpacing),
         ) {
-            DetailSection(heading = "実施場所", onInfoClick = onOpenMap) {
-                DetailBodyText(
-                    text = venueDisplayText(event.venues),
-                    modifier = Modifier.padding(start = BodyIndent),
-                )
-            }
-
-            DetailSection(heading = "実施時間") {
-                Text(
-                    text = "${event.startTime.toFormattedTime().toDisplayTime()} 〜 " +
-                        event.endTime.toFormattedTime().toDisplayTime(),
-                    color = AppTheme.colors.textDetailsScreenBody,
-                    fontSize = BodyFontSize,
-                    modifier = Modifier.padding(start = BodyIndent),
-                )
-            }
-
             if (gatherings.isNotEmpty()) {
-                DetailSection(heading = "集合時間・集合場所", onInfoClick = onOpenMap) {
-                    GatheringList(
-                        gatherings = gatherings,
-                        attendingGatheringIds = attendingGatheringIds,
-                    )
-                }
+                EventRoundPreviews(event, gatherings, attendingGatheringIds)
             }
 
             event.ruleText?.takeIf { it.isNotBlank() }?.let { ruleText ->
-                AppDivider()
                 AppMarkdown(
                     content = ruleText,
                     imageTitle = event.eventName,
@@ -230,12 +233,23 @@ private fun EventDetailContent(
 }
 
 @Composable
-private fun EventTitleBand(title: String, onHeightChanged: (Int) -> Unit) {
-    Box(
+private fun EventTitleBand(
+    title: String,
+    onTitleHeightChanged: (Int) -> Unit,
+    onHeightChanged: (Int) -> Unit,
+    status: String,
+    overview: @Composable () -> Unit,
+) {
+    val bottomLineColor = AppTheme.colors.themeColorFirst
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .onSizeChanged { onHeightChanged(it.height) }
             .background(AppTheme.colors.themeColorSecond)
+            .drawBehind {
+                val thickness = 2.dp.toPx()
+                drawRect(bottomLineColor, topLeft = Offset(0f, size.height - thickness), size = Size(size.width, thickness))
+            }
             .padding(
                 start = AppTheme.layout.screenHorizontalPadding,
                 end = AppTheme.layout.screenHorizontalPadding,
@@ -243,148 +257,88 @@ private fun EventTitleBand(title: String, onHeightChanged: (Int) -> Unit) {
                 bottom = TitleBandVerticalPadding,
             ),
     ) {
-        Text(
-            text = title,
-            modifier = Modifier.offset(y=10.dp),
-            color = AppTheme.colors.textThemeColorSecond,
-            fontSize = TitleFontSize,
-            lineHeight = TitleFontSize * 1.3f,
-            fontWeight = FontWeight.Black,
-        )
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f).onSizeChanged { onTitleHeightChanged(it.height) },
+                color = AppTheme.colors.textThemeColorSecond,
+                fontSize = TitleFontSize,
+                lineHeight = TitleFontSize * 1.3f,
+                fontWeight = FontWeight.Black,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            OverviewStatus(status)
+        }
+        Spacer(Modifier.height(8.dp))
+        overview()
     }
 }
 
 @Composable
-private fun DetailSection(
-    heading: String,
-    onInfoClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(SectionHeadingSpacing)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = heading,
-                color = AppTheme.colors.textDetailsScreenBody,
-                fontSize = HeadingFontSize,
-                fontWeight = FontWeight.Bold,
-            )
-            if (onInfoClick != null) {
-                Icon(
-                    painter = painterResource(Res.drawable.ic_info_outline),
-                    contentDescription = "会場マップを開く",
-                    tint = AppTheme.colors.themeColorFirst,
-                    modifier = Modifier
-                        .size(InfoIconSize)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onInfoClick,
-                        ),
-                )
+private fun EventOverview(event: EventDetail, onOpenMap: () -> Unit) {
+    val foreground = AppTheme.colors.textThemeColorSecond
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Column(Modifier.width(IntrinsicSize.Max)) {
+            Text("開催時間", color = foreground.copy(alpha = 0.8f), fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                AppTimeText(event.startTime.toFormattedTime(padHour = false), fontSize = 20.sp, lineHeight = 24.sp,
+                    color = foreground, fontWeight = FontWeight.Bold)
+                Text("~", color = foreground, fontSize = 20.sp)
+                AppTimeText(event.endTime.toFormattedTime(padHour = false), fontSize = 20.sp, lineHeight = 24.sp,
+                    color = foreground, fontWeight = FontWeight.Bold)
             }
         }
-        content()
+        Column(
+            Modifier.weight(1f),
+            horizontalAlignment = Alignment.End,
+        ) {
+            Text("開催場所", color = foreground.copy(alpha = 0.8f), fontSize = 13.sp)
+            Row(
+                modifier = Modifier
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Button,
+                        onClick = onOpenMap,
+                    )
+                    .semantics { contentDescription = "会場マップを開く" },
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    venueDisplayText(event.venues), color = foreground, fontSize = BodyFontSize,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                )
+                Icon(SolidGroup.ChevronRight, contentDescription = null, tint = foreground, modifier = Modifier.size(14.dp))
+            }
+        }
     }
 }
 
 @Composable
-private fun DetailBodyText(text: String, modifier: Modifier = Modifier) {
+private fun OverviewStatus(status: String) {
+    val colors = AppTheme.colors
+    val background = when (status) {
+        "開催中" -> colors.themeColorFirst
+        "終了" -> colors.screenBackground
+        else -> colors.surfacePrimary
+    }
+    val foreground = when (status) {
+        "開催中" -> colors.textThemeColorFirst
+        "終了" -> colors.textMuted
+        else -> colors.themeColorSecond
+    }
     Text(
-        text = text,
-        color = AppTheme.colors.textDetailsScreenBody,
-        fontSize = BodyFontSize,
-        lineHeight = BodyFontSize * 1.6f,
-        modifier = modifier,
+        status, color = foreground, fontSize = 13.sp, maxLines = 1, softWrap = false,
+        modifier = Modifier.background(background, RoundedCornerShape(50))
+            .padding(horizontal = 10.dp, vertical = 3.dp),
     )
 }
 
-@Composable
-private fun GatheringList(gatherings: List<Gathering>, attendingGatheringIds: Set<Int>) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(gatheringRowRadius()))
-            .background(AppTheme.colors.detailsScreenListBackground),
-    ) {
-        gatherings.forEach { gathering ->
-            GatheringRow(
-                gathering = gathering,
-                isAttending = gathering.gatheringId in attendingGatheringIds,
-            )
-        }
-    }
-}
-
-@Composable
-private fun GatheringRow(gathering: Gathering, isAttending: Boolean) {
-    val textColor = if (isAttending) {
-        AppTheme.colors.textThemeColorFirst
-    } else {
-        AppTheme.colors.textDetailsScreenBody
-    }
-    val fontWeight = if (isAttending) FontWeight.Bold else FontWeight.Normal
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(CircleShape)
-            .background(if (isAttending) AppTheme.colors.themeColorFirst else Color.Transparent)
-            .padding(
-                horizontal = GatheringRowHorizontalPadding,
-                vertical = GatheringRowVerticalPadding,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "${gathering.round}.",
-            color = textColor,
-            fontSize = GatheringFontSize,
-            lineHeight = GatheringLineHeight,
-            fontWeight = fontWeight,
-            modifier = Modifier.width(GatheringRoundWidth),
-        )
-        Text(
-            text = gathering.displayTime(),
-            color = textColor,
-            fontSize = GatheringFontSize,
-            lineHeight = GatheringLineHeight,
-            fontWeight = fontWeight,
-            modifier = Modifier.width(GatheringTimeWidth),
-        )
-        Text(
-            text = gathering.gatheringSpotName,
-            color = textColor,
-            fontSize = GatheringFontSize,
-            lineHeight = GatheringLineHeight,
-            fontWeight = fontWeight,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f),
-        )
-        Box(modifier = Modifier.width(GatheringBadgeWidth)) {
-            if (isAttending) {
-                Text(
-                    text = "出場",
-                    color = textColor,
-                    fontSize = GatheringFontSize,
-                    lineHeight = GatheringLineHeight,
-                    fontWeight = fontWeight,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-    }
-}
-
-// 行はCircleShapeで「高さの半分」に丸まるため、大枠もその値に揃える
-@Composable
-private fun gatheringRowRadius(): Dp =
-    GatheringRowVerticalPadding + with(LocalDensity.current) { GatheringLineHeight.toDp() } / 2
-
-private fun Gathering.displayTime(): String =
-    if (gatheringTime == UndecidedGatheringTime) "未定" else gatheringTime.toDisplayTime()
-
-private fun String.toDisplayTime(): String = removePrefix("0")
+private fun overviewMinute(): Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).let { it.hour * 60 + it.minute }

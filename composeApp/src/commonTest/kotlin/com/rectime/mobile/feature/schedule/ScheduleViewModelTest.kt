@@ -76,7 +76,7 @@ class ScheduleViewModelTest {
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
         val displayed = viewModel.events.value
-        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        cache.store.putString("schedule_events_v1", eventsJson.replace("綱引き", "古い予定"))
         viewModel.fetchEvents()
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(displayed, viewModel.events.value)
@@ -130,10 +130,10 @@ class ScheduleViewModelTest {
         assertEquals(1, calls)
         viewModel.onEnter()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(1, calls)
+        assertEquals(2, calls)
         viewModel.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(2, calls)
+        assertEquals(3, calls)
     }
 
     @Test
@@ -146,7 +146,7 @@ class ScheduleViewModelTest {
         assertEquals(2, viewModel.events.value.size)
         viewModel.onEnter()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(1, calls)
+        assertEquals(2, calls)
     }
 
     @Test
@@ -163,7 +163,7 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         val displayed = viewModel.events.value
         // ディスクの値が古くても、更新中は表示中のデータを優先する。
-        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        cache.store.putString("schedule_events_v1", eventsJson.replace("綱引き", "古い予定"))
         viewModel.onForeground()
         testDispatcher.scheduler.runCurrent()
         assertEquals(displayed, viewModel.events.value)
@@ -192,7 +192,7 @@ class ScheduleViewModelTest {
         viewModel.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
         val displayed = viewModel.events.value
-        cache.save("schedule_events_v1", Json.decodeFromString<EventsResponse>(eventsJson.replace("綱引き", "古い予定")))
+        cache.store.putString("schedule_events_v1", eventsJson.replace("綱引き", "古い予定"))
         viewModel.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(displayed, viewModel.events.value)
@@ -272,7 +272,7 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun returningToScheduleDoesNotFetchAgainAndManualRefreshStillWorks() = runTest(testDispatcher) {
+    fun returningToScheduleFetchesAgainWithoutClearingContent() = runTest(testDispatcher) {
         var calls = 0
         val viewModel = buildViewModel(mockClient {
             calls++
@@ -281,12 +281,12 @@ class ScheduleViewModelTest {
         viewModel.onEnter()
         testDispatcher.scheduler.advanceUntilIdle()
         viewModel.onEnter()
-        testDispatcher.scheduler.runCurrent()
-        assertEquals(1, calls)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
         assertFalse(viewModel.isUpdating)
         viewModel.refresh()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertEquals(2, calls)
+        assertEquals(3, calls)
         assertFalse(viewModel.isRefreshing)
     }
 
@@ -513,7 +513,7 @@ class ScheduleViewModelTest {
     // ---- 引っ張って更新 ----
 
     @Test
-    fun refreshKeepsExistingEventsUntilMinimumDurationCompletes() = runTest(testDispatcher) {
+    fun latestCacheIsDisplayedImmediatelyWhileRefreshAnimationFinishes() = runTest(testDispatcher) {
         var calls = 0
         val viewModel = buildViewModel(mockClient {
             calls++
@@ -526,11 +526,11 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.runCurrent()
         assertTrue(viewModel.isRefreshing)
         assertFalse(viewModel.isLoading)
-        assertEquals(2, viewModel.events.value.size)
+        assertTrue(viewModel.events.value.isEmpty())
         testDispatcher.scheduler.advanceTimeBy(599)
         testDispatcher.scheduler.runCurrent()
         assertTrue(viewModel.isRefreshing)
-        assertEquals(2, viewModel.events.value.size)
+        assertTrue(viewModel.events.value.isEmpty())
         testDispatcher.scheduler.advanceTimeBy(1)
         testDispatcher.scheduler.runCurrent()
         assertFalse(viewModel.isRefreshing)
@@ -604,6 +604,7 @@ class ScheduleViewModelTest {
         assertFalse(viewModel.isLoading)
         assertEquals(LOAD_FAILED_MESSAGE, viewModel.error)
         viewModel.refresh()
+        testDispatcher.scheduler.runCurrent()
         assertNull(viewModel.error)
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(2, calls)

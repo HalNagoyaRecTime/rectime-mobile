@@ -84,6 +84,7 @@ fun RootScreenScaffold(
         0.dp
     }
 
+    // 既定の背景より画面側の指定を優先し、バウンス用背景を上書きしない。
     Box(modifier = modifier.fillMaxSize()) {
         val listContent: @Composable () -> Unit = {
             Box(Modifier.fillMaxSize()) {
@@ -160,10 +161,11 @@ fun PushScreenScaffold(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
+    titleVisible: Boolean = true,
+    lazyListState: LazyListState = rememberLazyListState(),
     contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
-    val lazyListState = rememberLazyListState()
     val inputEnabled = navigationScrollEnabled(lazyListState)
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
@@ -174,9 +176,10 @@ fun PushScreenScaffold(
         0.dp
     }
 
-    Box(modifier = modifier
-        .fillMaxSize()
-        .background(AppTheme.colors.commonBackground),
+    Box(modifier = Modifier
+        .background(AppTheme.colors.commonBackground)
+        .then(modifier)
+        .fillMaxSize(),
     ) {
         contentBackground()
         LazyColumn(
@@ -207,6 +210,7 @@ fun PushScreenScaffold(
         }
         PushHeader(
             title = title,
+            titleVisible = titleVisible,
             onBack = onBack,
             onTrailingClick = onTrailingClick,
             trailing = trailing,
