@@ -248,4 +248,17 @@ class EventScheduleStoreTest {
         } finally { store.close() }
     }
 
+    @Test fun detailUnauthorizedDoesNotInvalidateSharedSavedContent() = runTest(dispatcher) {
+        val cache = LocalCache(MemoryStore())
+        val detail = Json { ignoreUnknownKeys = true }.decodeFromString<EventDetailResponse>(detailBody)
+        cache.saveFetched("event_detail_v1_1", detail)
+        val rejected = HttpClient(MockEngine) {
+            engine { addHandler { respond("{\"error\":{\"code\":\"UNAUTHORIZED\"}}", io.ktor.http.HttpStatusCode.Unauthorized) } }
+        }
+        val store = EventScheduleStore(cache, rejected)
+        try { assertFailsWith<HttpStatusException> { store.refreshDetail(1) } }
+        finally { rejected.close() }
+        assertEquals(detail, cache.load<EventDetailResponse>("event_detail_v1_1"))
+    }
+
 }

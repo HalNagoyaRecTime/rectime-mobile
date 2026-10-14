@@ -69,6 +69,12 @@ class ScheduleViewModel internal constructor(
     private val _events = mutableStateOf(listOf<TimelineEvent>())
     val events: State<List<TimelineEvent>> = _events
 
+    private var liveActivityInvalidated by mutableStateOf(false)
+
+    // 保存値なしの通信失敗では、同じ本人のOS上の表示を消さない。成功した空結果は更新する。
+    internal val liveActivityReady: Boolean
+        get() = enteredSession?.isCurrent == true && !isUpdating && (displayedResponse != null || error == null || liveActivityInvalidated)
+
     var isLoading by mutableStateOf(false)
         private set
 
@@ -155,6 +161,7 @@ class ScheduleViewModel internal constructor(
                 participatingEventIds = null
                 contentSession = CacheRequestGeneration()
             }
+            liveActivityInvalidated = false
             isUpdating = true
             isLoading = !isRefresh && !isBackground && _events.value.isEmpty()
             isRefreshing = isRefresh
@@ -187,7 +194,7 @@ class ScheduleViewModel internal constructor(
                         loadCache = { eventCache.loadEvents() },
                         // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
                         saveCache = {},
-                        invalidateCache = { cache.invalidate("schedule_events_v1") },
+                        invalidateCache = { liveActivityInvalidated = true; cache.invalidate("schedule_events_v1") },
                         onCached = { saved ->
                             if (!isRefresh && !isBackground && _events.value.isEmpty()) {
                                 publishEvents(saved, cacheRequest)
@@ -310,6 +317,7 @@ class ScheduleViewModel internal constructor(
     private suspend fun fetchAllEvents(): EventsResponse {
         val events = mutableListOf<EventResponse>()
         var offset = 0
+        var eventDate: String? = null
         do {
             val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events") {
                 parameter("limit", EVENTS_PAGE_SIZE)
@@ -319,6 +327,8 @@ class ScheduleViewModel internal constructor(
                 throw apiErrorException(response.status, response.bodyAsText())
             }
             val page = response.body<EventsResponse>()
+            if (offset == 0) eventDate = page.eventDate
+            else check(page.eventDate == eventDate) { "一覧の開催日が取得中に変わりました" }
             // 全件に達する前の空ページを完全な一覧として保存しない。
             check(page.events.isNotEmpty() || offset >= page.total) {
                 "イベント一覧の取得が全件に達する前に終了しました"
@@ -326,7 +336,7 @@ class ScheduleViewModel internal constructor(
             events += page.events
             offset += page.events.size
         } while (page.events.isNotEmpty() && offset < page.total)
-        return EventsResponse(events, events.size, EVENTS_PAGE_SIZE, 0)
+        return EventsResponse(events, events.size, EVENTS_PAGE_SIZE, 0, eventDate)
     }
 
     private fun toTimelineEvents(body: EventsResponse): TimelineResult {

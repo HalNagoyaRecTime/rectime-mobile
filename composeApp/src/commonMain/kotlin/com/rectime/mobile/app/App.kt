@@ -29,6 +29,7 @@ import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.schedule.ScheduleScreen
+import com.rectime.mobile.feature.liveactivity.ScheduleLiveActivityEffect
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
 import com.rectime.mobile.feature.ranking.RankingViewModel
 import com.rectime.mobile.feature.ranking.rankingViewModelFactory
@@ -122,6 +123,9 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     }
 
     AppTheme(themeStateHolder = themeStateHolder) {
+        if (authState.session == null && !authState.isRestoringSession) {
+            ScheduleLiveActivityEffect("", ready = true)
+        }
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
             val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
@@ -129,6 +133,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             LaunchedEffect(session.user.id, session.user.teamId) {
                 rankingViewModel.onSession(session.user.teamId)
             }
+            ScheduleLiveActivityEffect(session.user.id, scheduleViewModel.liveActivityReady, scheduleViewModel.isOffline)
             val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {

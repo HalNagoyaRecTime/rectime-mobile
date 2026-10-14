@@ -92,7 +92,6 @@ class EventDetailViewModel internal constructor(
                         loadCache = { eventCache.loadDetail(eventId) },
                         // 統合済みの値を本文表示にも使う。
                         saveCache = {},
-                        invalidateCache = { eventCache.invalidateDetail(eventId, it) },
                         onCached = { saved ->
                             val gatherings = saved.toGatherings().orEmpty()
                             val attending = loadAttendingGatheringIdsFromCache()

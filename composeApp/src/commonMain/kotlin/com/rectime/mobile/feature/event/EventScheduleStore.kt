@@ -85,12 +85,23 @@ internal class EventScheduleStore(
             val request = CacheRequestGeneration()
             val eventCache = EventCache(cache)
             val cacheRequest = eventCache.beginRequest()
-            val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events/$eventId")
-            if (!response.status.isSuccess()) throw apiErrorException(response.status, response.bodyAsText())
-            val detail = response.body<EventDetailResponse>()
-            checkNotNull(detail.rounds) { "イベント詳細のroundsがありません" }
-            if (!request.isCurrent) throw CancellationException("イベントのセッションが変わりました")
-            eventCache.saveDetail(detail, cacheRequest)
+            try {
+                val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events/$eventId")
+                if (!response.status.isSuccess()) throw apiErrorException(response.status, response.bodyAsText())
+                val detail = response.body<EventDetailResponse>()
+                checkNotNull(detail.rounds) { "イベント詳細のroundsがありません" }
+                if (!request.isCurrent) throw CancellationException("イベントのセッションが変わりました")
+                eventCache.saveDetail(detail, cacheRequest)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (request.isCurrent && e.invalidatesDisplayedContent()) {
+                    try { eventCache.invalidateDetail(eventId, e) }
+                    catch (cancel: CancellationException) { throw cancel }
+                    catch (_: Exception) { }
+                }
+                throw e
+            }
         }
 
     private suspend inline fun <reified T> loadEntryOrNull(key: String): FetchedCache<T>? = try {
