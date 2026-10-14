@@ -259,7 +259,7 @@ private struct LiveGatheringCountdown: View {
         if #available(iOS 18.0, *) {
             // 標準の時間データと有界タイマーで、最上位の一単位だけ表示し、0で止める。
             Text("集合まで") + Text(.currentDate, format: .timer(
-                countingDownIn: min(Date.now, time)..<time,
+                countingDownIn: min(Date.now, time.addingTimeInterval(-1))..<time,
                 showsHours: true, maxFieldCount: 1, maxPrecision: .seconds(60)
             ).locale(Locale(identifier: "ja_JP")))
         } else {
