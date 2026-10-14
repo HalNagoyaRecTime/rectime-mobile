@@ -19,8 +19,13 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.disk.DiskCache
-import coil3.network.cachecontrol.CacheControlCacheStrategy
-import coil3.network.ktor3.KtorNetworkFetcherFactory
+import com.rectime.mobile.core.image.ImageFreshness
+import com.rectime.mobile.core.image.ImageCacheStrategy
+import com.rectime.mobile.core.image.ImageCacheInterceptor
+import coil3.network.DeDupeConcurrentRequestStrategy
+import coil3.network.NetworkFetcher
+import coil3.network.ktor3.asNetworkClient
+import com.rectime.mobile.core.image.CacheOnlyImageNetworkClient
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
@@ -74,19 +79,21 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     LaunchedEffect(Unit) { HapticCapability.load() }
 
     setSingletonImageLoaderFactory { context ->
+        val freshness = ImageFreshness()
         ImageLoader.Builder(context)
             .components {
+                add(ImageCacheInterceptor(freshness))
                 add(
-                    KtorNetworkFetcherFactory(
-                        httpClient = {
-                            createHttpClient().config {
-                                install(MobileAuthHeadersPlugin)
-                            }
+                    NetworkFetcher.Factory(
+                        networkClient = {
+                            CacheOnlyImageNetworkClient(
+                                createHttpClient().config {
+                                    install(MobileAuthHeadersPlugin)
+                                }.asNetworkClient(),
+                            )
                         },
-                        // 既定のCacheStrategyはディスクキャッシュがあれば無条件に返すため、
-                        // 差し替えた画像が二度と反映されない。Cache-ControlとETagを見て
-                        // 再検証させる。
-                        cacheStrategy = { CacheControlCacheStrategy() },
+                        cacheStrategy = { ImageCacheStrategy(freshness) },
+                        concurrentRequestStrategy = { DeDupeConcurrentRequestStrategy() },
                     )
                 )
             }
