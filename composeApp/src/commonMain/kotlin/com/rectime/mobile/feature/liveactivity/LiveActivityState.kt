@@ -141,9 +141,7 @@ internal fun buildLiveActivityState(
             }
         }
     }.distinctBy { it.number }
-    val gatheringOrder = compareBy<LiveGathering> { it.time }.thenBy { it.number }
-    val next = gatherings.filter { it.time <= now }.minWithOrNull(gatheringOrder)
-        ?: gatherings.minWithOrNull(gatheringOrder)
+    val next = selectNextGathering(gatherings, now)
     val active = matches.filter { it.start <= now && now < it.end }
         .sortedWith(compareBy<LiveMatch> { it.id != next?.eventId }
             .thenBy { it.id !in own }.thenByDescending { it.start }.thenBy { it.id })
@@ -162,19 +160,8 @@ internal fun buildLiveActivityState(
         val end = event?.let { activityTime(schedule.eventDate, it.endTime) }
         event != null && end != null && (end <= now || details[id]?.rounds != null)
     }
-    val pendingOwnIds = if (personalKnown) details.flatMap { (eventId, detail) ->
-        val event = schedule.events.firstOrNull { it.eventId == eventId }
-        val end = event?.let { activityTime(schedule.eventDate, it.endTime) }
-        detail.rounds.orEmpty().flatMap { round ->
-            val start = activityTime(schedule.eventDate, round.startTime)
-            round.gatherings.mapNotNull { gathering ->
-                if (gathering.gatheringId !in own[eventId].orEmpty()) return@mapNotNull null
-                val time = activityTime(schedule.eventDate, gathering.gatheringTime) ?: return@mapNotNull null
-                val keepUntil = start?.takeIf { it > time } ?: end
-                gathering.gatheringId.takeIf { end != null && end > now && (time > now || (keepUntil ?: end) > now) }
-            }
-        }
-    }.toSet() else emptySet()
+    // 表示対象と残件数は、同じ保持条件を通過した本人集合から決める。
+    val pendingOwnIds = if (personalKnown) gatherings.map { it.number }.toSet() else emptySet()
     val personalState = when {
         participation == null -> "unknown"
         own.isEmpty() -> "none"
@@ -199,6 +186,14 @@ internal fun buildLiveActivityState(
         remainingGatheringCount = if (personalKnown && next != null) (pendingOwnIds.size - 1).coerceAtLeast(0) else null,
         personalState = personalState,
         presentationUntil = presentationUntil)
+}
+
+/** 保持中の本人集合を優先し、同時刻はIDの小さい方に揃える。入力順には依存しない。 */
+private fun selectNextGathering(gatherings: List<LiveGathering>, now: Long): LiveGathering? {
+    val reachedOrder = compareByDescending<LiveGathering> { it.time }.thenBy { it.number }
+    val upcomingOrder = compareBy<LiveGathering> { it.time }.thenBy { it.number }
+    return gatherings.filter { it.time <= now }.minWithOrNull(reachedOrder)
+        ?: gatherings.minWithOrNull(upcomingOrder)
 }
 
 private fun String.activityText(limit: Int): String = take(limit).let { text ->
