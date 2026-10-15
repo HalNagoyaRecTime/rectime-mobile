@@ -33,6 +33,7 @@ class EventDetailViewModel internal constructor(
     private val ownsScheduleStore = scheduleStore == null
     private val scheduleStore = scheduleStore ?: EventScheduleStore(cache, client = httpClient)
 
+    internal val eventTime = viewModelScope.eventTimeStateFlow(cache)
     private val contentSession = CacheRequestGeneration()
     private val eventCache = EventCache(cache)
 

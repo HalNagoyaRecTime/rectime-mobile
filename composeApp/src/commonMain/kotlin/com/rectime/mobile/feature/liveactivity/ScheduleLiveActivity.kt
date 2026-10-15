@@ -12,13 +12,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** 共通ストアを購読し、OS固有の処理は表示とActivityの管理だけにする。 */
 @Composable
-internal fun ScheduleLiveActivityEffect(accountId: String, ready: Boolean, sourceOffline: Boolean = false) {
+internal fun ScheduleLiveActivityEffect(accountId: String, ready: Boolean, sourceOffline: Boolean = false, refreshVersion: Int = 0) {
     if (!supportsScheduleLiveActivity) return
     if (accountId.isBlank()) {
         PublishLiveActivityEffect(null, accountId, ready)
         return
     }
-    val model = remember(accountId, CacheGeneration.value) { LiveActivityViewModel(accountId) }
+    val model = remember(accountId, CacheGeneration.value) { LiveActivityViewModel(accountId, initiallyReady = false) }
+    LaunchedEffect(model, ready, refreshVersion) { model.setSourceReady(ready) }
     LaunchedEffect(model, sourceOffline) { model.setOffline(sourceOffline) }
     val state by model.state.collectAsStateWithLifecycle()
     val restored by model.ready.collectAsStateWithLifecycle()

@@ -88,6 +88,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         }
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onForeground() }
         val uiState by viewModel.uiState.collectAsState()
+        val eventTime by viewModel.eventTime.collectAsState()
         var isMapVisible by remember { mutableStateOf(false) }
         var titleHeightPx by remember { mutableIntStateOf(0) }
         var titleBandHeightPx by remember { mutableIntStateOf(0) }
@@ -154,6 +155,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                         event != null -> {
                             EventDetailContent(
                                 event = event,
+                                eventTime = eventTime,
                                 gatherings = uiState.gatherings,
                                 attendingGatheringIds = uiState.attendingGatheringIds,
                                 onOpenMap = { isMapVisible = true },
@@ -175,24 +177,14 @@ data class EventDetailScreen(val eventId: Int) : Screen {
 @Composable
 private fun EventDetailContent(
     event: EventDetail,
+    eventTime: EventTimeContext,
     gatherings: List<Gathering>,
     attendingGatheringIds: Set<Int>,
     onOpenMap: () -> Unit,
     onTitleHeightChanged: (Int) -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
 ) {
-    var now by remember { mutableIntStateOf(overviewMinute()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = overviewMinute()
-            delay(60_000)
-        }
-    }
-    val status = when {
-        minuteOf(event.endTime)?.let { now >= it } == true -> "終了"
-        minuteOf(event.startTime)?.let { now >= it } == true -> "開催中"
-        else -> "開催前"
-    }
+    val status = eventTime.status(event.startTime, event.endTime).label
     // 高さを固定せず、本文全体をLazyColumnのスクロール範囲に含める。
     // 短い本文の下側はScaffoldのcontentBackgroundが描画する。
     Column(modifier = Modifier.fillMaxWidth().background(EventDetailBackground)) {
@@ -214,7 +206,7 @@ private fun EventDetailContent(
             verticalArrangement = Arrangement.spacedBy(SectionSpacing),
         ) {
             if (gatherings.isNotEmpty()) {
-                EventRoundPreviews(event, gatherings, attendingGatheringIds)
+                EventRoundPreviews(event, gatherings, attendingGatheringIds, now = eventTime.minute)
             }
 
             event.ruleText?.takeIf { it.isNotBlank() }?.let { ruleText ->
@@ -237,7 +229,7 @@ private fun EventTitleBand(
     title: String,
     onTitleHeightChanged: (Int) -> Unit,
     onHeightChanged: (Int) -> Unit,
-    status: String,
+    status: String?,
     overview: @Composable () -> Unit,
 ) {
     val bottomLineColor = AppTheme.colors.themeColorFirst
@@ -268,7 +260,7 @@ private fun EventTitleBand(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            OverviewStatus(status)
+            status?.let { OverviewStatus(it) }
         }
         Spacer(Modifier.height(8.dp))
         overview()
@@ -340,5 +332,3 @@ private fun OverviewStatus(status: String) {
             .padding(horizontal = 10.dp, vertical = 3.dp),
     )
 }
-
-private fun overviewMinute(): Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).let { it.hour * 60 + it.minute }

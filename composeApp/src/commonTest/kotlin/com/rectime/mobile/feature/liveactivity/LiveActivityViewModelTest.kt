@@ -65,6 +65,19 @@ class LiveActivityViewModelTest {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
     }.also { clients += it }
 
+    @Test fun foregroundWaitsForSharedScheduleRefreshBeforeFetchingDetailsOnce() = runModelTest {
+        val cache = LocalCache(Memory())
+        seed(cache, event(1))
+        var calls = 0
+        val store = EventScheduleStore(cache, client { calls++; detail(it) })
+        val vm = LiveActivityViewModel("user", cache, store, clock, initiallyReady = false).also { models += it }
+        vm.setForeground(true); runCurrent()
+        assertEquals(0, calls)
+        cache.saveEntry("schedule_events_v1", EventsResponse(listOf(event(1)), 1, 100, 0, "2026-03-09"), now.toString())
+        vm.setSourceReady(true); runCurrent()
+        assertEquals(1, calls)
+    }
+
     @Test fun rejectedOrDeletedEventStopsPreviouslyCachedLiveActivity() = runModelTest {
         for (status in listOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound)) {
             val cache = LocalCache(Memory())

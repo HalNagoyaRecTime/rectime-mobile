@@ -65,18 +65,16 @@ internal data class LiveActivityState(
 )
 
 /** 開催日はAPI値だけを使う。端末の今日へ毎日読み替えない。時刻は詳細と同じHHmm/HH:mmの解釈を使う。 */
-internal fun activityTime(date: String?, time: String?): Long? = runCatching {
-    val minute = time?.let(::minuteOf) ?: return null
-    LocalDateTime(LocalDate.parse(requireNotNull(date)), LocalTime(minute / 60, minute % 60))
-        .toInstant(TimeZone.of("Asia/Tokyo")).epochSeconds
-}.getOrNull()
+internal fun activityTime(date: String?, time: String?): Long? = com.rectime.mobile.feature.event.eventInstant(date, time)
 
-internal fun activityCandidateIds(schedule: EventsResponse, now: Long): List<Int> =
-    schedule.events.mapNotNull { event ->
+internal fun activityCandidateIds(schedule: EventsResponse, now: Long, ownIds: Set<Int> = emptySet()): List<Int> {
+    if (com.rectime.mobile.feature.event.eventTimeContext(schedule.eventDate, Instant.fromEpochSeconds(now)).day != com.rectime.mobile.feature.event.EventDay.Today) return emptyList()
+    return schedule.events.mapNotNull { event ->
         val start = activityTime(schedule.eventDate, event.startTime) ?: return@mapNotNull null
         val end = activityTime(schedule.eventDate, event.endTime) ?: return@mapNotNull null
-        event.eventId.takeIf { it > 0 && end > start && end > now && start <= now + LiveActivityHorizonSeconds }
+        event.eventId.takeIf { it > 0 && end > start && end > now && (event.eventId in ownIds || start <= now + LiveActivityHorizonSeconds) }
     }.distinct()
+}
 
 /** ラウンドには終了時刻がないため、現在開催中と推測せず開始予定と出場判定だけを返す。 */
 internal fun buildLiveActivityState(
@@ -89,8 +87,8 @@ internal fun buildLiveActivityState(
     isCached: Boolean,
 ): LiveActivityState? {
     if (accountId.isBlank()) return null
-    val ids = activityCandidateIds(schedule, now).toSet()
     val own = participation.orEmpty().associate { it.eventId to it.gatheringIds.toSet() }
+    val ids = activityCandidateIds(schedule, now, own.keys).toSet()
     val matches = schedule.events.filter { it.eventId in ids }.map { event ->
         val rounds = details[event.eventId]?.rounds.orEmpty().filter { it.round > 0 }
             .distinctBy { it.round }.sortedBy { it.round }
@@ -116,7 +114,7 @@ internal fun buildLiveActivityState(
                 val time = activityTime(schedule.eventDate, gathering.gatheringTime) ?: return@mapNotNull null
                 val roundStart = activityTime(schedule.eventDate, round.startTime)
                 // 過去の集合は開始予定まで保持する。親ラウンドが開始済みでも未来の集合は消さない。
-                if (time > now + LiveActivityHorizonSeconds || (time < now && (roundStart ?: event.end) <= now)) return@mapNotNull null
+                if (time < now && (roundStart ?: event.end) <= now) return@mapNotNull null
                 LiveGathering(event.id, event.title, gathering.gatheringId, round.round, time,
                     gathering.gatheringSpot.name.activityText(60), roundStart, event.venue, event.end)
             }

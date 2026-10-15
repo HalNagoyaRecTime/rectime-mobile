@@ -34,11 +34,15 @@ internal class LiveActivityViewModel(
     private val cache: LocalCache = LocalCache(),
     private val store: EventScheduleStore = EventScheduleStore.shared,
     private val clock: Clock = Clock.System,
+    initiallyReady: Boolean = true,
 ) : ViewModel() {
     private val currentSession = CacheRequestGeneration()
     private val _state = MutableStateFlow<LiveActivityState?>(null)
     val state: StateFlow<LiveActivityState?> = _state
     private val active = MutableStateFlow(false)
+    private val waitForSharedRefresh = !initiallyReady
+    private val sourceReady = MutableStateFlow(initiallyReady)
+    private val canRefresh = combine(active, sourceReady) { foreground, ready -> foreground && ready }
     private val tick = MutableStateFlow(clock.now().epochSeconds)
     private val detailRevision = MutableStateFlow(0)
     private val restored = MutableStateFlow(false)
@@ -75,15 +79,15 @@ internal class LiveActivityViewModel(
             }
         }
         viewModelScope.launch {
-            combine(cache.observe<EventsResponse>("schedule_events_v1"), store.participationChanges, tick, detailRevision, active) {
+            combine(cache.observe<EventsResponse>("schedule_events_v1"), store.participationChanges, tick, detailRevision, canRefresh) {
                     events, own, now, _, foreground -> Inputs(events, own, now, foreground)
             }.collect { input ->
                 if (!currentSession.isCurrent) { _state.value = null; restored.value = true; return@collect }
                 val fetched = cachedListEntry()?.fetchedAt
-                val changed = schedule != input.events || lastScheduleFetch != fetched
+                val changed = lastScheduleFetch != fetched
                 lastScheduleFetch = fetched
                 schedule = input.events
-                val candidates = input.events?.let { activityCandidateIds(it, input.now).toSet() }.orEmpty()
+                val candidates = input.events?.let { activityCandidateIds(it, input.now, input.own.orEmpty().map { own -> own.eventId }.toSet()).toSet() }.orEmpty()
                 observedCandidates.value = candidates
                 val requested = if (changed) candidates else candidates - lastCandidates
                 val entries = candidates.associateWith { store.cachedDetailEntry(it) }
@@ -95,7 +99,7 @@ internal class LiveActivityViewModel(
                         coroutineScope {
                             requested.map { id -> async {
                                 concurrency.withPermit {
-                                    if (!active.value || !currentSession.isCurrent) return@withPermit
+                                    if (!active.value || !sourceReady.value || !currentSession.isCurrent) return@withPermit
                                     try { store.refreshDetail(id); failedAt.remove(id) }
                                     catch (e: CancellationException) { throw e }
                                     catch (_: Exception) { failedAt[id] = store.cachedDetailEntry(id)?.fetchedAt }
@@ -109,8 +113,16 @@ internal class LiveActivityViewModel(
         }
     }
 
+    fun setSourceReady(value: Boolean) {
+        if (!value) fetchJob?.cancel()
+        sourceReady.value = value
+    }
+
     fun setForeground(value: Boolean) {
-        if (value) { lastCandidates = emptySet(); tick.value = clock.now().epochSeconds }
+        if (value) {
+            if (waitForSharedRefresh) sourceReady.value = false
+            lastCandidates = emptySet(); tick.value = clock.now().epochSeconds
+        }
         if (!value) fetchJob?.cancel()
         active.value = value
     }

@@ -13,6 +13,7 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.util.nowMinuteStateFlow
+import com.rectime.mobile.feature.event.eventTimeStateFlow
 import com.rectime.mobile.core.util.LoadingMode
 import com.rectime.mobile.core.util.loadingVisibility
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
@@ -158,6 +159,7 @@ class NotificationDetailViewModel internal constructor(
     } else {
         EventScheduleStore(cache = cache, myEvents = myEventsGateway)
     }
+    internal val eventTime = viewModelScope.eventTimeStateFlow(cache, clock)
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _uiState = MutableStateFlow(NotificationDetailUiState())

@@ -69,20 +69,13 @@ private data class RoundPreview(val number: Int, val rows: List<Gathering>) {
 
 /** 本人の集合情報と、ラウンドの時間軸を表示する。 */
 @Composable
-internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>, attendingIds: Set<Int>) {
+internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>, attendingIds: Set<Int>, now: Int = -1) {
     if (gatherings.isEmpty()) return
     val rounds = remember(gatherings) {
         gatherings.byRound().map { RoundPreview(it.key, it.value) }
             .sortedWith(compareBy<RoundPreview> { it.minute == null }.thenBy { it.minute })
     }
     var sheetRound by remember(event.eventId) { mutableStateOf<Int?>(null) }
-    var now by remember { mutableIntStateOf(currentMinute()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = currentMinute()
-            delay(15_000)
-        }
-    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         val mine = rounds.filter { it.isMine(attendingIds) }
         if (mine.isNotEmpty()) {
@@ -373,5 +366,3 @@ private fun RoundGatheringsSheet(rounds: List<RoundPreview>, ids: Set<Int>, sele
         }
     }
 }
-
-private fun currentMinute(): Int = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).let { it.hour * 60 + it.minute }
