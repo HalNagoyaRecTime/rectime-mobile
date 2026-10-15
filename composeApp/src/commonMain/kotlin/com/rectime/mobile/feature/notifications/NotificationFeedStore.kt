@@ -104,7 +104,6 @@ class NotificationFeedStore(
             // 未読バッジ・一覧・手動更新が同時に要求された場合は、進行中の同じ取得を共有する。
             val request = CacheRequestGeneration()
             val requestRevision = revision
-            val contentRequest = updateOrder.beginRequest()
             inFlight?.takeIf { it.isActive } ?: async {
                 if (!request.isCurrent || requestRevision != revision) {
                     return@async request.validate(CachedFetchResult.Failed(IllegalStateException("通知の取得が取り消されました")))
@@ -114,11 +113,14 @@ class NotificationFeedStore(
                 val result = try {
                     fetchWithCacheFirst(
                         fetchLive = {
-                            val page = cache.requests.run("notifications_page:0:$NotificationHistoryLimit") {
-                                gateway.getNotifications(limit = NotificationHistoryLimit, offset = 0)
+                            val response = cache.requests.run("notifications_page:0:$NotificationHistoryLimit") {
+                                val contentRequest = updateOrder.beginRequest()
+                                NotificationPageFetch(gateway.getNotifications(limit = NotificationHistoryLimit, offset = 0), contentRequest)
                             }
+                            if (!request.isCurrent || requestRevision != revision) throw CancellationException("通知の取得が取り消されました")
+                            val page = response.page
                             val received = page.notifications.take(NotificationHistoryLimit)
-                            val newest = updateOrder.acceptList(received.distinctBy { it.id }, contentRequest)
+                            val newest = updateOrder.acceptList(received.distinctBy { it.id }, response.revision)
                             val previousVisible = _cachedNotifications.value.orEmpty()
                             val values = if (visibleCount > NotificationHistoryLimit && received.isNotEmpty() && received.size < page.total) {
                                 // 画面に出した履歴は残し、次の無限スクロールで順番に再検証する。
@@ -141,7 +143,7 @@ class NotificationFeedStore(
                                 _notifications.value.takeIf { _cachedNotifications.value != null }
                             }
                         },
-                        saveCache = { history.saveList(applyDetailUpdates(it), contentRequest = contentRequest) },
+                        saveCache = { history.saveList(it) },
                         invalidateCache = { cache.invalidate("notifications_v1") },
                         onCached = {
                             if (request.isCurrent && requestRevision == revision) {
@@ -219,7 +221,6 @@ class NotificationFeedStore(
             if (_status.value.isOffline) return@coroutineScope
             val request = CacheRequestGeneration()
             val requestRevision = revision
-            val contentRequest = updateOrder.beginRequest()
             _status.value = _status.value.copy(isLoadingMore = true, pageError = null)
             // 通信中はロックを保持せず、ログアウト・ユーザー切り替えを即時に受け付ける。
             async {
@@ -229,16 +230,18 @@ class NotificationFeedStore(
                 }
                 try {
                     // オンラインの無限スクロールは保存先の状態に依存させない。
-                    val page = cache.requests.run("notifications_page:$nextOffset:$NotificationPageSize") {
-                        gateway.getNotifications(limit = NotificationPageSize, offset = nextOffset)
+                    val response = cache.requests.run("notifications_page:$nextOffset:$NotificationPageSize") {
+                        val contentRequest = updateOrder.beginRequest()
+                        NotificationPageFetch(gateway.getNotifications(limit = NotificationPageSize, offset = nextOffset), contentRequest)
                     }
+                    val page = response.page
                     if (!request.isCurrent || requestRevision != revision) {
                         if (requestRevision == revision) clearMemory()
                         return@async
                     }
                     total = page.total.coerceAtLeast(0)
                     val received = page.notifications.take(NotificationPageSize)
-                    val values = updateOrder.acceptList(received, contentRequest)
+                    val values = updateOrder.acceptList(received, response.revision)
                     val followingOffset = nextOffset + received.size
                     // APIで確認した先頭部分の後ろに挿入し、保持している履歴より前の欠落を埋める。
                     val updates = values.associateBy { it.id }
@@ -249,7 +252,7 @@ class NotificationFeedStore(
                     try {
                         // 最新100件だけ保存し、それより古い取得分は永続化しない。
                         // 追加ページの取得で、先頭一覧の取得時刻を新しくしない。
-                        history.saveList(applyDetailUpdates(combined), refreshFetchedAt = false, contentRequest = contentRequest)
+                        history.saveList(combined, refreshFetchedAt = false)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -297,11 +300,11 @@ class NotificationFeedStore(
         publish(_notifications.value.filterNot { it.id == id })
     }
 
-    internal fun updateNotification(notification: UserNotification) {
+    internal fun updateNotification(notification: UserNotification, contentRequest: Long) {
         if (!session.isCurrent) return
-        updateOrder.acceptDetail(notification, updateOrder.beginRequest())
+        val accepted = updateOrder.acceptDetail(notification, contentRequest) ?: return
         if (_notifications.value.none { it.id == notification.id }) return
-        publish(_notifications.value.map { if (it.id == notification.id) notification else it })
+        publish(applyDetailUpdates(_notifications.value.map { if (it.id == notification.id) accepted else it }))
     }
 
     // 通信開始後に詳細で取得できた内容を、遅い一覧応答で古い内容に戻さない。
@@ -355,3 +358,6 @@ class NotificationFeedStore(
         val shared: NotificationFeedStore by lazy { NotificationFeedStore() }
     }
 }
+
+// 通信を共有する呼び出し元も、実際の通信開始時の取得順を引き継ぐ。
+private data class NotificationPageFetch(val page: NotificationPage, val revision: Long)

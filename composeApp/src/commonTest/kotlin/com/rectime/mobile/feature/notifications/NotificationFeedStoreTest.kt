@@ -270,6 +270,107 @@ class NotificationFeedStoreTest {
         } finally { first.viewModelScope.cancel(); second.viewModelScope.cancel() }
     }
 
+    @Test
+    fun detailCompletingBeforeNewerListDoesNotAcquireANewerRevision() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("notifications_v1", listOf(notification(1)))
+        val detailGate = CompletableDeferred<Unit>()
+        val listGate = CompletableDeferred<Unit>()
+        val fresh = notification(1).copy(body = "更新後")
+        val gateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
+                listGate.await()
+                return page(listOf(fresh), 1, limit, offset)
+            }
+            override suspend fun getNotification(notificationId: Int): UserNotification {
+                detailGate.await()
+                return notification(1)
+            }
+        }
+        val feed = NotificationFeedStore(gateway, cache)
+        val detail = NotificationDetailViewModel(1, gateway = gateway, cache = cache, refreshOnOpen = true, feedStore = feed)
+        try {
+            runCurrent()
+            val loading = async { feed.load(force = true) }
+            runCurrent()
+            detailGate.complete(Unit)
+            runCurrent()
+            assertEquals("本文1", detail.uiState.value.notification?.body)
+            listGate.complete(Unit)
+            loading.await()
+            runCurrent()
+            assertEquals("更新後", feed.notifications.value.single().body)
+            assertEquals("更新後", detail.uiState.value.notification?.body)
+            assertEquals("更新後", cache.load<List<UserNotification>>("notifications_v1")?.single()?.body)
+        } finally { detail.viewModelScope.cancel() }
+    }
+
+    @Test
+    fun additionalPageDoesNotReconfirmUnfetchedRowsWhileDetailIsInFlight() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val detailGate = CompletableDeferred<Unit>()
+        val offsets = mutableListOf<Int>()
+        val gateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
+                offsets += offset
+                return page(((offset + 1)..minOf(offset + limit, 120)).map(::notification), 120, limit, offset)
+            }
+            override suspend fun getNotification(notificationId: Int): UserNotification {
+                detailGate.await()
+                return notification(notificationId).copy(body = "fresh-detail")
+            }
+        }
+        val feed = NotificationFeedStore(gateway, cache)
+        feed.load()
+        val fetchedAt = cache.loadEntry<List<UserNotification>>("notifications_v1")?.fetchedAt
+        val detail = NotificationDetailViewModel(1, gateway = gateway, cache = cache, refreshOnOpen = true, feedStore = feed)
+        try {
+            runCurrent()
+            repeat(5) { feed.loadMore() }
+            assertEquals(listOf(0, 100), offsets)
+            detailGate.complete(Unit)
+            runCurrent()
+            assertEquals("fresh-detail", detail.uiState.value.notification?.body)
+            assertEquals("fresh-detail", feed.notifications.value.first { it.id == 1 }.body)
+            assertEquals("fresh-detail", cache.load<List<UserNotification>>("notifications_v1")?.first { it.id == 1 }?.body)
+            assertEquals(fetchedAt, cache.loadEntry<List<UserNotification>>("notifications_v1")?.fetchedAt)
+        } finally { detail.viewModelScope.cancel() }
+    }
+
+    @Test
+    fun joiningAnOlderListRequestDoesNotMakeItsResponseNewerThanDetail() = runTest {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val listGate = CompletableDeferred<Unit>()
+        var calls = 0
+        val gateway = object : NotificationGateway {
+            override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
+                calls++
+                listGate.await()
+                return page(listOf(notification(1)), 1, limit, offset)
+            }
+            override suspend fun getNotification(notificationId: Int) = notification(1).copy(body = "fresh-detail")
+        }
+        val firstFeed = NotificationFeedStore(gateway, cache)
+        val secondFeed = NotificationFeedStore(gateway, cache)
+        val firstLoad = async { firstFeed.load(force = true) }
+        runCurrent()
+        val detail = NotificationDetailViewModel(1, gateway = gateway, cache = cache, refreshOnOpen = true, feedStore = firstFeed)
+        try {
+            runCurrent()
+            val secondLoad = async { secondFeed.load(force = true) }
+            runCurrent()
+            listGate.complete(Unit)
+            firstLoad.await()
+            secondLoad.await()
+            runCurrent()
+            assertEquals(1, calls)
+            assertEquals("fresh-detail", detail.uiState.value.notification?.body)
+            assertEquals("fresh-detail", firstFeed.notifications.value.single().body)
+            assertEquals("fresh-detail", secondFeed.notifications.value.single().body)
+            assertEquals("fresh-detail", cache.load<List<UserNotification>>("notifications_v1")?.single()?.body)
+        } finally { detail.viewModelScope.cancel() }
+    }
+
     private fun page(
         notifications: List<UserNotification>,
         total: Int,

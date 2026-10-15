@@ -38,13 +38,14 @@ internal class NotificationHistoryCache(private val cache: LocalCache) {
         }
     }
 
-    suspend fun saveList(values: List<UserNotification>, refreshFetchedAt: Boolean = true, contentRequest: Long = updateOrder.beginRequest()) {
+    suspend fun saveList(values: List<UserNotification>, refreshFetchedAt: Boolean = true) {
         val request = CacheRequestGeneration()
         historyMutex.withLock {
             val fetchedAt = if (refreshFetchedAt) cache.fetchedNow()
                 else cache.loadEntry<List<UserNotification>>(HistoryCacheKey)?.fetchedAt
             if (request.isCurrent) {
-                val bounded = updateOrder.acceptList(values, contentRequest).distinctBy { it.id }.take(NotificationHistoryLimit)
+                // 保存対象には未取得の既存行も含まれる。取得順は変更せず、受理済みの値と照合する。
+                val bounded = updateOrder.reconcile(values).distinctBy { it.id }.take(NotificationHistoryLimit)
                 // 開いている詳細も一覧の更新を受け取る。全件分の詳細キャッシュは作らない。
                 bounded.forEach { notification ->
                     val key = notificationDetailCacheKey(notification.id)
