@@ -82,7 +82,8 @@ final class LiveActivityCoordinator {
         let expired = existing.contains { $0.attributes.accountId == state.accountId && $0.activityState == .ended }
         for activity in existing {
             if activity.attributes.accountId == state.accountId,
-               activity.activityState == .active || activity.activityState == .stale,
+               activity.activityState == .active || activity.activityState == .stale ||
+                    (activity.activityState == .ended && state.displayMode == "finished"),
                current == nil { current = activity }
             else { await activity.end(nil, dismissalPolicy: .immediate) }
         }
@@ -95,13 +96,20 @@ final class LiveActivityCoordinator {
         let key = "\(state.accountId):\(date.timeIntervalSince1970)"
         if let current {
             startedKey = key
-            if current.content.state != state { await current.update(content) }
+            if state.displayMode == "finished", let deadline = state.presentationUntil {
+                if current.activityState != .ended {
+                    await current.end(content, dismissalPolicy: .after(deadline))
+                }
+            } else if current.content.state != state { await current.update(content) }
         } else if (startedKey != key || expired), UIApplication.shared.applicationState == .active,
                   ActivityAuthorizationInfo().areActivitiesEnabled {
             do {
-                _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
+                let activity = try Activity.request(attributes: attributes, content: content, pushType: nil)
                 // 同日起動中にユーザーが閉じたActivityを再作成しない。
                 startedKey = key
+                if state.displayMode == "finished", let deadline = state.presentationUntil {
+                    await activity.end(content, dismissalPolicy: .after(deadline))
+                }
             } catch { print("[LiveActivity] Start failed: \(error)") }
         }
     }

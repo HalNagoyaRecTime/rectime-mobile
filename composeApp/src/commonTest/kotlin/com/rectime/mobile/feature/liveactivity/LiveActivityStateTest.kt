@@ -22,17 +22,17 @@ class LiveActivityStateTest {
         buildLiveActivityState("user", body, details, own, at(now), fetched, cached)
 
     @Test fun ownAfternoonGatheringIsVisibleFromMorningOutsidePublicWindow() {
-        val body = schedule(event(start = "1530", end = "1700"))
+        val body = schedule(event(start = "1530", end = "1700"), event(2, "0900", "1200"))
         val data = detail(start = "1540", time = "15:00")
         val state = requireNotNull(build(now = "0900", body = body, details = mapOf(1 to data)))
         assertEquals(at("1500"), state.nextGathering?.time)
-        assertTrue(activityCandidateIds(body, at("0900")).isEmpty())
-        assertEquals(listOf(1), activityCandidateIds(body, at("0900"), setOf(1)))
+        assertEquals(listOf(2), activityCandidateIds(body, at("0900")))
+        assertEquals(listOf(1, 2), activityCandidateIds(body, at("0900"), setOf(1)))
     }
 
-    @Test fun windowIncludesActiveAndExactTwoHourBoundaryButNotFinishedOrLater() {
+    @Test fun windowIncludesActiveExactTwoHourBoundaryAndFinishedGraceButNotLater() {
         val body = schedule(event(1, "0900", "1200"), event(2, "1300", "1400"), event(3, "1301", "1400"), event(4, "0900", "1100"))
-        assertEquals(listOf(1, 2), activityCandidateIds(body, at("1100")))
+        assertEquals(listOf(1, 2, 4), activityCandidateIds(body, at("1100")))
     }
     @Test fun missingMalformedOrDifferentDayDoesNotBecomeTodaysSchedule() {
         assertNull(build(body = schedule(event(), day = null)))

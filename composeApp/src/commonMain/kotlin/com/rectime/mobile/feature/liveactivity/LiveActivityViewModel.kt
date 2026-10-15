@@ -84,7 +84,7 @@ internal class LiveActivityViewModel(
             }.collect { input ->
                 if (!currentSession.isCurrent) { _state.value = null; restored.value = true; return@collect }
                 val fetched = cachedListEntry()?.fetchedAt
-                val changed = lastScheduleFetch != fetched
+                val changed = schedule != input.events || lastScheduleFetch != fetched
                 lastScheduleFetch = fetched
                 schedule = input.events
                 val candidates = input.events?.let { activityCandidateIds(it, input.now, input.own.orEmpty().map { own -> own.eventId }.toSet()).toSet() }.orEmpty()

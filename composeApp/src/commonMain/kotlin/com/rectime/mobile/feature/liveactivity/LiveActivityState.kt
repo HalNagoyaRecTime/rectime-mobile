@@ -1,22 +1,18 @@
 package com.rectime.mobile.feature.liveactivity
 
-import com.rectime.mobile.feature.event.minuteOf
-import kotlin.time.Instant
 import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.core.network.MyEventParticipation
 import com.rectime.mobile.core.network.toModel
 import com.rectime.mobile.feature.schedule.EventsResponse
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.LocalTime
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toInstant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 internal const val LiveActivityHorizonSeconds = 2 * 60 * 60L
+private const val ActivityLeadSeconds = 60 * 60L
+private const val ActivityGraceSeconds = 10 * 60L
+private const val ActivityFinishedSeconds = 60 * 60L
 internal const val LiveActivityNotice = "最新の情報はアプリを開いて確認してください"
 
 @Serializable
@@ -67,12 +63,25 @@ internal data class LiveActivityState(
 /** 開催日はAPI値だけを使う。端末の今日へ毎日読み替えない。時刻は詳細と同じHHmm/HH:mmの解釈を使う。 */
 internal fun activityTime(date: String?, time: String?): Long? = com.rectime.mobile.feature.event.eventInstant(date, time)
 
+private fun activityWindow(schedule: EventsResponse): LongRange? {
+    val times = schedule.events.mapNotNull { event ->
+        val start = activityTime(schedule.eventDate, event.startTime) ?: return@mapNotNull null
+        val end = activityTime(schedule.eventDate, event.endTime) ?: return@mapNotNull null
+        if (event.eventId <= 0 || end <= start) null else start to end
+    }
+    val first = times.minOfOrNull { it.first } ?: return null
+    val last = times.maxOf { it.second }
+    return (first - ActivityLeadSeconds)..(last + ActivityFinishedSeconds)
+}
+
 internal fun activityCandidateIds(schedule: EventsResponse, now: Long, ownIds: Set<Int> = emptySet()): List<Int> {
-    if (com.rectime.mobile.feature.event.eventTimeContext(schedule.eventDate, Instant.fromEpochSeconds(now)).day != com.rectime.mobile.feature.event.EventDay.Today) return emptyList()
+    val window = activityWindow(schedule) ?: return emptyList()
+    if (now !in window || now >= window.last) return emptyList()
     return schedule.events.mapNotNull { event ->
         val start = activityTime(schedule.eventDate, event.startTime) ?: return@mapNotNull null
         val end = activityTime(schedule.eventDate, event.endTime) ?: return@mapNotNull null
-        event.eventId.takeIf { it > 0 && end > start && end > now && (event.eventId in ownIds || start <= now + LiveActivityHorizonSeconds) }
+        event.eventId.takeIf { it > 0 && end > start && end + ActivityGraceSeconds > now &&
+            (event.eventId in ownIds || start <= now + LiveActivityHorizonSeconds) }
     }.distinct()
 }
 
@@ -87,6 +96,19 @@ internal fun buildLiveActivityState(
     isCached: Boolean,
 ): LiveActivityState? {
     if (accountId.isBlank()) return null
+    val window = activityWindow(schedule) ?: return null
+    if (now !in window || now >= window.last) return null
+    val finish = window.last - ActivityFinishedSeconds
+    if (now >= finish + ActivityGraceSeconds) {
+        // 完全終了後は詳細を取り直さず、既知の一覧から終了案内を作る。
+        val event = schedule.events.first { activityTime(schedule.eventDate, it.endTime) == finish &&
+            activityTime(schedule.eventDate, it.startTime)?.let { start -> start < finish } == true }
+        val last = LiveMatch(event.eventId, event.eventName.activityText(60),
+            venueDisplayText(event.venues.map { it.toModel() }).activityText(40),
+            requireNotNull(activityTime(schedule.eventDate, event.startTime)), finish)
+        return LiveActivityState(accountId, listOf(last), 0, null, null, window.last,
+            fetchedAt, isCached, personalState = "noUpcoming", presentationUntil = window.last, displayMode = "finished")
+    }
     val own = participation.orEmpty().associate { it.eventId to it.gatheringIds.toSet() }
     val ids = activityCandidateIds(schedule, now, own.keys).toSet()
     val matches = schedule.events.filter { it.eventId in ids }.map { event ->
@@ -106,27 +128,32 @@ internal fun buildLiveActivityState(
             requireNotNull(activityTime(schedule.eventDate, event.startTime)), requireNotNull(activityTime(schedule.eventDate, event.endTime)),
             preferred, rounds.size, timelineMarkers)
     }.distinctBy { it.id }.sortedWith(compareBy<LiveMatch> { it.start }.thenBy { it.id })
-    val active = matches.filter { it.start <= now && now < it.end }
-        .sortedWith(compareBy<LiveMatch> { it.id !in own }.thenBy { it.start }.thenBy { it.id })
     val gatherings = matches.flatMap { event ->
         details[event.id]?.rounds.orEmpty().filter { it.round > 0 }.flatMap { round ->
             round.gatherings.filter { it.gatheringId in own[event.id].orEmpty() }.mapNotNull { gathering ->
                 val time = activityTime(schedule.eventDate, gathering.gatheringTime) ?: return@mapNotNull null
                 val roundStart = activityTime(schedule.eventDate, round.startTime)
                 // 過去の集合は開始予定まで保持する。親ラウンドが開始済みでも未来の集合は消さない。
-                if (time < now && (roundStart ?: event.end) <= now) return@mapNotNull null
+                val keepUntil = roundStart?.takeIf { it > time } ?: event.end
+                if (event.end <= now || (time <= now && keepUntil <= now)) return@mapNotNull null
                 LiveGathering(event.id, event.title, gathering.gatheringId, round.round, time,
                     gathering.gatheringSpot.name.activityText(60), roundStart, event.venue, event.end)
             }
         }
     }.distinctBy { it.number }
-    val next = gatherings.filter { it.time >= now }.minWithOrNull(compareBy<LiveGathering> { it.time }.thenBy { it.number })
-        ?: gatherings.maxWithOrNull(compareBy<LiveGathering> { it.time }.thenBy { -it.number })
+    val gatheringOrder = compareBy<LiveGathering> { it.time }.thenBy { it.number }
+    val next = gatherings.filter { it.time <= now }.minWithOrNull(gatheringOrder)
+        ?: gatherings.minWithOrNull(gatheringOrder)
+    val active = matches.filter { it.start <= now && now < it.end }
+        .sortedWith(compareBy<LiveMatch> { it.id != next?.eventId }
+            .thenBy { it.id !in own }.thenByDescending { it.start }.thenBy { it.id })
+    val recentlyEnded = matches.filter { it.end <= now && now < it.end + ActivityGraceSeconds }
+        .maxWithOrNull(compareBy<LiveMatch> { it.end }.thenBy { -it.id })
     val upcoming = matches.firstOrNull { it.start > now }
-    if (active.isEmpty() && upcoming == null && next == null) return null
+    if (active.isEmpty() && recentlyEnded == null && upcoming == null && next == null) return null
     val boundaries = matches.flatMap { listOf(it.start, it.end) + it.rounds.mapNotNull { round -> round.start } } +
         listOfNotNull(next?.time, next?.roundStart)
-    // サーバー側の変更は自動検出できないので、境界か取得から15分で「更新待ち」にする。
+    // 取得鮮度の記録と、iOSの案内可能な表示期限は別に保持する。
     val freshnessEnd = fetchedAt?.plus(15 * 60) ?: now
     val until = minOf(boundaries.filter { it > now }.minOrNull() ?: now + LiveActivityHorizonSeconds, freshnessEnd)
     // 全本人イベントの詳細が揃うまでは「予定なし」や残件数を断定しない。
@@ -141,7 +168,8 @@ internal fun buildLiveActivityState(
             round.gatherings.mapNotNull { gathering ->
                 if (gathering.gatheringId !in own[eventId].orEmpty()) return@mapNotNull null
                 val time = activityTime(schedule.eventDate, gathering.gatheringTime) ?: return@mapNotNull null
-                gathering.gatheringId.takeIf { end != null && end > now && (time >= now || (start ?: end) > now) }
+                val keepUntil = start?.takeIf { it > time } ?: end
+                gathering.gatheringId.takeIf { end != null && end > now && (time > now || (keepUntil ?: end) > now) }
             }
         }
     }.toSet() else emptySet()
@@ -153,15 +181,16 @@ internal fun buildLiveActivityState(
         else -> "available"
     }
     // 主表示以外のラウンドを抑え、詳細な丸とActivityKitの容量上限を両立する。
-    val displayed = active.take(3).mapIndexed { index, match ->
+    val displayed = (if (active.isEmpty()) listOfNotNull(recentlyEnded) else active.take(3)).mapIndexed { index, match ->
         if (index == 0) match else match.copy(timelineRounds = emptyList())
     }
     val nextEvent = upcoming?.let { match ->
         match.copy(rounds = emptyList(), timelineRounds = if (active.isEmpty()) match.timelineRounds else emptyList())
     }
     val presentationUntil = listOfNotNull(
-        (displayed.firstOrNull() ?: nextEvent)?.end,
-        next?.let { gathering -> gathering.roundStart?.takeIf { it > gathering.time } ?: gathering.eventEnd },
+        (displayed.firstOrNull() ?: nextEvent)?.end?.plus(ActivityGraceSeconds),
+        next?.let { gathering -> gathering.roundStart?.takeIf { it > gathering.time } ?: gathering.eventEnd }
+            ?.plus(ActivityGraceSeconds),
     ).minOrNull()
     return LiveActivityState(accountId, displayed, active.size, next, nextEvent,
         until, fetchedAt, isCached || freshnessEnd <= now,
