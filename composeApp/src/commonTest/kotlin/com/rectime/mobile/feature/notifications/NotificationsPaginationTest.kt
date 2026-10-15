@@ -456,7 +456,9 @@ class NotificationsPaginationTest {
         assertTrue(storage.getString(key) == null)
         assertTrue(history.load() == null)
 
-        history.saveList(listOf(notification(101).copy(body = "更新後の本文")))
+        // 取得順の確定は保存処理ではなく、実際の一覧取得で行う。
+        val gateway = Gateway { _, offset -> page(listOf(notification(101).copy(body = "更新後の本文")), 1, offset) }
+        NotificationFeedStore(gateway, cache).load(force = true)
         assertEquals("更新後の本文", reader.load<UserNotification>(key)?.body)
         assertTrue(storage.getString(key) == null)
         cache.clearAll()
