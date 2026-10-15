@@ -101,7 +101,7 @@ internal fun buildLiveActivityState(
     val finish = window.last - ActivityFinishedSeconds
     if (now >= finish + ActivityGraceSeconds) {
         // 完全終了後は詳細を取り直さず、既知の一覧から終了案内を作る。
-        val event = schedule.events.first { activityTime(schedule.eventDate, it.endTime) == finish &&
+        val event = schedule.events.first { it.eventId > 0 && activityTime(schedule.eventDate, it.endTime) == finish &&
             activityTime(schedule.eventDate, it.startTime)?.let { start -> start < finish } == true }
         val last = LiveMatch(event.eventId, event.eventName.activityText(60),
             venueDisplayText(event.venues.map { it.toModel() }).activityText(40),
@@ -158,7 +158,9 @@ internal fun buildLiveActivityState(
     val until = minOf(boundaries.filter { it > now }.minOrNull() ?: now + LiveActivityHorizonSeconds, freshnessEnd)
     // 全本人イベントの詳細が揃うまでは「予定なし」や残件数を断定しない。
     val personalKnown = participation != null && own.keys.all { id ->
-        details[id]?.rounds != null && schedule.events.any { it.eventId == id }
+        val event = schedule.events.firstOrNull { it.eventId == id }
+        val end = event?.let { activityTime(schedule.eventDate, it.endTime) }
+        event != null && end != null && (end <= now || details[id]?.rounds != null)
     }
     val pendingOwnIds = if (personalKnown) details.flatMap { (eventId, detail) ->
         val event = schedule.events.firstOrNull { it.eventId == eventId }
