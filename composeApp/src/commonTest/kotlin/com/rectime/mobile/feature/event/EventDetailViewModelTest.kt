@@ -235,13 +235,16 @@ class EventDetailViewModelTest {
             eventsHandler = { detailCalls++; jsonOk(body).invoke(this, it) },
             participationHandler = { participationCalls++; jsonOk(participating).invoke(this, it) },
         )
-        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore()))
+        var now = kotlin.time.Instant.parse("2026-10-15T02:00:00Z")
+        val clock = object : kotlin.time.Clock { override fun now() = now }
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
         vm.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(1, detailCalls)
         assertEquals(1, participationCalls)
         assertEquals(setOf(10), vm.uiState.value.attendingGatheringIds)
 
+        now += kotlin.time.Duration.parse("30s")
         body = validEventBody.replace("100m走", "変更された競技").replace("08:45", "08:55")
         participating = """{"events":[]}"""
         vm.onForeground()
@@ -267,9 +270,12 @@ class EventDetailViewModelTest {
             },
             participationHandler = { jsonOk(participating).invoke(this, it) },
         )
-        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore()))
+        var now = kotlin.time.Instant.parse("2026-10-15T02:00:00Z")
+        val clock = object : kotlin.time.Clock { override fun now() = now }
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
         vm.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
+        now += kotlin.time.Duration.parse("30s")
         failDetail = true
         participating = """{"events":[]}"""
         vm.onForeground()
@@ -295,9 +301,12 @@ class EventDetailViewModelTest {
             },
             participationHandler = jsonOk(validParticipationBody),
         )
-        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore()))
+        var now = kotlin.time.Instant.parse("2026-10-15T02:00:00Z")
+        val clock = object : kotlin.time.Clock { override fun now() = now }
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
         vm.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
+        now += kotlin.time.Duration.parse("30s")
         deleted = true
         vm.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()

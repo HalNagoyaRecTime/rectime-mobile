@@ -8,6 +8,7 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.core.network.MyEventParticipation
+import com.rectime.mobile.feature.event.EventRefreshReason
 import com.rectime.mobile.feature.event.EventScheduleStore
 import com.rectime.mobile.feature.schedule.EventsResponse
 import kotlinx.coroutines.CancellationException
@@ -62,7 +63,7 @@ internal class LiveActivityViewModel(
     }
 
     private suspend fun refresh() {
-        val own = try { store.refreshParticipation() }
+        val own = try { store.refreshParticipation(EventRefreshReason.Foreground) }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (e.invalidatesDisplayedContent()) {
@@ -79,7 +80,7 @@ internal class LiveActivityViewModel(
         val results = coroutineScope {
             own.map { it.eventId }.distinct().map { id -> async {
                 concurrency.withPermit {
-                    val detail = try { store.refreshDetail(id) }
+                    val detail = try { store.refreshDetail(id, EventRefreshReason.Foreground) }
                     catch (e: CancellationException) { throw e }
                     catch (e: Exception) {
                         if (e.invalidatesDisplayedContent()) return@withPermit id to DetailResult(null, invalidated = true)

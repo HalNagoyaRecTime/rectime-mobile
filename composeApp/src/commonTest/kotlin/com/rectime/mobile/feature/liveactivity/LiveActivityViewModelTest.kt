@@ -56,7 +56,7 @@ class LiveActivityViewModelTest {
     @Test fun onlyOwnEventsFetchAndNoClockDrivenUpdatesOccur() = runTest(dispatcher) {
         val cache = LocalCache(Memory(), clock)
         val calls = mutableListOf<String>()
-        val vm = model(cache, EventScheduleStore(cache, client(calls = calls), participation))
+        val vm = model(cache, EventScheduleStore(cache, client(calls = calls), participation, clock = clock))
         vm.setForeground(true); runCurrent()
         assertEquals(listOf("/api/v1/events/1"), calls)
         val snapshot = vm.state.value
@@ -68,7 +68,7 @@ class LiveActivityViewModelTest {
     @Test fun rejectedOrDeletedEventStopsPreviouslyCachedLiveActivity() = runTest(dispatcher) {
         for (status in listOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound)) {
             val cache = LocalCache(Memory(), clock); seed(cache)
-            val vm = model(cache, EventScheduleStore(cache, client(status), participation))
+            val vm = model(cache, EventScheduleStore(cache, client(status), participation, clock = clock))
             runCurrent(); assertNotNull(vm.state.value)
             // 古い保存値にして前面復帰の30秒再利用を避ける。
             cache.saveEntry("event_detail_v1_1", detail(), null)
@@ -81,11 +81,23 @@ class LiveActivityViewModelTest {
     @Test fun temporaryServerFailureKeepsCachedSnapshot() = runTest(dispatcher) {
         val cache = LocalCache(Memory(), clock); seed(cache)
         cache.saveEntry("event_detail_v1_1", detail(), null)
-        val vm = model(cache, EventScheduleStore(cache, client(HttpStatusCode.InternalServerError), participation))
+        val vm = model(cache, EventScheduleStore(cache, client(HttpStatusCode.InternalServerError), participation, clock = clock))
         runCurrent(); val snapshot = assertNotNull(vm.state.value)
         vm.setForeground(true); runCurrent()
         assertEquals(snapshot, vm.state.value)
         assertTrue(vm.ready.value)
     }
 
+    @Test fun sharedCacheChangesAreAppliedOnNextForeground() = runTest(dispatcher) {
+        val cache = LocalCache(Memory(), clock); seed(cache)
+        val vm = model(cache, EventScheduleStore(cache, client(), participation, clock = clock))
+        runCurrent(); assertEquals("集合入口", vm.state.value?.plan?.spot)
+        val changed = detail().copy(rounds = listOf(EventRoundResponse(1,
+            listOf(EventRoundGatheringResponse(10, "1105", EventGatheringSpotResponse(2, "北入口"))), "1115")))
+        cache.saveEntry("event_detail_v1_1", changed, clock.now().toString())
+        runCurrent(); assertEquals("集合入口", vm.state.value?.plan?.spot)
+        vm.setForeground(true); runCurrent()
+        assertEquals("北入口", vm.state.value?.plan?.spot)
+        vm.close()
+    }
 }

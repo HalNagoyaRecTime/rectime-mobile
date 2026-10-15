@@ -120,6 +120,28 @@ class ScheduleViewModelTest {
     }
 
     @Test
+    fun shortForegroundReusesEachSuccessfulResourceButManualRefreshAlwaysFetches() = runTest(testDispatcher) {
+        val clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z"))
+        val cache = LocalCache(InMemoryKeyValueStore(), clock)
+        var calls = 0
+        var ownCalls = 0
+        val vm = buildViewModel(mockClient { calls++; respondJson(eventsJson) }, clock = clock, cache = cache,
+            myEventsGateway = participationGateway { ownCalls++; emptySet() })
+        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
+        clock.instant += kotlin.time.Duration.parse("29s")
+        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(1, ownCalls)
+        vm.refresh(); testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals(2, ownCalls)
+        clock.instant += kotlin.time.Duration.parse("30s")
+        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(3, calls)
+        assertEquals(3, ownCalls)
+    }
+
+    @Test
     fun firstForegroundAfterScreenEntryDoesNotFetchTwiceEvenAfterInitialLoadCompletes() = runTest(testDispatcher) {
         var calls = 0
         val viewModel = buildViewModel(mockClient { calls++; respondJson(eventsJson) })
