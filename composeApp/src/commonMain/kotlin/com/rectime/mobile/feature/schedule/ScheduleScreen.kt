@@ -109,7 +109,8 @@ object ScheduleScreen : Screen {
     @Composable
     override fun Content(navigationController: NavigationController) {
         val viewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
-        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+        val eventTime by viewModel.eventTime.collectAsStateWithLifecycle()
+        val nowMinute = eventTime.minute
         val events by viewModel.events
 
         val isRootVisible = navigationController.state.pushStack.isEmpty()
@@ -191,8 +192,8 @@ private fun ScheduleScreenUI(
         if (isDragged) hasAutoScrolled = true
     }
 
-    LaunchedEffect(isLoading) {
-        if (!isLoading && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
+    LaunchedEffect(isLoading, nowMinute) {
+        if (nowMinute in 0..1439 && !isLoading && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
             val totalHours = hourEnd - hourStart
             val clampedNowMinute = nowMinute.coerceIn(hourStart * 60, hourEnd * 60)
             val nowOffsetPx = with(density) { timelineGeometry.minuteY(clampedNowMinute).toPx() }
@@ -227,7 +228,7 @@ private fun ScheduleScreenUI(
                     val bottom = size.height + bouncePaintBottom.toPx()
                     drawRect(backgroundColor, Offset(0f, top), Size(size.width, bottom - top))
                     val pastEnd = nowY.coerceIn(top, bottom)
-                    drawRect(pastColor, Offset(0f, top), Size(size.width, pastEnd - top))
+                    if (nowMinute >= 0) drawRect(pastColor, Offset(0f, top), Size(size.width, pastEnd - top))
                 }
                 val separatorLineColor = AppTheme.colors.textScheduleTimeLine
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -339,7 +340,7 @@ private fun ScheduleScreenUI(
 
                                     val endMinuteOfDay =
                                         event.startMinuteOfDay + event.durationMinutes
-                                    val isLive = nowMinute in event.startMinuteOfDay..endMinuteOfDay
+                                    val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMinuteOfDay
 
                                     val shadowSpec = resolveEventCardShadowSpec(
                                         assignedWidth = laneWidth,
@@ -457,7 +458,7 @@ private fun ScheduleScreenUI(
                                 }
                             } else {
                                 val endMinuteOfDay = event.startMinuteOfDay + event.durationMinutes
-                                val isLive = nowMinute in event.startMinuteOfDay..endMinuteOfDay
+                                val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMinuteOfDay
 
                                 EventCard(
                                     time = "${event.startTimeLabel}-${event.endTimeLabel}",
@@ -489,7 +490,7 @@ private fun ScheduleScreenUI(
 
                 hiddenEvents.forEach { event ->
                     val endMin = event.startMinuteOfDay + event.durationMinutes
-                    val isLive = nowMinute in event.startMinuteOfDay..endMin
+                    val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMin
 
                     EventCard(
                         time = "${event.startTimeLabel}-${event.endTimeLabel}",

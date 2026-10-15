@@ -24,6 +24,7 @@ import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.util.nowMinuteStateFlow
+import com.rectime.mobile.feature.event.eventTimeStateFlow
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -64,11 +65,14 @@ class ScheduleViewModel internal constructor(
     private val refreshQueue = CacheRefreshQueue()
     private var loadJob: Job? = null
     private var participatingEventIds: Set<Int>? = null
+    internal val eventTime = viewModelScope.eventTimeStateFlow(cache, clock)
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _events = mutableStateOf(listOf<TimelineEvent>())
     val events: State<List<TimelineEvent>> = _events
 
+    internal var liveActivityRefreshVersion by mutableStateOf(0)
+        private set
     private var liveActivityInvalidated by mutableStateOf(false)
 
     // 保存値なしの通信失敗では、同じ本人のOS上の表示を消さない。成功した空結果は更新する。
@@ -88,8 +92,9 @@ class ScheduleViewModel internal constructor(
         private set
 
     // trueのとき、_eventsは通信失敗時にローカルキャッシュから復元した前回取得分。
-    var isOffline by mutableStateOf(false)
-        private set
+    private var scheduleOffline by mutableStateOf(false)
+    private var participationFailure by mutableStateOf<String?>(null)
+    val isOffline: Boolean get() = scheduleOffline || participationFailure != null
 
     init {
         viewModelScope.launch {
@@ -133,7 +138,7 @@ class ScheduleViewModel internal constructor(
         isRefreshing = false
         clearDisplayedEvents()
         participatingEventIds = null
-        isOffline = false
+        scheduleOffline = false
         enteredSession = CacheRequestGeneration()
         hasEnteredForeground = false
         fetchEvents()
@@ -162,6 +167,7 @@ class ScheduleViewModel internal constructor(
                 contentSession = CacheRequestGeneration()
             }
             liveActivityInvalidated = false
+            participationFailure = null
             isUpdating = true
             isLoading = !isRefresh && !isBackground && _events.value.isEmpty()
             isRefreshing = isRefresh
@@ -212,7 +218,7 @@ class ScheduleViewModel internal constructor(
                         if (timelineResult.skippedCount > 0) {
                             error = skippedEventsMessage(timelineResult.skippedCount)
                         }
-                        isOffline = false
+                        scheduleOffline = false
                     }
 
                     is CachedFetchResult.Cached -> {
@@ -222,7 +228,7 @@ class ScheduleViewModel internal constructor(
                         if (result.error.invalidatesDisplayedContent()) {
                             clearDisplayedEvents()
                             error = if (status == HttpStatusCode.Forbidden) "スケジュールを表示する権限がありません" else "通信に失敗しました"
-                            isOffline = false
+                            scheduleOffline = false
                         } else {
                             // 前面復帰の失敗では、表示中の値を古いディスクキャッシュへ戻さない。
                             val displayed = displayedResponse ?: result.value
@@ -230,7 +236,7 @@ class ScheduleViewModel internal constructor(
                             val latest = eventCache.reconcileEvents(displayed, displayRequest)
                             if (!request.isCurrent) return@launch
                             publishEvents(latest, displayRequest)
-                            isOffline = true
+                            scheduleOffline = true
                             // 通信失敗時のフォールバックは「オフライン」として静かに
                             // 隠れてしまうため、原因(スキーマ不整合等の恒常的な不具合の
                             // 可能性もある)を追えるようログには残す。
@@ -242,7 +248,7 @@ class ScheduleViewModel internal constructor(
                         val status = (result.error as? HttpStatusException)?.status
                         if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(result.error, contentSession)) {
                             // 保存に失敗してキャッシュがなくても、表示中のデータは維持する。
-                            isOffline = true
+                            scheduleOffline = true
                             result.error.printStackTrace()
                             return@launch
                         }
@@ -253,7 +259,7 @@ class ScheduleViewModel internal constructor(
                         // 保存済みデータがない場合やセッション切替後は、一覧を復元しない。
                         // 失効が確定した場合の画面遷移は共通の認証処理が行う。
                         clearDisplayedEvents()
-                        isOffline = false
+                        scheduleOffline = false
                         result.error.printStackTrace()
                     }
                 }
@@ -261,21 +267,23 @@ class ScheduleViewModel internal constructor(
                 throw e
             } catch (e: Exception) {
                 if ((isBackground || _events.value.isNotEmpty()) && request.canRetainDisplayedContent(e, contentSession)) {
-                    isOffline = true
+                    scheduleOffline = true
                 } else {
                     clearDisplayedEvents()
                     error = "通信に失敗しました"
-                    isOffline = false
+                    scheduleOffline = false
                 }
                 e.printStackTrace()
             } finally {
                 isLoading = false
                 try {
                     participationJob?.join()
+                    if (request.isCurrent && error == null) error = participationFailure
                 } finally {
                     isLoading = false
                     isRefreshing = false
                     isUpdating = false
+                    if (request.isCurrent) liveActivityRefreshVersion++
                 }
             }
         }
@@ -300,7 +308,11 @@ class ScheduleViewModel internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // 初回の保存済み表示と、表示中の最新値を維持する。
+            // 本人予定だけ更新できなかった場合も、保存値を最新と表示しない。
+            if (request.isCurrent) {
+                participationFailure = if (scheduleStore.cachedParticipation() == null)
+                    "出場情報を取得できませんでした" else "出場情報を更新できませんでした。保存済みの情報を表示しています"
+            }
             e.printStackTrace()
         }
     }
