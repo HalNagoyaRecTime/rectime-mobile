@@ -72,16 +72,6 @@ class ScheduleViewModel internal constructor(
     private val _events = mutableStateOf(listOf<TimelineEvent>())
     val events: State<List<TimelineEvent>> = _events
 
-    internal var liveActivityRefreshVersion by mutableStateOf(0)
-        private set
-    internal var liveActivityRefreshReason by mutableStateOf(EventRefreshReason.Required)
-        private set
-    private var liveActivityInvalidated by mutableStateOf(false)
-
-    // 保存値なしの通信失敗では、同じ本人のOS上の表示を消さない。成功した空結果は更新する。
-    internal val liveActivityReady: Boolean
-        get() = enteredSession?.isCurrent == true && !isUpdating && (displayedResponse != null || error == null || liveActivityInvalidated)
-
     var isLoading by mutableStateOf(false)
         private set
 
@@ -154,10 +144,6 @@ class ScheduleViewModel internal constructor(
         } else if (hasEnteredForeground) {
             // 進行中の取得に合流する。復帰で手動更新の待機要求を置き換えない。
             if (!isUpdating) loadEvents(isRefresh = false, isBackground = true, reason = EventRefreshReason.Foreground)
-        } else if (!isUpdating) {
-            // 初回取得が既に終わった後のON_RESUMEでも、ライブ側の待機を解除する。
-            liveActivityRefreshReason = EventRefreshReason.Foreground
-            liveActivityRefreshVersion++
         }
         // 起動時のonEnterと最初のON_RESUMEが重なっても、取得は一度だけにする。
         hasEnteredForeground = true
@@ -174,7 +160,6 @@ class ScheduleViewModel internal constructor(
                 participatingEventIds = null
                 contentSession = CacheRequestGeneration()
             }
-            liveActivityInvalidated = false
             participationFailure = null
             isUpdating = true
             isLoading = !isRefresh && !isBackground && _events.value.isEmpty()
@@ -208,7 +193,7 @@ class ScheduleViewModel internal constructor(
                         loadCache = { eventCache.loadEvents() },
                         // 統合済みの値を画面にも返すため、保存はfetchLive内で行う。
                         saveCache = {},
-                        invalidateCache = { liveActivityInvalidated = true; cache.invalidate("schedule_events_v1") },
+                        invalidateCache = { cache.invalidate("schedule_events_v1") },
                         onCached = { saved ->
                             if (!isRefresh && !isBackground && _events.value.isEmpty()) {
                                 publishEvents(saved, cacheRequest)
@@ -291,10 +276,6 @@ class ScheduleViewModel internal constructor(
                     isLoading = false
                     isRefreshing = false
                     isUpdating = false
-                    if (request.isCurrent) {
-                        liveActivityRefreshReason = reason
-                        liveActivityRefreshVersion++
-                    }
                 }
             }
         }

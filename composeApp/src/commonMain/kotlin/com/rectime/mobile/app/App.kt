@@ -30,6 +30,7 @@ import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.liveactivity.ScheduleLiveActivityEffect
+import com.rectime.mobile.feature.liveactivity.PersonalPlanNavigation
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
 import com.rectime.mobile.feature.ranking.RankingViewModel
 import com.rectime.mobile.feature.ranking.rankingViewModelFactory
@@ -85,6 +86,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
+    var personalPlanEventId by remember { mutableStateOf<Int?>(null) }
     val themeStateHolder = remember { ThemeStateHolder() }
     val pushTokenLifecycle = remember { platformPushTokenLifecycle() }
     val authViewModel: AuthViewModel = viewModel(
@@ -121,10 +123,13 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             notificationNavigationTarget = it
         }
     }
+    LaunchedEffect(Unit) {
+        PersonalPlanNavigation.targets.collect { personalPlanEventId = it }
+    }
 
     AppTheme(themeStateHolder = themeStateHolder) {
         if (authState.session == null && !authState.isRestoringSession) {
-            ScheduleLiveActivityEffect("", ready = true)
+            ScheduleLiveActivityEffect("")
         }
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
@@ -133,7 +138,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             LaunchedEffect(session.user.id, session.user.teamId) {
                 rankingViewModel.onSession(session.user.teamId)
             }
-            ScheduleLiveActivityEffect(session.user.id, scheduleViewModel.liveActivityReady, scheduleViewModel.isOffline, scheduleViewModel.liveActivityRefreshVersion, scheduleViewModel.liveActivityRefreshReason)
+            ScheduleLiveActivityEffect(session.user.id)
             val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {
@@ -164,6 +169,13 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                         badgeViewModel.onPush(session.user.id)
                     }
+                }
+            }
+            LaunchedEffect(personalPlanEventId) {
+                personalPlanEventId?.let { id ->
+                    navigationController.reset(ScheduleScreen)
+                    navigationController.push(EventDetailScreen(id))
+                    personalPlanEventId = null
                 }
             }
             LaunchedEffect(notificationNavigationTarget) {
