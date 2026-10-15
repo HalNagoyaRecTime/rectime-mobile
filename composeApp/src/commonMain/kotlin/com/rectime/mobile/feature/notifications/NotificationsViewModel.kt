@@ -259,14 +259,14 @@ class NotificationDetailViewModel internal constructor(
                             if (updateOrder.remove(notificationId, contentRequest)) {
                             cache.invalidateMemory(notificationDetailCacheKey(notificationId))
                             val remaining = history.load()?.filterNot { it.id == notificationId }
-                            if (remaining != null) history.saveList(remaining, refreshFetchedAt = false, contentRequest = contentRequest)
+                            if (remaining != null) history.saveList(remaining, refreshFetchedAt = false)
                             feedStore?.removeNotification(notificationId, contentRequest)
                             }
                         },
                         saveCache = {
                             if (fetched) {
                                 // 保存前に取得済み内容を登録し、同時進行の一覧更新にも反映する。
-                                if (request.isCurrent) feedStore?.updateNotification(it)
+                                if (request.isCurrent) feedStore?.updateNotification(it, contentRequest)
                                 history.saveDetail(it, contentRequest)
                             }
                         },
