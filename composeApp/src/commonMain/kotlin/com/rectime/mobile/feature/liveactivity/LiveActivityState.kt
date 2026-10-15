@@ -5,6 +5,7 @@ import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.core.network.EventRoundGatheringResponse
 import com.rectime.mobile.core.network.MyEventParticipation
 import com.rectime.mobile.core.network.toModel
+import com.rectime.mobile.feature.event.eventInstant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -26,7 +27,7 @@ internal data class LiveActivityState(
     val remainingEventCount: Int,
 )
 
-/** 表示用の本人予定をAPI順に構成する。開催日と残り予定の判断は#380で共通化する。 */
+/** 開催日が未取得なら時刻だけで今日の予定と推測せず、API順の本人予定を残す。 */
 internal fun buildLiveActivityState(
     accountId: String,
     participation: List<MyEventParticipation>,
@@ -39,20 +40,25 @@ internal fun buildLiveActivityState(
     val candidates = participation.distinctBy { it.eventId }.mapNotNull { own ->
         val detail = details[own.eventId] ?: return@mapNotNull null
         if (own.eventId <= 0) return@mapNotNull null
+        val end = eventInstant(eventDate, detail.endTime)
+        if (end != null && end <= now) return@mapNotNull null
         val rounds = detail.rounds.orEmpty().filter { it.round > 0 }.sortedBy { it.round }
         val eligible = rounds.flatMap { round ->
-            round.gatherings
+            // ラウンドには終了時刻がない。次ラウンド開始までは当該本人予定を保持する。
+            val nextStart = rounds.filter { it.round > round.round }
+                .mapNotNull { eventInstant(eventDate, it.startTime) }.minOrNull() ?: end
+            if (nextStart != null && nextStart <= now) emptyList() else round.gatherings
                 .filter { it.gatheringId in own.gatheringIds }
                 .map { round.round to it }
         }
         val first = eligible.minWithOrNull(compareBy<Pair<Int, EventRoundGatheringResponse>> {
-            it.first.toLong()
+            eventInstant(eventDate, it.second.gatheringTime) ?: Long.MAX_VALUE
         }.thenBy { it.first }.thenBy { it.second.gatheringId }) ?: return@mapNotNull null
         val spot = first.second.gatheringSpot
         val numbers = eligible.filter { it.second.gatheringSpot.id == spot.id }.map { it.first }.distinct().sorted()
         Candidate(LivePersonalPlan(own.eventId, detail.eventName.activityText(60), numbers.take(24),
             venueDisplayText(detail.venues.map { it.toModel() }).activityText(40), spot.name.activityText(60)),
-            null)
+            eventInstant(eventDate, first.second.gatheringTime))
     }
     val first = candidates.minWithOrNull(compareBy<Candidate> { it.time ?: Long.MAX_VALUE }) ?: return null
     return LiveActivityState(accountId, first.plan, candidates.size)

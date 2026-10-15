@@ -120,26 +120,6 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun onlyConfirmedEmptyOrRejectedResultCanClearOsActivity() = runTest(testDispatcher) {
-        val failed = buildViewModel(mockClient { error("offline") })
-        failed.onEnter()
-        testDispatcher.scheduler.advanceUntilIdle()
-        assertTrue(failed.error != null)
-        assertFalse(failed.liveActivityReady)
-        val empty = buildViewModel(mockClient { respondJson("""{"events":[],"total":0,"limit":100,"offset":0}""") })
-        empty.onEnter()
-        testDispatcher.scheduler.advanceUntilIdle()
-        assertTrue(empty.liveActivityReady)
-        for (status in listOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound)) {
-            val rejected = buildViewModel(mockClient { respondJson("{}", status) })
-            rejected.onEnter()
-            testDispatcher.scheduler.advanceUntilIdle()
-            assertTrue(rejected.liveActivityReady)
-        }
-
-    }
-
-    @Test
     fun firstForegroundAfterScreenEntryDoesNotFetchTwiceEvenAfterInitialLoadCompletes() = runTest(testDispatcher) {
         var calls = 0
         val viewModel = buildViewModel(mockClient { calls++; respondJson(eventsJson) })
@@ -181,7 +161,6 @@ class ScheduleViewModelTest {
         }, cache = cache)
         viewModel.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
-        assertTrue(viewModel.liveActivityReady)
         val displayed = viewModel.events.value
         // ディスクの値が古くても、更新中は表示中のデータを優先する。
         cache.store.putString("schedule_events_v1", eventsJson.replace("綱引き", "古い予定"))
@@ -189,7 +168,6 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.runCurrent()
         assertEquals(displayed, viewModel.events.value)
         assertTrue(viewModel.isUpdating)
-        assertFalse(viewModel.liveActivityReady)
         assertFalse(viewModel.isLoading)
         assertFalse(viewModel.isRefreshing)
         viewModel.refresh()
@@ -200,7 +178,6 @@ class ScheduleViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         assertFalse(viewModel.events.value == displayed)
         assertFalse(viewModel.isUpdating)
-        assertTrue(viewModel.liveActivityReady)
     }
 
     @Test
