@@ -133,7 +133,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             LaunchedEffect(session.user.id, session.user.teamId) {
                 rankingViewModel.onSession(session.user.teamId)
             }
-            ScheduleLiveActivityEffect(session.user.id, scheduleViewModel.liveActivityReady, scheduleViewModel.isOffline, scheduleViewModel.liveActivityRefreshVersion)
+            ScheduleLiveActivityEffect(session.user.id, scheduleViewModel.liveActivityReady, scheduleViewModel.isOffline, scheduleViewModel.liveActivityRefreshVersion, scheduleViewModel.liveActivityRefreshReason)
             val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {

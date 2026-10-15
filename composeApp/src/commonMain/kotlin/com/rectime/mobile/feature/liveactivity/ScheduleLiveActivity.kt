@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.liveactivity
 
 import com.rectime.mobile.core.cache.CacheGeneration
+import com.rectime.mobile.feature.event.EventRefreshReason
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -12,14 +13,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** 共通ストアを購読し、OS固有の処理は表示とActivityの管理だけにする。 */
 @Composable
-internal fun ScheduleLiveActivityEffect(accountId: String, ready: Boolean, sourceOffline: Boolean = false, refreshVersion: Int = 0) {
+internal fun ScheduleLiveActivityEffect(accountId: String, ready: Boolean, sourceOffline: Boolean = false, refreshVersion: Int = 0, refreshReason: EventRefreshReason = EventRefreshReason.Required) {
     if (!supportsScheduleLiveActivity) return
     if (accountId.isBlank()) {
         PublishLiveActivityEffect(null, accountId, ready)
         return
     }
     val model = remember(accountId, CacheGeneration.value) { LiveActivityViewModel(accountId, initiallyReady = false) }
-    LaunchedEffect(model, ready, refreshVersion) { model.setSourceReady(ready) }
+    LaunchedEffect(model, ready, refreshVersion) { model.setSourceReady(ready, refreshVersion, refreshReason) }
     LaunchedEffect(model, sourceOffline) { model.setOffline(sourceOffline) }
     val state by model.state.collectAsStateWithLifecycle()
     val restored by model.ready.collectAsStateWithLifecycle()

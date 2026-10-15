@@ -65,6 +65,43 @@ class LiveActivityViewModelTest {
         install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
     }.also { clients += it }
 
+    @Test fun detailMergeDoesNotRefetchOtherCandidatesAndTicksOnlyRecomputeDisplay() = runModelTest {
+        val cache = LocalCache(Memory(), clock)
+        seed(cache, event(1), event(2))
+        val calls = mutableListOf<Int>()
+        val store = EventScheduleStore(cache, client { id ->
+            calls += id
+            // 詳細から一覧へ本文が反映されても、他の対象を再取得しない。
+            detail(id).copy(eventName = "更新済み$id")
+        }, clock = clock)
+        val vm = model(cache, store)
+        vm.setForeground(true); runCurrent()
+        assertEquals(listOf(1, 2), calls.sorted())
+        advanceTimeBy(30_000); runCurrent()
+        assertEquals(2, calls.size)
+        vm.setForeground(false); runCurrent()
+        vm.setForeground(true); runCurrent()
+        assertEquals(2, calls.size, "短い前面復帰は保存済み詳細を使う")
+        vm.setSourceReady(false); runCurrent()
+        vm.setSourceReady(true, version = 1); runCurrent()
+        assertEquals(4, calls.size, "手動更新の完了は30秒以内でも必要な詳細を取得する")
+    }
+
+    @Test fun newlyEligibleEventFetchesWithoutRefetchingExistingCandidate() = runModelTest {
+        var instant = now
+        val movingClock = object : Clock { override fun now() = instant }
+        val cache = LocalCache(Memory(), movingClock)
+        seed(cache, event(1), event(2, "1301"))
+        val calls = mutableListOf<Int>()
+        val store = EventScheduleStore(cache, client { id -> calls += id; detail(id) }, clock = movingClock)
+        val vm = LiveActivityViewModel("user", cache, store, movingClock).also { models += it }
+        vm.setForeground(true); runCurrent()
+        assertEquals(listOf(1), calls)
+        instant += kotlin.time.Duration.parse("1m")
+        advanceTimeBy(30_000); runCurrent()
+        assertEquals(listOf(1, 2), calls)
+    }
+
     @Test fun foregroundWaitsForSharedScheduleRefreshBeforeFetchingDetailsOnce() = runModelTest {
         val cache = LocalCache(Memory())
         seed(cache, event(1))

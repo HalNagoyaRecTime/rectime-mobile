@@ -13,6 +13,7 @@ import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
+import com.rectime.mobile.feature.event.EventRefreshReason
 import com.rectime.mobile.feature.event.EventScheduleStore
 import com.rectime.mobile.feature.event.EventCache
 import com.rectime.mobile.feature.event.EventCacheRequest
@@ -55,7 +56,7 @@ class ScheduleViewModel internal constructor(
     scheduleStore: EventScheduleStore? = null,
 ) : ViewModel() {
     private val ownsScheduleStore = scheduleStore == null
-    private val scheduleStore = scheduleStore ?: EventScheduleStore(cache, client, myEventsGateway ?: MyEventsApi(client = client, baseUrl = baseUrl), baseUrl)
+    private val scheduleStore = scheduleStore ?: EventScheduleStore(cache, client, myEventsGateway ?: MyEventsApi(client = client, baseUrl = baseUrl), baseUrl, clock)
     private val eventCache = EventCache(cache)
     private var contentSession = CacheRequestGeneration()
     private var enteredSession: CacheRequestGeneration? = null
@@ -72,6 +73,8 @@ class ScheduleViewModel internal constructor(
     val events: State<List<TimelineEvent>> = _events
 
     internal var liveActivityRefreshVersion by mutableStateOf(0)
+        private set
+    internal var liveActivityRefreshReason by mutableStateOf(EventRefreshReason.Required)
         private set
     private var liveActivityInvalidated by mutableStateOf(false)
 
@@ -149,7 +152,12 @@ class ScheduleViewModel internal constructor(
         if (enteredSession?.isCurrent != true) {
             onEnter()
         } else if (hasEnteredForeground) {
-            loadEvents(isRefresh = false, isBackground = true)
+            // 進行中の取得に合流する。復帰で手動更新の待機要求を置き換えない。
+            if (!isUpdating) loadEvents(isRefresh = false, isBackground = true, reason = EventRefreshReason.Foreground)
+        } else if (!isUpdating) {
+            // 初回取得が既に終わった後のON_RESUMEでも、ライブ側の待機を解除する。
+            liveActivityRefreshReason = EventRefreshReason.Foreground
+            liveActivityRefreshVersion++
         }
         // 起動時のonEnterと最初のON_RESUMEが重なっても、取得は一度だけにする。
         hasEnteredForeground = true
@@ -159,7 +167,7 @@ class ScheduleViewModel internal constructor(
 
     fun refresh() = loadEvents(isRefresh = true)
 
-    private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false) {
+    private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false, reason: EventRefreshReason = EventRefreshReason.Required) {
         loadJob = refreshQueue.launch(viewModelScope, afterCurrent = isRefresh || isBackground) {
             if (!contentSession.isCurrent) {
                 clearDisplayedEvents()
@@ -188,12 +196,12 @@ class ScheduleViewModel internal constructor(
                     saved?.let(::applyParticipation)
                 }
                 // 参加情報の取得が遅くても予定一覧は先に表示する。
-                participationJob = launch { updateParticipation(request) }
+                participationJob = launch { updateParticipation(request, reason) }
                 val cacheRequest = eventCache.beginRequest()
                 val result = request.validate(withMinimumRefreshDuration(isRefresh) {
                     fetchWithCacheFirst(
                         fetchLive = {
-                            cache.requests.run("schedule_events_v1") {
+                            scheduleStore.refreshEvents(reason) {
                                 eventCache.saveEvents(fetchAllEvents(), cacheRequest)
                             }
                         },
@@ -283,7 +291,10 @@ class ScheduleViewModel internal constructor(
                     isLoading = false
                     isRefreshing = false
                     isUpdating = false
-                    if (request.isCurrent) liveActivityRefreshVersion++
+                    if (request.isCurrent) {
+                        liveActivityRefreshReason = reason
+                        liveActivityRefreshVersion++
+                    }
                 }
             }
         }
@@ -301,9 +312,9 @@ class ScheduleViewModel internal constructor(
         return toTimelineEvents(response).also { _events.value = it.events }
     }
 
-    private suspend fun updateParticipation(request: CacheRequestGeneration) {
+    private suspend fun updateParticipation(request: CacheRequestGeneration, reason: EventRefreshReason) {
         try {
-            val latest = scheduleStore.refreshParticipation()
+            val latest = scheduleStore.refreshParticipation(reason)
             if (request.isCurrent) applyParticipation(latest.map { it.eventId }.toSet())
         } catch (e: CancellationException) {
             throw e
