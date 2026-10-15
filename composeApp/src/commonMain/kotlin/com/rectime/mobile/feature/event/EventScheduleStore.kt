@@ -59,16 +59,28 @@ internal class EventScheduleStore(
         return event.gatheringIds.toSet()
     }
 
-    /** 一覧の取得と保存は呼び出し側の取得順を維持し、復帰時の鮮度判断だけ共有する。 */
-    suspend fun refreshEvents(reason: EventRefreshReason, fetch: suspend () -> EventsResponse): EventsResponse =
-        cache.requests.run("schedule_events_v1") {
+    /** 一覧の取得と保存は呼び出し側の取得順を維持し、復帰時の鮮度判断だけ共有する。
+     * 保存値の再利用は通信共有の外で行い、明示更新が通信なしの結果へ合流するのを防ぐ。
+     */
+    suspend fun refreshEvents(reason: EventRefreshReason, fetch: suspend () -> EventsResponse): EventsResponse {
+        if (reason == EventRefreshReason.Foreground) {
+            cache.requests.awaitCurrent("schedule_events_v1")
             val saved = EventCache(cache).loadEventsEntry()
-            if (saved.canReuse(reason, clock)) requireNotNull(saved).data else fetch()
+            if (saved.canReuse(reason, clock)) return requireNotNull(saved).data
         }
+        return cache.requests.run("schedule_events_v1", fetch)
+    }
 
-    suspend fun refreshParticipation(reason: EventRefreshReason = EventRefreshReason.Required): List<MyEventParticipation> = cache.requests.run(ParticipationKey) {
-        val saved = cachedParticipationEntry()
-        if (saved.canReuse(reason, clock)) return@run requireNotNull(saved).data
+    suspend fun refreshParticipation(reason: EventRefreshReason = EventRefreshReason.Required): List<MyEventParticipation> {
+        if (reason == EventRefreshReason.Foreground) {
+            cache.requests.awaitCurrent(ParticipationKey)
+            val saved = cachedParticipationEntry()
+            if (saved.canReuse(reason, clock)) return requireNotNull(saved).data
+        }
+        return fetchParticipation()
+    }
+
+    private suspend fun fetchParticipation(): List<MyEventParticipation> = cache.requests.run(ParticipationKey) {
         val request = CacheRequestGeneration()
         val latest = try { myEvents.getMyEvents() }
         catch (e: CancellationException) { throw e }
@@ -92,10 +104,17 @@ internal class EventScheduleStore(
         EventCache(cache).loadDetailEntry(eventId)
 
     /** 同時に開かれた詳細や将来のLive Activityも、イベントごとに通信を共有できる。 */
-    suspend fun refreshDetail(eventId: Int, reason: EventRefreshReason = EventRefreshReason.Required): EventDetailResponse =
-        cache.requests.run("event_detail_v1_$eventId") {
+    suspend fun refreshDetail(eventId: Int, reason: EventRefreshReason = EventRefreshReason.Required): EventDetailResponse {
+        if (reason == EventRefreshReason.Foreground) {
+            cache.requests.awaitCurrent("event_detail_v1_$eventId")
             val saved = cachedDetailEntry(eventId)
-            if (saved?.data?.rounds != null && saved.canReuse(reason, clock)) return@run saved.data
+            if (saved?.data?.rounds != null && saved.canReuse(reason, clock)) return saved.data
+        }
+        return fetchDetail(eventId)
+    }
+
+    private suspend fun fetchDetail(eventId: Int): EventDetailResponse =
+        cache.requests.run("event_detail_v1_$eventId") {
             val request = CacheRequestGeneration()
             val eventCache = EventCache(cache)
             val cacheRequest = eventCache.beginRequest()
