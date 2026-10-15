@@ -10,7 +10,6 @@ final class LiveActivityCoordinator {
     private var revision = 0
     private var startedKey: String?
     private var accountId: String?
-    private var systemAppearance: String?
 
     func receive(_ json: String?, accountId: String?, ready: Bool) {
         if self.accountId != accountId { startedKey = nil }
@@ -22,11 +21,8 @@ final class LiveActivityCoordinator {
         }
         if let json, let data = json.data(using: .utf8) {
             let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .secondsSince1970
             do {
-                var decoded = try decoder.decode(RecreationActivityAttributes.ContentState.self, from: data)
-                decoded.systemAppearance = systemAppearance
-                state = decoded
+                state = try decoder.decode(RecreationActivityAttributes.ContentState.self, from: data)
             }
             catch { print("[LiveActivity] Invalid state: \(error)"); return }
         } else { state = nil }
@@ -36,14 +32,6 @@ final class LiveActivityCoordinator {
 
     func setActive(_ active: Bool) {
         if active { synchronize() }
-    }
-
-    func setAppearance(dark: Bool) {
-        let appearance = dark ? "dark" : "light"
-        guard systemAppearance != appearance else { return }
-        systemAppearance = appearance
-        state?.systemAppearance = appearance
-        synchronize()
     }
 
     private func synchronize() {
@@ -67,7 +55,7 @@ final class LiveActivityCoordinator {
             }
             return
         }
-        guard let state, !state.accountId.isEmpty else {
+        guard let state, !state.accountId.isEmpty, state.accountId == accountId, state.plan != nil else {
             let endedByApp = existing.contains { $0.attributes.accountId == accountId &&
                 ($0.activityState == .active || $0.activityState == .stale || $0.activityState == .ended) }
             for activity in existing { await activity.end(nil, dismissalPolicy: .immediate) }
@@ -87,20 +75,17 @@ final class LiveActivityCoordinator {
             else { await activity.end(nil, dismissalPolicy: .immediate) }
         }
         guard version == revision else { return }
-        // 取得から15分ではなく、このカードが案内できる予定の区切りで再確認を促す。
-        let content = ActivityContent(state: state, staleDate: state.presentationUntil ?? state.validUntil)
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "Asia/Tokyo")!
-        let date = calendar.startOfDay(for: state.nextEvent?.start ?? state.matches.first?.start ?? state.nextGathering?.time ?? Date())
-        let key = "\(state.accountId):\(date.timeIntervalSince1970)"
+        // 時間で内容を変えない。再確認案内や終了の予約も設定しない。
+        let content = ActivityContent(state: state, staleDate: nil)
+        let key = state.accountId
         if let current {
             startedKey = key
-            if current.content.state != state { await current.update(content) }
+            if current.content.state != state || current.content.staleDate != nil { await current.update(content) }
         } else if (startedKey != key || expired), UIApplication.shared.applicationState == .active,
                   ActivityAuthorizationInfo().areActivitiesEnabled {
             do {
                 _ = try Activity.request(attributes: attributes, content: content, pushType: nil)
-                // 同日起動中にユーザーが閉じたActivityを再作成しない。
+                // 同じ起動中にユーザーが閉じたActivityを再作成しない。
                 startedKey = key
             } catch { print("[LiveActivity] Start failed: \(error)") }
         }
