@@ -59,11 +59,11 @@ fun requireProductionApiOrigin(value: String?): String {
 fun resolveBuildProperty(name: String): String? =
     (findProperty(name) as String?)?.takeIf { it.isNotBlank() }
         ?: localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
 
 val releaseStoreFile = resolveBuildProperty("RELEASE_STORE_FILE")
 // Android Studioの署名ウィザードはsigningConfigsを使わず、このプロパティで鍵を渡す。
 val injectedStoreFile = findProperty("android.injected.signing.store.file")
-val allowUnsignedRelease = resolveBuildProperty("ALLOW_UNSIGNED_RELEASE") == "true"
 
 // buildとcommitの対応を追えるようにする。
 fun resolveGitCommit(): String =
@@ -225,7 +225,7 @@ gradle.taskGraph.whenReady {
     val packagesRelease = allTasks.any {
         it.project == project && it.name in setOf("packageRelease", "packageReleaseBundle")
     }
-    if (packagesRelease && releaseStoreFile == null && injectedStoreFile == null && !allowUnsignedRelease) {
+    if (packagesRelease && releaseStoreFile == null && injectedStoreFile == null) {
         throw GradleException(
             "release buildの署名鍵が未設定です。RELEASE_STORE_FILEなどを設定してください。"
         )
