@@ -93,10 +93,17 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :composeApp:assembleDebug
 
-      # 署名はRelease配布手順で行う。通常CIではRelease用の設定・コードが
-      # bundle生成まで成立することを確認する。
-      - name: Build release AAB
-        run: ./gradlew :composeApp:bundleRelease
+      # 本番のアップロード鍵はCIに置かないため、使い捨ての鍵で署名設定が効くことだけを確かめる。
+      - name: Build signed release AAB
+        env:
+          RELEASE_STORE_FILE: ${{ runner.temp }}/ci-upload.jks
+          RELEASE_STORE_PASSWORD: ci-password
+          RELEASE_KEY_ALIAS: ci
+          RELEASE_KEY_PASSWORD: ci-password
+        run: |
+          keytool -genkeypair -keystore "$RELEASE_STORE_FILE" -storepass "$RELEASE_STORE_PASSWORD" -keypass "$RELEASE_KEY_PASSWORD" -alias "$RELEASE_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 1 -dname "CN=rectime-ci"
+          ./gradlew :composeApp:bundleRelease
+          keytool -printcert -jarfile composeApp/build/outputs/bundle/release/composeApp-release.aab | grep -F "CN=rectime-ci"
 
   build-ios:
     name: Build (iOS)
