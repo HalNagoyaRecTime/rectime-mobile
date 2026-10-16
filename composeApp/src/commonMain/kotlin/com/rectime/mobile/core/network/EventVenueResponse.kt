@@ -10,9 +10,12 @@ data class EventVenueResponse(
     val venueId: Int,
     @SerialName("venue_name")
     val venueName: String,
+    @SerialName("image_url")
+    val imageUrl: String? = null,
 )
 
 fun EventVenueResponse.toModel(): EventVenue = EventVenue(
     venueId = venueId,
     venueName = venueName,
+    imageUrl = imageUrl,
 )

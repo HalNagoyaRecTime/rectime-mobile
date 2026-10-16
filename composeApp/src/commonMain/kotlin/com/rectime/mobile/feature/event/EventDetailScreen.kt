@@ -13,6 +13,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,8 +48,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,11 +57,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.model.EventDetail
+import com.rectime.mobile.core.model.EventVenue
 import com.rectime.mobile.core.model.Gathering
-import com.rectime.mobile.core.model.venueDisplayText
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.ui.component.AppLoadingIndicator
-import com.rectime.mobile.ui.component.MapModal
+import com.rectime.mobile.ui.component.PlaceImageModal
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.component.BounceBackground
 import com.rectime.mobile.ui.component.headerTitleBarHeight
@@ -89,7 +88,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onForeground() }
         val uiState by viewModel.uiState.collectAsState()
         val eventTime by viewModel.eventTime.collectAsState()
-        var isMapVisible by remember { mutableStateOf(false) }
+        var selectedVenue by remember { mutableStateOf<EventVenue?>(null) }
         var titleHeightPx by remember { mutableIntStateOf(0) }
         var titleBandHeightPx by remember { mutableIntStateOf(0) }
         val listState = rememberLazyListState()
@@ -158,7 +157,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                 eventTime = eventTime,
                                 gatherings = uiState.gatherings,
                                 attendingGatheringIds = uiState.attendingGatheringIds,
-                                onOpenMap = { isMapVisible = true },
+                                onOpenVenue = { selectedVenue = it },
                                 onTitleHeightChanged = { titleHeightPx = it },
                                 onTitleBandHeightChanged = { titleBandHeightPx = it },
                             )
@@ -167,8 +166,8 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                 }
             }
 
-            if (isMapVisible) {
-                MapModal(onDismiss = { isMapVisible = false })
+            selectedVenue?.let { venue ->
+                PlaceImageModal(venue.venueName, venue.imageUrl, onDismiss = { selectedVenue = null })
             }
         }
     }
@@ -180,7 +179,7 @@ private fun EventDetailContent(
     eventTime: EventTimeContext,
     gatherings: List<Gathering>,
     attendingGatheringIds: Set<Int>,
-    onOpenMap: () -> Unit,
+    onOpenVenue: (EventVenue) -> Unit,
     onTitleHeightChanged: (Int) -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
 ) {
@@ -193,7 +192,7 @@ private fun EventDetailContent(
             onTitleHeightChanged = onTitleHeightChanged,
             onHeightChanged = onTitleBandHeightChanged,
             status = status,
-            overview = { EventOverview(event, onOpenMap) },
+            overview = { EventOverview(event, onOpenVenue) },
         )
 
         Column(
@@ -268,7 +267,7 @@ private fun EventTitleBand(
 }
 
 @Composable
-private fun EventOverview(event: EventDetail, onOpenMap: () -> Unit) {
+private fun EventOverview(event: EventDetail, onOpenVenue: (EventVenue) -> Unit) {
     val foreground = AppTheme.colors.textThemeColorSecond
     Row(
         Modifier.fillMaxWidth(),
@@ -290,24 +289,27 @@ private fun EventOverview(event: EventDetail, onOpenMap: () -> Unit) {
             horizontalAlignment = Alignment.End,
         ) {
             Text("開催場所", color = foreground.copy(alpha = 0.8f), fontSize = 13.sp)
-            Row(
-                modifier = Modifier
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Button,
-                        onClick = onOpenMap,
-                    )
-                    .semantics { contentDescription = "会場マップを開く" },
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    venueDisplayText(event.venues), color = foreground, fontSize = BodyFontSize,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
-                )
-                Icon(SolidGroup.ChevronRight, contentDescription = null, tint = foreground, modifier = Modifier.size(14.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)) {
+                event.venues.forEach { venue ->
+                    Row(
+                        modifier = Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            role = Role.Button,
+                            onClickLabel = "画像を開く",
+                            onClick = { onOpenVenue(venue) },
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            venue.venueName, color = foreground, fontSize = BodyFontSize,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                        )
+                        Icon(SolidGroup.ChevronRight, contentDescription = null, tint = foreground, modifier = Modifier.size(14.dp))
+                    }
+                }
             }
         }
     }
