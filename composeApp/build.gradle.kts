@@ -60,6 +60,9 @@ fun resolveBuildProperty(name: String): String? =
     (findProperty(name) as String?)?.takeIf { it.isNotBlank() }
         ?: localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
 
+val releaseStoreFile = resolveBuildProperty("RELEASE_STORE_FILE")
+val allowUnsignedRelease = resolveBuildProperty("ALLOW_UNSIGNED_RELEASE") == "true"
+
 // buildとcommitの対応を追えるようにする。
 fun resolveGitCommit(): String =
     providers.exec {
@@ -184,6 +187,16 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = resolveBuildProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = resolveBuildProperty("RELEASE_KEY_ALIAS")
+                keyPassword = resolveBuildProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
@@ -196,11 +209,24 @@ android {
             isMinifyEnabled = false
             val apiBaseUrl = requireProductionApiOrigin(productionApiOrigin)
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+// 設定時に止めるとdebug buildまで止まるため、release成果物を作るときだけ判定する。
+gradle.taskGraph.whenReady {
+    val packagesRelease = allTasks.any {
+        it.project == project && it.name in setOf("packageRelease", "packageReleaseBundle")
+    }
+    if (packagesRelease && releaseStoreFile == null && !allowUnsignedRelease) {
+        throw GradleException(
+            "release buildの署名鍵が未設定です。RELEASE_STORE_FILEなどを設定してください。"
+        )
     }
 }
 

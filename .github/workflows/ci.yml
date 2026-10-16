@@ -96,7 +96,7 @@ jobs:
       # 署名はRelease配布手順で行う。通常CIではRelease用の設定・コードが
       # bundle生成まで成立することを確認する。
       - name: Build release AAB
-        run: ./gradlew :composeApp:bundleRelease
+        run: ./gradlew :composeApp:bundleRelease -PALLOW_UNSIGNED_RELEASE=true
 
   build-ios:
     name: Build (iOS)
