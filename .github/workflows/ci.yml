@@ -90,8 +90,8 @@ jobs:
       - name: Setup CI Firebase config
         run: cp composeApp/google-services.ci.json composeApp/google-services.json
 
-      - name: Assemble debug APK
-        run: ./gradlew :composeApp:assembleDebug
+      - name: Assemble debug and staging APK
+        run: ./gradlew :composeApp:assembleDebug :composeApp:assembleStaging
 
       # 本番のアップロード鍵はCIに置かないため、使い捨ての鍵で署名設定が効くことだけを確かめる。
       - name: Build signed release AAB
@@ -157,6 +157,15 @@ jobs:
             -configuration Release)"
           echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime"
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api.rectime-project.workers.dev"
+
+      - name: Verify iOS Staging settings
+        run: |
+          settings="$(xcodebuild -showBuildSettings \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Staging)"
+          echo "$settings" | grep -F "API_BASE_URL = https://rectime-api-staging.rectime-project.workers.dev"
+          echo "$settings" | grep -F "KOTLIN_FRAMEWORK_BUILD_TYPE = release"
 
       - name: Build app for iOS Simulator (Release)
         run: |
