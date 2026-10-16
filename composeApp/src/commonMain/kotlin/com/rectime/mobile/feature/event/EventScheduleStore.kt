@@ -18,6 +18,8 @@ import com.rectime.mobile.core.network.MyEventsApi
 import com.rectime.mobile.core.network.MyEventsGateway
 import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import kotlinx.coroutines.CancellationException
+import kotlin.time.Clock
+import com.rectime.mobile.feature.schedule.EventsResponse
 
 /** 詳細と本人参加情報を共有する。全イベントの詳細を起動時に取得しない。 */
 internal class EventScheduleStore(
@@ -25,6 +27,7 @@ internal class EventScheduleStore(
     private val client: HttpClient = createAppHttpClient(),
     private val myEvents: MyEventsGateway = MyEventsApi(client = client),
     private val baseUrl: String = apiBaseUrl,
+    private val clock: Clock = Clock.System,
 ) {
     companion object {
         val shared: EventScheduleStore by lazy { EventScheduleStore() }
@@ -56,7 +59,28 @@ internal class EventScheduleStore(
         return event.gatheringIds.toSet()
     }
 
-    suspend fun refreshParticipation(): List<MyEventParticipation> = cache.requests.run(ParticipationKey) {
+    /** 一覧の取得と保存は呼び出し側の取得順を維持し、復帰時の鮮度判断だけ共有する。
+     * 保存値の再利用は通信共有の外で行い、明示更新が通信なしの結果へ合流するのを防ぐ。
+     */
+    suspend fun refreshEvents(reason: EventRefreshReason, fetch: suspend () -> EventsResponse): EventsResponse {
+        if (reason == EventRefreshReason.Foreground) {
+            cache.requests.awaitCurrent("schedule_events_v1")
+            val saved = EventCache(cache).loadEventsEntry()
+            if (saved.canReuse(reason, clock)) return requireNotNull(saved).data
+        }
+        return cache.requests.run("schedule_events_v1", fetch)
+    }
+
+    suspend fun refreshParticipation(reason: EventRefreshReason = EventRefreshReason.Required): List<MyEventParticipation> {
+        if (reason == EventRefreshReason.Foreground) {
+            cache.requests.awaitCurrent(ParticipationKey)
+            val saved = cachedParticipationEntry()
+            if (saved.canReuse(reason, clock)) return requireNotNull(saved).data
+        }
+        return fetchParticipation()
+    }
+
+    private suspend fun fetchParticipation(): List<MyEventParticipation> = cache.requests.run(ParticipationKey) {
         val request = CacheRequestGeneration()
         val latest = try { myEvents.getMyEvents() }
         catch (e: CancellationException) { throw e }
@@ -80,17 +104,37 @@ internal class EventScheduleStore(
         EventCache(cache).loadDetailEntry(eventId)
 
     /** 同時に開かれた詳細や将来のLive Activityも、イベントごとに通信を共有できる。 */
-    suspend fun refreshDetail(eventId: Int): EventDetailResponse =
+    suspend fun refreshDetail(eventId: Int, reason: EventRefreshReason = EventRefreshReason.Required): EventDetailResponse {
+        if (reason == EventRefreshReason.Foreground) {
+            cache.requests.awaitCurrent("event_detail_v1_$eventId")
+            val saved = cachedDetailEntry(eventId)
+            if (saved?.data?.rounds != null && saved.canReuse(reason, clock)) return saved.data
+        }
+        return fetchDetail(eventId)
+    }
+
+    private suspend fun fetchDetail(eventId: Int): EventDetailResponse =
         cache.requests.run("event_detail_v1_$eventId") {
             val request = CacheRequestGeneration()
             val eventCache = EventCache(cache)
             val cacheRequest = eventCache.beginRequest()
-            val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events/$eventId")
-            if (!response.status.isSuccess()) throw apiErrorException(response.status, response.bodyAsText())
-            val detail = response.body<EventDetailResponse>()
-            checkNotNull(detail.rounds) { "イベント詳細のroundsがありません" }
-            if (!request.isCurrent) throw CancellationException("イベントのセッションが変わりました")
-            eventCache.saveDetail(detail, cacheRequest)
+            try {
+                val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events/$eventId")
+                if (!response.status.isSuccess()) throw apiErrorException(response.status, response.bodyAsText())
+                val detail = response.body<EventDetailResponse>()
+                checkNotNull(detail.rounds) { "イベント詳細のroundsがありません" }
+                if (!request.isCurrent) throw CancellationException("イベントのセッションが変わりました")
+                eventCache.saveDetail(detail, cacheRequest)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (request.isCurrent && e.invalidatesDisplayedContent()) {
+                    try { eventCache.invalidateDetail(eventId, e) }
+                    catch (cancel: CancellationException) { throw cancel }
+                    catch (_: Exception) { }
+                }
+                throw e
+            }
         }
 
     private suspend inline fun <reified T> loadEntryOrNull(key: String): FetchedCache<T>? = try {

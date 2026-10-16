@@ -9,7 +9,8 @@ data class EventsResponse(
     val events: List<EventResponse>,
     val total: Int,
     val limit: Int,
-    val offset: Int
+    val offset: Int,
+    @SerialName("event_date") val eventDate: String? = null,
 )
 
 @Serializable

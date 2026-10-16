@@ -75,7 +75,8 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
                 scheduleStore = com.rectime.mobile.feature.event.EventScheduleStore.shared)
         }
         val uiState by viewModel.uiState.collectAsState()
-        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+        val eventTime by viewModel.eventTime.collectAsStateWithLifecycle()
+        val nowMinute = eventTime.minute
         var titleScrolledOut by remember(id) { mutableStateOf(false) }
         val headerBottomPx = with(LocalDensity.current) { headerTitleBarHeight().toPx() }
         val fullyVisible = isNotificationDetailFullyVisible(navigationController.state, this)
@@ -259,4 +260,6 @@ internal fun String.toMinuteOfDay(): Int {
 }
 
 internal fun isEventLiveAt(startTime: String, endTime: String, nowMinute: Int): Boolean =
-    nowMinute in startTime.toMinuteOfDay()..endTime.toMinuteOfDay()
+    com.rectime.mobile.feature.event.minuteOf(startTime)?.let { start ->
+        com.rectime.mobile.feature.event.minuteOf(endTime)?.let { end -> start < end && nowMinute >= start && nowMinute < end }
+    } == true
