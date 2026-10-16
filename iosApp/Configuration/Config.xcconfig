@@ -15,4 +15,8 @@ API_BASE_URL[config=Debug] = $(DEBUG_API_BASE_URL)
 API_BASE_URL[config=Staging] = https:/$()/rectime-api-staging.rectime-project.workers.dev
 API_BASE_URL[config=Release] = https:/$()/rectime-api.rectime-project.workers.dev
 
+APP_ENVIRONMENT[config=Debug] = Development
+APP_ENVIRONMENT[config=Staging] = Staging
+APP_ENVIRONMENT[config=Release] = Production
+
 KOTLIN_FRAMEWORK_BUILD_TYPE[config=Staging] = release

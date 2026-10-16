@@ -14,15 +14,22 @@ const val productionWebOrigin: String = "https://recwatch.pages.dev"
  */
 const val developWebOrigin: String = "https://develop.recwatch.pages.dev"
 
+/** Public staging origin used only by staging builds, paired with the staging API. */
+const val stagingWebOrigin: String = "https://staging.recwatch.pages.dev"
+
 /** Public entry point for starting the RE:CREATION account deletion process. */
 const val accountDeletionPath: String = "/account-deletion"
 
-/** Web origin for the current build type: develop for debug, production for release. */
+/** Web origin for the current build type, paired with the API the build connects to. */
 val publicWebOrigin: String
-    get() = allowedWebOrigin(isDebugBuild)
+    get() = allowedWebOrigin(appEnvironment)
 
-internal fun allowedWebOrigin(isDebug: Boolean): String =
-    if (isDebug) developWebOrigin else productionWebOrigin
+internal fun allowedWebOrigin(environment: AppEnvironment): String =
+    when (environment) {
+        AppEnvironment.Development -> developWebOrigin
+        AppEnvironment.Staging -> stagingWebOrigin
+        AppEnvironment.Production -> productionWebOrigin
+    }
 
 private val httpsOriginPattern = Regex(
     pattern = "^https://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[1-9][0-9]{0,4})?/?$",
@@ -31,14 +38,13 @@ private val httpsOriginPattern = Regex(
 /**
  * Resolves a path against the public web origin.
  *
- * Release builds accept only the approved production origin. Debug builds accept
- * only the develop origin. Preview, staging, localhost, example and placeholder
- * origins are rejected in every build.
+ * Each build accepts only the origin of its own environment. Preview, localhost,
+ * example and placeholder origins are rejected in every build.
  */
 fun resolvePublicWebUrl(
     path: String,
     origin: String = publicWebOrigin,
-    isDebug: Boolean = isDebugBuild,
+    environment: AppEnvironment = appEnvironment,
 ): String? {
     if (!path.startsWith('/') || path.startsWith("//")) return null
     if ('?' in path || '#' in path || '\\' in path) return null
@@ -54,10 +60,10 @@ fun resolvePublicWebUrl(
         host.endsWith(".example.com") ||
         host.startsWith("pr-") ||
         host.startsWith("preview.") ||
-        (!isDebug && host.startsWith("develop.")) ||
+        (environment != AppEnvironment.Development && host.startsWith("develop.")) ||
         host.startsWith("development.") ||
-        host.startsWith("staging.")
-    if (forbiddenHost || normalizedOrigin != allowedWebOrigin(isDebug)) return null
+        (environment != AppEnvironment.Staging && host.startsWith("staging."))
+    if (forbiddenHost || normalizedOrigin != allowedWebOrigin(environment)) return null
 
     return normalizedOrigin + path
 }

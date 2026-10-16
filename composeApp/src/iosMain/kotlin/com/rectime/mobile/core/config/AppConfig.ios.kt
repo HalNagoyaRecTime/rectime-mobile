@@ -12,6 +12,11 @@ import platform.posix.getenv
 @OptIn(ExperimentalNativeApi::class)
 actual val isDebugBuild: Boolean = Platform.isDebugBinary
 
+actual val appEnvironment: AppEnvironment =
+    AppEnvironment.entries.firstOrNull {
+        it.name == NSBundle.mainBundle.objectForInfoDictionaryKey("APP_ENVIRONMENT") as? String
+    } ?: if (isDebugBuild) AppEnvironment.Development else AppEnvironment.Production
+
 @OptIn(ExperimentalForeignApi::class)
 actual val apiBaseUrlResult: ApiBaseUrlResult = resolveApiBaseUrl(
     rawValue =

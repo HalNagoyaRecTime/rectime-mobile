@@ -165,6 +165,7 @@ jobs:
             -scheme iosApp \
             -configuration Staging)"
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api-staging.rectime-project.workers.dev"
+          echo "$settings" | grep -F "APP_ENVIRONMENT = Staging"
           echo "$settings" | grep -F "KOTLIN_FRAMEWORK_BUILD_TYPE = release"
 
       - name: Build app for iOS Simulator (Release)

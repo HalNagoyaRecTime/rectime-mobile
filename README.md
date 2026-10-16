@@ -76,11 +76,11 @@ rectime-mobile/
 
 ## ビルドの種類
 
-| 種類 | 接続先 API | Android | iOS (Build Configuration) |
-| --- | --- | --- | --- |
-| デバッグ | `rectime-api-development` | `debug` | `Debug` |
-| ステージング | `rectime-api-staging` | `staging` | `Staging` |
-| リリース | `rectime-api` | `release` | `Release` |
+| 種類 | 接続先 API | 接続先 Web（規約・アカウント削除） | Android | iOS (Build Configuration) |
+| --- | --- | --- | --- | --- |
+| デバッグ | `rectime-api-development` | `develop.recwatch.pages.dev` | `debug` | `Debug` |
+| ステージング | `rectime-api-staging` | `staging.recwatch.pages.dev` | `staging` | `Staging` |
+| リリース | `rectime-api` | `recwatch.pages.dev` | `release` | `Release` |
 
 - デバッグだけは接続先を差し替えられる。ローカルの `wrangler dev` に繋ぐときは、Android は
   `local.properties` の `API_BASE_URL`、iOS は `Local.xcconfig` の `DEBUG_API_BASE_URL` を指定する。

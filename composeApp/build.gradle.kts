@@ -205,17 +205,20 @@ android {
         getByName("debug") {
             val apiBaseUrl = resolveBuildProperty("API_BASE_URL") ?: developmentApiOrigin
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Development\"")
         }
         getByName("release") {
             isMinifyEnabled = false
             val apiBaseUrl = requireProductionApiOrigin(productionApiOrigin)
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Production\"")
             signingConfig = signingConfigs.findByName("release")
         }
-        // 社内で配って確かめるbuildなので、アップロード鍵が無くても作れるようdebug鍵で署名する。
+        // チームで配って確かめるbuildなので、アップロード鍵が無くても作れるようdebug鍵で署名する。
         create("staging") {
             initWith(getByName("release"))
             buildConfigField("String", "API_BASE_URL", "\"$stagingApiOrigin\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Staging\"")
             signingConfig = signingConfigs.getByName("debug")
         }
     }
