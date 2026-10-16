@@ -28,3 +28,15 @@ iOSのBundle IDを変更した場合は、Repositoryの変更だけでは配布�
 - 新しい `GoogleService-Info.plist` を取得してローカル/Release環境へ配置する
 
 OAuthのURL Schemeは別設定です。この手順では変更しません。
+
+## Microsoft OAuth callback
+
+モバイルのOAuth callbackは次のURIへ統一する。
+
+```text
+io.github.halnagoyarectime://auth/callback
+```
+
+AndroidのIntent FilterとiOSのURL Schemeだけを変更してもログインは成立しない。
+Microsoft EntraのRedirect URIとrectime-apiの `MICROSOFT_MOBILE_REDIRECT_URI` を同じ値へ切り替えてから配布する。
+既存配布版がある場合は、新旧callbackの移行期間を考慮して旧Redirect URIの削除を最後に行う。
