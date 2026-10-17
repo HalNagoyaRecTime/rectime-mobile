@@ -10,6 +10,8 @@ val localProperties = Properties().apply {
 // 本番APIの公開オリジン。秘匿値ではなく公開設定であり、
 // PublicWebConfig.kt の productionWebOrigin と同じ扱いをする。
 val productionApiOrigin = "https://rectime-api.rectime-project.workers.dev"
+val stagingApiOrigin = "https://rectime-api-staging.rectime-project.workers.dev"
+val developmentApiOrigin = "https://rectime-api-development.rectime-project.workers.dev"
 
 val httpsOriginPattern = Regex("^https://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[1-9][0-9]{0,4})?$")
 
@@ -20,7 +22,7 @@ fun requireProductionApiOrigin(value: String?): String {
     val origin = value?.trim()?.trimEnd('/').orEmpty()
     if (origin.isEmpty()) {
         throw GradleException(
-            "release buildのAPI_BASE_URLが未設定です。-PRELEASE_API_BASE_URL=<本番origin> を指定してください。"
+            "release buildの本番API originが未設定です。productionApiOriginを確認してください。"
         )
     }
     val host = httpsOriginPattern.matchEntire(origin)?.groupValues?.get(1)?.lowercase()
@@ -59,6 +61,11 @@ fun requireProductionApiOrigin(value: String?): String {
 fun resolveBuildProperty(name: String): String? =
     (findProperty(name) as String?)?.takeIf { it.isNotBlank() }
         ?: localProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+        ?: providers.environmentVariable(name).orNull?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = resolveBuildProperty("RELEASE_STORE_FILE")
+// Android Studioの署名ウィザードはsigningConfigsを使わず、このプロパティで鍵を渡す。
+val injectedStoreFile = findProperty("android.injected.signing.store.file")
 
 // buildとcommitの対応を追えるようにする。
 fun resolveGitCommit(): String =
@@ -128,15 +135,15 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.compose.icon.collections.fontawesome)
+            implementation(libs.markdown.core)
+            implementation(libs.markdown.material3)
             implementation(libs.coil.compose)
             implementation(libs.coil.network.ktor)
-            implementation(libs.coil.network.cache.control)
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
-            implementation(libs.navigationevent.compose)
         }
         androidUnitTest.dependencies {
             implementation(libs.kotlin.test)
@@ -184,25 +191,52 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = resolveBuildProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = resolveBuildProperty("RELEASE_KEY_ALIAS")
+                keyPassword = resolveBuildProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
-            val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
-                ?: findProperty("API_BASE_URL") as String?
-                ?: providers.environmentVariable("API_BASE_URL").orNull
-                ?: "http://10.0.2.2:8787"
+            val apiBaseUrl = resolveBuildProperty("API_BASE_URL") ?: developmentApiOrigin
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Development\"")
         }
         getByName("release") {
             isMinifyEnabled = false
-            val apiBaseUrl = requireProductionApiOrigin(
-                resolveBuildProperty("RELEASE_API_BASE_URL") ?: productionApiOrigin
-            )
+            val apiBaseUrl = requireProductionApiOrigin(productionApiOrigin)
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Production\"")
+            signingConfig = signingConfigs.findByName("release")
+        }
+        // チームで配って確かめるbuildなので、アップロード鍵が無くても作れるようdebug鍵で署名する。
+        create("staging") {
+            initWith(getByName("release"))
+            buildConfigField("String", "API_BASE_URL", "\"$stagingApiOrigin\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Staging\"")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+// 設定時に止めるとdebug buildまで止まるため、release成果物を作るときだけ判定する。
+gradle.taskGraph.whenReady {
+    val packagesRelease = allTasks.any {
+        it.project == project && it.name in setOf("packageRelease", "packageReleaseBundle")
+    }
+    if (packagesRelease && releaseStoreFile == null && injectedStoreFile == null) {
+        throw GradleException(
+            "release buildの署名鍵が未設定です。RELEASE_STORE_FILEなどを設定してください。"
+        )
     }
 }
 
@@ -215,6 +249,8 @@ compose.desktop {
         mainClass = "com.rectime.mobile.MainKt"
 
         nativeDistributions {
+            // Desktopの認証コールバック受信に必要なJDKモジュールを同梱する。
+            modules("jdk.httpserver")
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.rectime.mobile"
             packageVersion = "1.0.0"

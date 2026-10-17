@@ -5,56 +5,27 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class RoleTest {
-
     @Test
     fun fromCategoriesMapsEachSingleCategory() {
-        assertEquals(
-            Role.Student,
-            Role.fromCategories(isStudent = true, isStaff = false, isTeacher = false),
-        )
-        assertEquals(
-            Role.Staff,
-            Role.fromCategories(isStudent = false, isStaff = true, isTeacher = false),
-        )
-        assertEquals(
-            Role.Teacher,
-            Role.fromCategories(isStudent = false, isStaff = false, isTeacher = true),
-        )
+        assertEquals(Role.Student, Role.fromCategories(true, false, false))
+        assertEquals(Role.Staff, Role.fromCategories(false, true, false))
+        assertEquals(Role.Teacher, Role.fromCategories(false, false, true))
     }
 
     @Test
-    fun fromCategoriesPrefersTeacherOverStaff() {
-        assertEquals(
-            Role.Teacher,
-            Role.fromCategories(isStudent = false, isStaff = true, isTeacher = true),
-        )
+    fun fromCategoriesUsesTeacherThenStaffThenStudentPriority() {
+        assertEquals(Role.Teacher, Role.fromCategories(true, true, true))
+        assertEquals(Role.Staff, Role.fromCategories(true, true, false))
+        assertEquals(Role.Student, Role.fromCategories(true, false, false))
+        assertNull(Role.fromCategories(false, false, false))
     }
 
     @Test
-    fun fromCategoriesPrefersStaffOverStudent() {
-        assertEquals(
-            Role.Staff,
-            Role.fromCategories(isStudent = true, isStaff = true, isTeacher = false),
-        )
-    }
-
-    @Test
-    fun fromCategoriesReturnsNullWhenNoCategoryIsSet() {
-        assertNull(Role.fromCategories(isStudent = false, isStaff = false, isTeacher = false))
-    }
-
-    @Test
-    fun fromStoredNameRestoresEveryEnumName() {
-        Role.entries.forEach { role ->
-            assertEquals(role, Role.fromStoredName(role.name))
-        }
-    }
-
-    @Test
-    fun fromStoredNameReturnsNullForUnknownOrMissingValue() {
-        assertNull(Role.fromStoredName(null))
-        assertNull(Role.fromStoredName(""))
-        assertNull(Role.fromStoredName("student"))
-        assertNull(Role.fromStoredName("Admin"))
+    fun authUserRoleIsDerivedFromCategoryFlags() {
+        val base = AuthUser("1", "test@example.com", "Test")
+        assertNull(base.role)
+        assertEquals(Role.Student, base.copy(isStudent = true).role)
+        assertEquals(Role.Staff, base.copy(isStudent = true, isStaff = true).role)
+        assertEquals(Role.Teacher, base.copy(isStudent = true, isStaff = true, isTeacher = true).role)
     }
 }

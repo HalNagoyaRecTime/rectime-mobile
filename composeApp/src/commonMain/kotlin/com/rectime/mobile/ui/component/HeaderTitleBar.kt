@@ -1,5 +1,10 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,13 +51,14 @@ internal fun HeaderTitleBar(
     leading: @Composable (() -> Unit)? = null,
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
+    titleVisible: Boolean = true,
 ) {
     val shape = RoundedCornerShape(bottomStart = HeaderBottomRadius, bottomEnd = HeaderBottomRadius)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(color = AppTheme.colors.detailsScreenHeaderBackground, shape = shape)
+            .background(brush = headerBackgroundBrush(AppTheme.colors.detailsScreenHeaderBackground), shape = shape)
             .outerShadow(
                 shape = shape,
                 color = AppTheme.colors.dropShadow,
@@ -70,18 +76,23 @@ internal fun HeaderTitleBar(
                 .height(AppTheme.layout.headerDetailAction),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = title,
-                color = AppTheme.colors.textDetailsScreenHeader,
-                fontWeight = FontWeight.Medium,
-                fontSize = 21.sp,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = AppTheme.layout.headerAction),
-            )
+            AnimatedVisibility(
+                visible = titleVisible,
+                enter = fadeIn() + slideInVertically { it },
+                exit = fadeOut() + slideOutVertically { it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = AppTheme.layout.headerAction),
+            ) {
+                Text(
+                    text = title,
+                    color = AppTheme.colors.textDetailsScreenHeader,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 21.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             if (leading != null || onLeadingClick != null) {
                 AppIconButton(
                     onClick = onLeadingClick,

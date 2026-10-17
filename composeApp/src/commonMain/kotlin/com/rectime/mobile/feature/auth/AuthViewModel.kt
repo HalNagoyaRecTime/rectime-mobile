@@ -31,10 +31,11 @@ class AuthViewModel(
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
     val photoRepository: ProfilePhotoRepository? = null,
-    private val devAuthBypassEnabled: Boolean = isDevAuthBypassEnabled(),
     private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
+    private val prepareCallback: (String) -> String? = ::preparePlatformAuthCallback,
+    private val cancelCallback: (String) -> Unit = ::cancelPlatformAuthCallback,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState(isRestoringSession = true))
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -45,6 +46,7 @@ class AuthViewModel(
     private var photoFetchJob: Job? = null
     private var previousAccessToken: String? = null
     private var loggingOut = false
+    private var activeCallbackState: String? = null
     private var refreshJob: Deferred<String?>? = null
     private var refreshRequestToken: String? = null
     private var sessionCheckJob: Job? = null
@@ -64,19 +66,6 @@ class AuthViewModel(
     private fun restoreSession() {
         sessionCheckJob = viewModelScope.launch {
             try {
-                if (devAuthBypassEnabled) {
-                    SessionTokenHolder.accessToken = "dev-bypass-token"
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            isRestoringSession = false,
-                            session = createDevSession(),
-                            message = "DEV_BYPASS_AUTH enabled",
-                        )
-                    }
-                    return@launch
-                }
-
                 _uiState.update { it.copy(isLoading = true, message = "Restoring session...") }
 
                 // 認証途中で終了した場合も、起動後のコールバックを受け付けられるよう復元する。
@@ -131,7 +120,7 @@ class AuthViewModel(
 
     /** 前面復帰時も画面を維持し、起動時と同じ確認を裏で行う。 */
     fun onForeground() {
-        if (devAuthBypassEnabled || loggingOut || sessionCheckJob?.isActive == true) return
+        if (loggingOut || sessionCheckJob?.isActive == true) return
         val stored = _uiState.value.session ?: return
         sessionCheckJob = viewModelScope.launch {
             try {
@@ -155,6 +144,9 @@ class AuthViewModel(
                     it.refreshTokenId == stored.refreshTokenId && it.accessToken == stored.accessToken
                 } == true) {
                     if (user.id != stored.user.id) {
+                        // 成功した本人確認で利用者が変わった場合だけ、旧利用者の共有データを失効する。
+                        // 永続領域を消せない場合は切替を確定しない。再起動後もSessionと保存値の本人を揃える。
+                        cache.clearAll()
                         photoFetchJob?.cancel()
                         photoRepository?.clear()
                         photoRepository?.restore(user.id)
@@ -225,29 +217,20 @@ class AuthViewModel(
 
     fun startLogin() {
         viewModelScope.launch {
-            if (devAuthBypassEnabled) {
-                SessionTokenHolder.accessToken = "dev-bypass-token"
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        error = null,
-                        session = createDevSession(),
-                        message = "DEV_BYPASS_AUTH enabled",
-                    )
-                }
-                return@launch
-            }
-
             _uiState.update {
                 it.copy(isLoading = true, error = null, message = "Opening Microsoft login...")
             }
             var pendingForAttempt: PendingAuth? = null
+            var callbackState: String? = null
             try {
                 val codeVerifier = generateBase64UrlRandom(32)
                 val codeChallenge = generateCodeChallenge(codeVerifier)
                 val state = generateBase64UrlRandom(32)
                 val pending = PendingAuth(state = state, codeVerifier = codeVerifier)
-                val authUrl = api.requestAuthUrl(state, codeChallenge)
+                callbackState = state
+                val redirectUri = prepareCallback(state)
+                activeCallbackState = state
+                val authUrl = api.requestAuthUrl(state, codeChallenge, redirectUri)
 
                 // Microsoftで認証済みの場合も即時コールバックを処理できるよう、
                 // ブラウザーへ制御を渡す前に今回のPKCE情報を保存する。
@@ -256,6 +239,7 @@ class AuthViewModel(
                 _uiState.update { it.copy(pendingAuth = pending) }
                 val opened = openUrl(authUrl)
                 if (!opened) {
+                    cancelCallback(state)
                     clearPendingAuthForAttempt(pending)
                     _uiState.update {
                         it.copy(
@@ -274,6 +258,7 @@ class AuthViewModel(
                     )
                 }
             } catch (error: Throwable) {
+                callbackState?.let { cancelCallback(it) }
                 if (error is CancellationException) throw error
                 pendingForAttempt?.let { clearPendingAuthForAttempt(it) }
                 _uiState.update { current ->
@@ -435,10 +420,8 @@ class AuthViewModel(
                         } && preparationSucceeded && stored.isSuccess
                     }
                 }
-                if (!devAuthBypassEnabled) {
-                    pushTokenLifecycle.logout(targetSession) { fcmToken ->
-                        api.logout(targetSession, fcmToken)
-                    }
+                pushTokenLifecycle.logout(targetSession) { fcmToken ->
+                    api.logout(targetSession, fcmToken)
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
@@ -705,6 +688,7 @@ class AuthViewModel(
     }
 
     override fun onCleared() {
+        activeCallbackState?.let { cancelCallback(it) }
         AuthSessionInvalidationHandler.unregister(this)
         photoFetchJob?.cancel()
         api.close()
@@ -724,20 +708,6 @@ private fun Throwable.isUnauthorizedAuthError(): Boolean =
 // 例外messageが空の場合も、デバッグログに最低限の原因を残す。
 private fun Throwable.describe(): String =
     message?.takeIf { it.isNotBlank() } ?: this::class.simpleName ?: "unknown error"
-
-private fun createDevSession() = AuthSession(
-    accessToken = "dev-bypass-token",
-    refreshTokenId = "dev-bypass-refresh",
-    expiresIn = 3600L,
-    user = AuthUser(
-        id = "dev-user",
-        email = "dev@local",
-        displayName = "Dev User",
-        studentIdNumber = "55000",
-        classRoomName = "IA12A203",
-        classCode = "IA12A203",
-    ),
-)
 
 private fun readQueryValue(url: String, key: String): String? {
     val queryStart = url.indexOf('?')

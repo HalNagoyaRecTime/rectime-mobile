@@ -15,3 +15,17 @@ fun MapModal(onDismiss: () -> Unit) {
         onDismiss = onDismiss,
     )
 }
+
+@Composable
+fun PlaceImageModal(placeName: String, imageUrl: String?, onDismiss: () -> Unit) {
+    if (imageUrl == null) {
+        MapModal(onDismiss = onDismiss)
+    } else {
+        ImageViewerDialog(
+            imageUrl = imageUrl,
+            contentDescription = placeName,
+            title = placeName,
+            onDismiss = onDismiss,
+        )
+    }
+}

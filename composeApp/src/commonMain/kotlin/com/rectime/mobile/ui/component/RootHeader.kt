@@ -34,7 +34,7 @@ fun RootHeader(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(color = AppTheme.colors.headerBackground)
+                .background(brush = headerBackgroundBrush(AppTheme.colors.headerBackground))
                 .outerShadow(
                     shape = RectangleShape,
                     color = AppTheme.colors.dropShadow,

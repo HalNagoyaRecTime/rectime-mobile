@@ -1,3 +1,5 @@
 sdk.dir=<your-android-sdk-path>
-API_BASE_URL=<shared-debug-api-url>
-RELEASE_API_BASE_URL=<shared-release-api-url>
+RELEASE_STORE_FILE=<upload-keystore-absolute-path>
+RELEASE_STORE_PASSWORD=<upload-keystore-password>
+RELEASE_KEY_ALIAS=<upload-key-alias>
+RELEASE_KEY_PASSWORD=<upload-key-password>

@@ -226,4 +226,41 @@ class LaneAssignmentTest {
             shuffledResult.associate { it.eventId to (it.lane to it.laneCount) },
         )
     }
+
+    // ---- 短時間イベントの最小表示時間 ----
+
+    @Test
+    fun shortEventIsDisplayedWithMinimumDuration() {
+        val tenMinutes = event(1, 600, 10)
+        assertEquals(10, tenMinutes.durationMinutes)
+        assertEquals(MIN_DISPLAY_DURATION_MINUTES, tenMinutes.displayDurationMinutes)
+        assertEquals(30, event(2, 600, 30).displayDurationMinutes)
+    }
+
+    @Test
+    fun backToBackShortEventsAreSeparatedIntoLanesToAvoidVisualOverlap() {
+        // 11:00-11:10 と 11:10-11:20 は時刻上は連続だが、
+        // 表示上は 11:00-11:20 まで伸びるため別レーンに並べる
+        val result = assignLanes(
+            listOf(
+                event(1, 660, 10),
+                event(2, 670, 10),
+            )
+        ).associateBy { it.eventId }
+
+        assertEquals(0, result.getValue(1).lane)
+        assertEquals(1, result.getValue(2).lane)
+        assertEquals(2, result.getValue(1).laneCount)
+    }
+
+    @Test
+    fun shortEventsFarEnoughApartStayInOneLane() {
+        val result = assignLanes(
+            listOf(
+                event(1, 660, 10),
+                event(2, 680, 10), // 表示上の終了(11:20)以降に開始
+            )
+        )
+        assertTrue(result.all { it.lane == 0 && it.laneCount == 1 })
+    }
 }

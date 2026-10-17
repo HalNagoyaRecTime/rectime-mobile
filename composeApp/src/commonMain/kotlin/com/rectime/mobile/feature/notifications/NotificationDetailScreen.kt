@@ -18,24 +18,30 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rectime.mobile.app.navigation.NavigationState
-import com.rectime.mobile.app.navigation.PushTransitionMode
-import com.rectime.mobile.app.navigation.ActiveGesture
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.ui.component.AppLoadingIndicator
+import com.rectime.mobile.ui.component.AppMarkdown
 import com.rectime.mobile.ui.component.AppDivider
 import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.PressSurface
 import com.rectime.mobile.ui.component.PushScreenScaffold
+import com.rectime.mobile.ui.component.headerTitleBarHeight
 import com.rectime.mobile.ui.theme.AppTheme
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
@@ -65,17 +71,22 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
     @Composable
     override fun Content(navigationController: NavigationController) {
         val viewModel = viewModel(key = key) {
-            NotificationDetailViewModel(id, refreshOnOpen = refreshOnOpen, feedStore = NotificationFeedStore.shared)
+            NotificationDetailViewModel(id, refreshOnOpen = refreshOnOpen, feedStore = NotificationFeedStore.shared,
+                scheduleStore = com.rectime.mobile.feature.event.EventScheduleStore.shared)
         }
         val uiState by viewModel.uiState.collectAsState()
-        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+        val eventTime by viewModel.eventTime.collectAsStateWithLifecycle()
+        val nowMinute = eventTime.minute
+        var titleScrolledOut by remember(id) { mutableStateOf(false) }
+        val headerBottomPx = with(LocalDensity.current) { headerTitleBarHeight().toPx() }
         val fullyVisible = isNotificationDetailFullyVisible(navigationController.state, this)
         LaunchedEffect(fullyVisible, uiState.notification?.id) {
             if (fullyVisible && uiState.notification != null) viewModel.onContentVisible()
         }
 
         PushScreenScaffold(
-            title = "通知詳細",
+            title = uiState.notification?.title.orEmpty(),
+            titleVisible = uiState.notification != null && titleScrolledOut,
             onBack = { navigationController.requestPop() },
         ) {
             item {
@@ -122,6 +133,7 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
                                 notification = requireNotNull(uiState.notification),
                                 isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
                                 nowMinute = nowMinute,
+                                onTitleBottomChanged = { bottom -> titleScrolledOut = bottom <= headerBottomPx },
                                 onRelatedEventClick = { eventId ->
                                     navigationController.push(
                                         EventDetailScreen(eventId = eventId),
@@ -136,17 +148,17 @@ data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = fa
     }
 }
 
-internal fun isNotificationDetailFullyVisible(state: NavigationState, screen: NotificationDetailScreen): Boolean =
-    state.pushStack.lastOrNull()?.screen == screen &&
-        state.pushTransition.mode == PushTransitionMode.Idle &&
-        !state.isTransitioning && state.activeGesture == ActiveGesture.None &&
-        state.backDragOffsetPx == 0f && state.sheet == null
+internal fun isNotificationDetailFullyVisible(state: NavigationState, screen: NotificationDetailScreen): Boolean {
+    val entry = state.pushStack.lastOrNull() ?: return false
+    return entry.screen == screen && state.isPushInteractive(entry.key)
+}
 
 @Composable
 private fun NotificationDetailContent(
     notification: UserNotification,
     isParticipatingInRelatedEvent: Boolean,
     nowMinute: Int,
+    onTitleBottomChanged: (Float) -> Unit,
     onRelatedEventClick: (Int) -> Unit,
 ) {
     Column(
@@ -160,7 +172,8 @@ private fun NotificationDetailContent(
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.ExtraBold,
             color = AppTheme.colors.textDetailsScreenTitle,
-            modifier = Modifier.padding(top = NotificationTitleTopPadding),
+            modifier = Modifier.padding(top = NotificationTitleTopPadding)
+                .onGloballyPositioned { onTitleBottomChanged(it.boundsInRoot().bottom) },
         )
         Text(
             text = notification.scheduledAt.toNotificationDateTime(),
@@ -169,15 +182,14 @@ private fun NotificationDetailContent(
             modifier = Modifier.offset(y = NotificationDateTimeOffsetY),
         )
         AppDivider()
-        Text(
-            text = notification.body,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = AppTheme.colors.textDetailsScreenBody,
-            lineHeight = NotificationBodyLineHeight,
+        AppMarkdown(
+            content = notification.body,
+            imageTitle = notification.title,
+            bodyStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = FontWeight.Medium,
+                lineHeight = NotificationBodyLineHeight,
+            ),
         )
-        AppDivider()
-
         notification.relatedEvent?.let { event ->
             Column(verticalArrangement = Arrangement.spacedBy(RelatedEventSpacing)) {
                 Text(
@@ -248,4 +260,6 @@ internal fun String.toMinuteOfDay(): Int {
 }
 
 internal fun isEventLiveAt(startTime: String, endTime: String, nowMinute: Int): Boolean =
-    nowMinute in startTime.toMinuteOfDay()..endTime.toMinuteOfDay()
+    com.rectime.mobile.feature.event.minuteOf(startTime)?.let { start ->
+        com.rectime.mobile.feature.event.minuteOf(endTime)?.let { end -> start < end && nowMinute >= start && nowMinute < end }
+    } == true

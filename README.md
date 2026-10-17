@@ -33,26 +33,31 @@ cd rectime-mobile
 
 ### Firebase Android設定
 
-Android版のビルドには、Firebase Consoleから取得した設定ファイルが必要です。
-プロジェクト管理者から安全な方法で共有されたファイルを、次の場所へ配置してください。
+Android版をFirebaseへ接続して実行する場合は、Firebase Consoleから取得した設定ファイルを次の場所へ配置してください。
 
 ```text
 composeApp/google-services.json
 ```
 
 `composeApp/google-services.json`はGitの管理対象外です。コミットしないでください。
-CIでAndroid版をビルドする場合は、Repository Secretなどに保存した内容からビルド時に同じパスへ生成してください。
+`composeApp/google-services.ci.json` はGit管理するCI専用のdummy設定で、`google-services.json` のJSON形式と `applicationId` の整合性をビルドで確認するために使います。本番Firebase設定のテンプレートではなく、ローカル実行や配布用ビルドには使用しません。
+配布用ビルドでは対象Firebase projectから取得した実ファイルを使用してください。
 
 ### iOSローカル設定
 
-`iosApp/Configuration/Config.xcconfig.example` を `iosApp/Configuration/Config.xcconfig` へコピーして使用します。
+iOSの共通設定はGit管理された `iosApp/Configuration/Config.xcconfig` を使用します。
+Bundle ID、バージョン、Staging / Release API URLはRepositoryを正とし、ローカルファイルへ複製しません。
 
-```shell
-cp iosApp/Configuration/Config.xcconfig.example iosApp/Configuration/Config.xcconfig
+実機デバッグなどで開発者固有の値が必要な場合だけ、
+Git管理対象外の `iosApp/Configuration/Local.xcconfig` を作成してください。
+
+```xcconfig
+TEAM_ID = <Apple Developer Team ID>
+DEBUG_API_BASE_URL = http:/$()/<MacのIP>:8787
 ```
 
-実機デバッグ時は `Config.xcconfig` 内の `API_BASE_URL`（例: `http://<MacのIP>:8787`）や `TEAM_ID`（Apple Developer Team ID）を各自の環境に合わせて設定してください。
-`Config.xcconfig` はGit管理対象外です。
+`Local.xcconfig` は任意です。未作成の場合、Debug APIは `rectime-api-development` を使用します。
+Staging / Release API URLは `Config.xcconfig` の値から変更しません。
 
 詳細なセットアップ手順は [`setup/README.md`](setup/README.md) を参照。
 
@@ -69,6 +74,18 @@ rectime-mobile/
 └── iosApp/                   # iOS エントリポイント（SwiftUI）
 ```
 
+## ビルドの種類
+
+| 種類 | 接続先 API | 接続先 Web（規約・アカウント削除） | Android | iOS (Build Configuration) |
+| --- | --- | --- | --- | --- |
+| デバッグ | `rectime-api-development` | `develop.recwatch.pages.dev` | `debug` | `Debug` |
+| ステージング | `rectime-api-staging` | `staging.recwatch.pages.dev` | `staging` | `Staging` |
+| リリース | `rectime-api` | `recwatch.pages.dev` | `release` | `Release` |
+
+- デバッグだけは接続先を差し替えられる。ローカルの `wrangler dev` に繋ぐときは、Android は
+  `local.properties` の `API_BASE_URL`、iOS は `Local.xcconfig` の `DEBUG_API_BASE_URL` を指定する。
+- ステージングはリリースと同じ非デバッグのbuildで、Android はアップロード鍵ではなく debug 鍵で署名する。
+
 ## 起動方法
 
 ### Android
@@ -82,6 +99,8 @@ rectime-mobile/
 ```
 
 IDE のツールバーから Run Configuration `composeApp [mobile]` を使うことも可能。
+
+ステージングは `./gradlew :composeApp:assembleStaging`（Android Studio では Build Variants で `staging` を選ぶ）。
 
 #### Android の release build
 
@@ -101,6 +120,8 @@ AAB は `composeApp/build/outputs/bundle/release/` に出力される。
 - `BuildConfig.GIT_COMMIT` に build 時の commit が入る。
 
 ### Desktop（JVM）
+
+API 接続先と Microsoft ログインの設定は [Desktop 認証の手順](setup/desktop-auth.md) を参照。
 
 ```shell
 # macOS / Linux
@@ -126,6 +147,8 @@ AAB は `composeApp/build/outputs/bundle/release/` に出力される。
 ### iOS
 
 `iosApp/` を Xcode で開いて実行、または IDE のツールバーから Run Configuration `composeApp [mobile]` を使う（macOS 必須）。
+
+ステージングで動かすときは、Scheme の Run の Build Configuration を `Staging` にする。
 
 ## テスト
 

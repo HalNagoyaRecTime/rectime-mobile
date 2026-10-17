@@ -7,13 +7,14 @@ import kotlin.test.assertNull
 class PublicWebConfigTest {
     @Test
     fun allowedWebOriginDependsOnBuildType() {
-        assertEquals(productionWebOrigin, allowedWebOrigin(isDebug = false))
-        assertEquals(developWebOrigin, allowedWebOrigin(isDebug = true))
+        assertEquals(productionWebOrigin, allowedWebOrigin(AppEnvironment.Production))
+        assertEquals(stagingWebOrigin, allowedWebOrigin(AppEnvironment.Staging))
+        assertEquals(developWebOrigin, allowedWebOrigin(AppEnvironment.Development))
     }
 
     @Test
     fun publicWebOriginMatchesCurrentBuildType() {
-        assertEquals(allowedWebOrigin(isDebugBuild), publicWebOrigin)
+        assertEquals(allowedWebOrigin(appEnvironment), publicWebOrigin)
     }
 
     @Test
@@ -23,7 +24,7 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = "/legal/terms.html",
                 origin = productionWebOrigin,
-                isDebug = false,
+                environment = AppEnvironment.Production,
             ),
         )
     }
@@ -35,7 +36,7 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = "/legal/terms.html",
                 origin = developWebOrigin,
-                isDebug = true,
+                environment = AppEnvironment.Development,
             ),
         )
     }
@@ -47,7 +48,15 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = accountDeletionPath,
                 origin = productionWebOrigin,
-                isDebug = false,
+                environment = AppEnvironment.Production,
+            ),
+        )
+        assertEquals(
+            "https://staging.recwatch.pages.dev/account-deletion",
+            resolvePublicWebUrl(
+                path = accountDeletionPath,
+                origin = stagingWebOrigin,
+                environment = AppEnvironment.Staging,
             ),
         )
         assertEquals(
@@ -55,7 +64,7 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = accountDeletionPath,
                 origin = developWebOrigin,
-                isDebug = true,
+                environment = AppEnvironment.Development,
             ),
         )
     }
@@ -75,7 +84,7 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = "/legal/privacy.html",
                 origin = "$productionWebOrigin/",
-                isDebug = false,
+                environment = AppEnvironment.Production,
             ),
         )
         assertEquals(
@@ -83,7 +92,7 @@ class PublicWebConfigTest {
             resolvePublicWebUrl(
                 path = "/legal/privacy.html",
                 origin = "$developWebOrigin/",
-                isDebug = true,
+                environment = AppEnvironment.Development,
             ),
         )
     }
@@ -106,9 +115,32 @@ class PublicWebConfigTest {
                 resolvePublicWebUrl(
                     path = "/legal/terms.html",
                     origin = origin,
-                    isDebug = false,
+                    environment = AppEnvironment.Production,
                 ),
                 "Release public web config must reject $origin",
+            )
+        }
+    }
+
+    @Test
+    fun stagingRejectsNonStagingOrigins() {
+        listOf(
+            "",
+            "http://staging.recwatch.pages.dev",
+            "https://recwatch.pages.dev",
+            "https://develop.recwatch.pages.dev",
+            "https://localhost",
+            "https://example.com",
+            "https://pr-150.recwatch.pages.dev",
+            "https://staging.other.pages.dev",
+        ).forEach { origin ->
+            assertNull(
+                resolvePublicWebUrl(
+                    path = accountDeletionPath,
+                    origin = origin,
+                    environment = AppEnvironment.Staging,
+                ),
+                "Staging public web config must reject $origin",
             )
         }
     }
@@ -132,7 +164,7 @@ class PublicWebConfigTest {
                 resolvePublicWebUrl(
                     path = "/legal/terms.html",
                     origin = origin,
-                    isDebug = true,
+                    environment = AppEnvironment.Development,
                 ),
                 "Debug public web config must reject $origin",
             )
@@ -148,14 +180,14 @@ class PublicWebConfigTest {
             "/legal/terms.html#section",
             "/legal\\terms.html",
         ).forEach { path ->
-            listOf(false, true).forEach { isDebug ->
+            AppEnvironment.entries.forEach { environment ->
                 assertNull(
                     resolvePublicWebUrl(
                         path = path,
-                        origin = allowedWebOrigin(isDebug),
-                        isDebug = isDebug,
+                        origin = allowedWebOrigin(environment),
+                        environment = environment,
                     ),
-                    "Public web config must reject $path (isDebug=$isDebug)",
+                    "Public web config must reject $path ($environment)",
                 )
             }
         }

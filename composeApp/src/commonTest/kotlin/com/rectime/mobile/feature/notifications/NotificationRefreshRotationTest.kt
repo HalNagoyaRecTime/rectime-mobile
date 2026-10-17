@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.ui.component.nextRefreshRotationTarget
+import com.rectime.mobile.ui.component.refreshRotationDurationMillis
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

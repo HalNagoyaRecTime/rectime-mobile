@@ -1,6 +1,8 @@
 package com.rectime.mobile.feature.auth
 
 import androidx.compose.runtime.compositionLocalOf
+import coil3.ImageLoader
+import coil3.PlatformContext
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
@@ -54,6 +56,12 @@ class ProfilePhotoRepository(
     private val _photoBytes = MutableStateFlow<ByteArray?>(null)
     val photoBytes: StateFlow<ByteArray?> = _photoBytes.asStateFlow()
 
+    private var photoImageLoader: ImageLoader? = null
+
+    /** 写真の描画キャッシュはこのRepositoryの寿命・ユーザー切り替えに合わせる。 */
+    fun imageLoader(context: PlatformContext): ImageLoader =
+        photoImageLoader ?: ImageLoader.Builder(context).build().also { photoImageLoader = it }
+
     private var userId: String? = null
     private var fetchedAtMillis: Long? = null
     private var generation = 0L
@@ -63,6 +71,7 @@ class ProfilePhotoRepository(
         mutex.withLock {
             if (userId == nextUserId) return
             generation++
+            clearRenderedPhoto()
             userId = nextUserId
             isRefreshing = false
             _photoBytes.value = null
@@ -129,6 +138,7 @@ class ProfilePhotoRepository(
                 val fetchedAt = nowMillis()
                 save(bytes, CachedProfilePhoto(expectedUserId, fetchedAt, bytes != null))
                 if (bytes == null || _photoBytes.value?.contentEquals(bytes) != true) {
+                    photoImageLoader?.memoryCache?.clear()
                     _photoBytes.value = bytes
                 }
                 fetchedAtMillis = fetchedAt
@@ -148,6 +158,7 @@ class ProfilePhotoRepository(
     /** 画像・成功時刻・表示中の内容をまとめて破棄する。進行中の取得結果も無効化する。 */
     suspend fun clear(): Boolean = mutex.withLock {
         generation++
+        clearRenderedPhoto()
         userId = null
         fetchedAtMillis = null
         isRefreshing = false
@@ -160,7 +171,15 @@ class ProfilePhotoRepository(
             runCatching { fileSystem.delete(path, mustExist = false) }.isSuccess
         }.all { it }
 
+    private fun clearRenderedPhoto() {
+        photoImageLoader?.memoryCache?.clear()
+        // 旧ユーザーの進行中の描画がキャッシュを再作成しないよう停止する。
+        photoImageLoader?.shutdown()
+        photoImageLoader = null
+    }
+
     fun close() {
+        clearRenderedPhoto()
         client.close()
     }
 

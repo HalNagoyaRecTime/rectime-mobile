@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rectime.mobile.ui.graphics.drawTimelineSeparator
+import com.rectime.mobile.ui.component.TimelineTimeLabel
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.event.EventDetailScreen
@@ -56,9 +57,17 @@ import com.rectime.mobile.ui.component.EventCard
 import com.rectime.mobile.ui.component.EventCardDimensions
 import com.rectime.mobile.ui.component.PullRefreshHoldDistance
 import com.rectime.mobile.ui.component.RootScreenScaffold
+import com.rectime.mobile.ui.component.StatusMessage
 import com.rectime.mobile.ui.component.resolveEventCardShadowSpec
 import com.rectime.mobile.ui.modifier.outerShadow
 import com.rectime.mobile.ui.theme.AppTheme
+
+/**
+ * タイムラインの1時間あたりの高さ。
+ * 短時間イベントのカードが潰れないよう、72dpから拡大している。
+ * 短時間イベントは別途 MIN_DISPLAY_DURATION_MINUTES の高さまで引き伸ばす。
+ */
+internal val ScheduleHourHeight: Dp = 144.dp
 
 internal class ScheduleTimelineGeometry(
     private val topPadding: Dp,
@@ -72,6 +81,14 @@ internal class ScheduleTimelineGeometry(
 
     fun minuteY(minute: Int): Dp =
         topPadding + hourHeight * ((minute - visibleStartHour * 60) / 60f)
+
+    /**
+     * 開始〜終了までのカードの高さ。
+     * minuteY(開始 + 所要時間) - minuteY(開始) で求めることで、
+     * カードの下端が終了時刻の位置と必ず一致する。
+     */
+    fun durationHeight(startMinute: Int, durationMinutes: Int): Dp =
+        minuteY(startMinute + durationMinutes) - minuteY(startMinute)
 
     fun pastHeight(minute: Int): Dp = minuteY(minute).coerceIn(0.dp, totalHeight)
 
@@ -92,7 +109,8 @@ object ScheduleScreen : Screen {
     @Composable
     override fun Content(navigationController: NavigationController) {
         val viewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
-        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
+        val eventTime by viewModel.eventTime.collectAsStateWithLifecycle()
+        val nowMinute = eventTime.minute
         val events by viewModel.events
 
         val isRootVisible = navigationController.state.pushStack.isEmpty()
@@ -130,7 +148,7 @@ private fun ScheduleScreenUI(
     val timelineBottomPadding = 120.dp + navigationBottomInset + 24.dp
     val hourStart = 9
     val hourEnd = 20
-    val hourHeight = 72.dp
+    val hourHeight = ScheduleHourHeight
     val timeBarWidth = 45.dp
 
     val timelineGeometry = ScheduleTimelineGeometry(
@@ -161,8 +179,8 @@ private fun ScheduleScreenUI(
 
     val overflowCardWidth = (10f * dim.u).dp
 
-    LaunchedEffect(error) {
-        if (error != null) {
+    LaunchedEffect(error, events.isNotEmpty()) {
+        if (error != null && events.isNotEmpty()) {
             snackbarHostState.showSnackbar(error)
         }
     }
@@ -174,8 +192,8 @@ private fun ScheduleScreenUI(
         if (isDragged) hasAutoScrolled = true
     }
 
-    LaunchedEffect(isLoading) {
-        if (!isLoading && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
+    LaunchedEffect(isLoading, nowMinute) {
+        if (nowMinute in 0..1439 && !isLoading && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
             val totalHours = hourEnd - hourStart
             val clampedNowMinute = nowMinute.coerceIn(hourStart * 60, hourEnd * 60)
             val nowOffsetPx = with(density) { timelineGeometry.minuteY(clampedNowMinute).toPx() }
@@ -210,7 +228,7 @@ private fun ScheduleScreenUI(
                     val bottom = size.height + bouncePaintBottom.toPx()
                     drawRect(backgroundColor, Offset(0f, top), Size(size.width, bottom - top))
                     val pastEnd = nowY.coerceIn(top, bottom)
-                    drawRect(pastColor, Offset(0f, top), Size(size.width, pastEnd - top))
+                    if (nowMinute >= 0) drawRect(pastColor, Offset(0f, top), Size(size.width, pastEnd - top))
                 }
                 val separatorLineColor = AppTheme.colors.textScheduleTimeLine
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -221,20 +239,7 @@ private fun ScheduleScreenUI(
 
                     repeat(totalHours + 1) { index ->
                         val y = topPadPx + (index * step) - lazyListState.firstVisibleItemScrollOffset
-                        drawRect(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    separatorLineColor.copy(alpha = 0.8f),
-                                    separatorLineColor.copy(alpha = 0.8f),
-                                    Color.Transparent
-                                ),
-                                startX = contentLeft,
-                                endX = size.width
-                            ),
-                            topLeft = Offset(contentLeft, y),
-                            size = Size(size.width - contentLeft, 1.dp.toPx())
-                        )
+                        drawTimelineSeparator(y, contentLeft, separatorLineColor)
                     }
                 }
 
@@ -311,7 +316,7 @@ private fun ScheduleScreenUI(
                                 }
 
                                 val yOffset = timelineGeometry.minuteY(event.startMinuteOfDay)
-                                val eventHeight = hourHeight * (event.durationMinutes / 60f)
+                                val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.displayDurationMinutes)
 
                                 if (event.overflowCount > 0) {
                                     val shadowWidth = laneWidth - (dim.borderExtend * 2)
@@ -335,7 +340,7 @@ private fun ScheduleScreenUI(
 
                                     val endMinuteOfDay =
                                         event.startMinuteOfDay + event.durationMinutes
-                                    val isLive = nowMinute in event.startMinuteOfDay..endMinuteOfDay
+                                    val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMinuteOfDay
 
                                     val shadowSpec = resolveEventCardShadowSpec(
                                         assignedWidth = laneWidth,
@@ -382,20 +387,10 @@ private fun ScheduleScreenUI(
                                 val index = hour - hourStart
                                 val yOffset = step * index
 
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .offset(y = yOffset - 10.dp)
-                                        .padding(end = 6.dp),
-                                    contentAlignment = Alignment.TopEnd
-                                ) {
-                                    Text(
-                                        text = "$hour:00",
-                                        color = AppTheme.colors.textScheduleTimeBar,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Normal
-                                    )
-                                }
+                                TimelineTimeLabel(
+                                    text = "$hour:00",
+                                    modifier = Modifier.fillMaxWidth().offset(y = yOffset - 10.dp),
+                                )
                             }
                         }
                     }
@@ -421,7 +416,7 @@ private fun ScheduleScreenUI(
                             }
 
                             val yOffset = timelineGeometry.minuteY(event.startMinuteOfDay)
-                            val eventHeight = hourHeight * (event.durationMinutes / 60f)
+                            val eventHeight = timelineGeometry.durationHeight(event.startMinuteOfDay, event.displayDurationMinutes)
 
                             if (event.overflowCount > 0) {
                                 Box(
@@ -463,7 +458,7 @@ private fun ScheduleScreenUI(
                                 }
                             } else {
                                 val endMinuteOfDay = event.startMinuteOfDay + event.durationMinutes
-                                val isLive = nowMinute in event.startMinuteOfDay..endMinuteOfDay
+                                val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMinuteOfDay
 
                                 EventCard(
                                     time = "${event.startTimeLabel}-${event.endTimeLabel}",
@@ -495,7 +490,7 @@ private fun ScheduleScreenUI(
 
                 hiddenEvents.forEach { event ->
                     val endMin = event.startMinuteOfDay + event.durationMinutes
-                    val isLive = nowMinute in event.startMinuteOfDay..endMin
+                    val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMin
 
                     EventCard(
                         time = "${event.startTimeLabel}-${event.endTimeLabel}",
@@ -512,6 +507,21 @@ private fun ScheduleScreenUI(
                             .height(60.dp)
                     )
                 }
+            }
+        }
+
+        // 一度も表示できていない場合は、一時的なSnackbarだけで終わらせない。
+        if (error != null && events.isEmpty() && !isLoading) {
+            Box(
+                Modifier.fillMaxSize().padding(top = timelineTopPadding)
+                    .background(AppTheme.colors.commonBackground),
+            ) {
+                StatusMessage(
+                    message = error,
+                    actionLabel = "再読み込み",
+                    onAction = onRefresh,
+                    actionEnabled = !isUpdating && !isRefreshing,
+                )
             }
         }
 

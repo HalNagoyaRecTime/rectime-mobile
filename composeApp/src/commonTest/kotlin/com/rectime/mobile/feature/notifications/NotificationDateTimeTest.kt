@@ -71,8 +71,8 @@ class NotificationDateTimeTest {
     }
 
     @Test
-    fun eventIsLiveAtExactEndTime() {
-        assertTrue(isEventLiveAt("1700", "1800", nowMinute = 18 * 60))
+    fun eventIsEndedAtExactEndTime() {
+        assertFalse(isEventLiveAt("1700", "1800", nowMinute = 18 * 60))
     }
 
     @Test

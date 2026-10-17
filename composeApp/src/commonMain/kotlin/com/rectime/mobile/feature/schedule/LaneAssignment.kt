@@ -24,7 +24,8 @@ internal fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
     var currentClusterEnd = -1
 
     for (event in sorted) {
-        val eventEnd = event.startMinuteOfDay + event.durationMinutes
+        // 表示上の終了位置で重なりを判定し、引き伸ばしたカード同士が重ならないようにする
+        val eventEnd = event.startMinuteOfDay + event.displayDurationMinutes
         if (currentCluster.isEmpty() || event.startMinuteOfDay < currentClusterEnd) {
             currentCluster.add(event)
             currentClusterEnd = maxOf(currentClusterEnd, eventEnd)
@@ -48,7 +49,7 @@ internal fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
 
         for (event in cluster) {
             val start = event.startMinuteOfDay
-            val end = start + event.durationMinutes
+            val end = start + event.displayDurationMinutes
 
             // 最も左にある空きレーンを探索
             var placedLane = -1
@@ -92,13 +93,13 @@ internal fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
             val mergedOverflowGroups = mutableListOf<MutableList<TimelineEvent>>()
 
             for (ev in sortedOverflow) {
-                val evEnd = ev.startMinuteOfDay + ev.durationMinutes
+                val evEnd = ev.startMinuteOfDay + ev.displayDurationMinutes
                 if (mergedOverflowGroups.isEmpty()) {
                     mergedOverflowGroups.add(mutableListOf(ev))
                 } else {
                     val currentGroup = mergedOverflowGroups.last()
                     val groupStart = currentGroup.minOf { it.startMinuteOfDay }
-                    val groupEnd = currentGroup.maxOf { it.startMinuteOfDay + it.durationMinutes }
+                    val groupEnd = currentGroup.maxOf { it.startMinuteOfDay + it.displayDurationMinutes }
 
                     // 期間が重複または連続している場合は同一グループにマージ
                     if (ev.startMinuteOfDay < groupEnd) {
@@ -112,7 +113,7 @@ internal fun assignLanes(events: List<TimelineEvent>): List<TimelineEvent> {
             // マージされたグループごとに1つの+Nカードを生成
             for (group in mergedOverflowGroups) {
                 val startMin = group.minOf { it.startMinuteOfDay }
-                val endMin = group.maxOf { it.startMinuteOfDay + it.durationMinutes }
+                val endMin = group.maxOf { it.startMinuteOfDay + it.displayDurationMinutes }
 
                 result.add(
                     TimelineEvent(

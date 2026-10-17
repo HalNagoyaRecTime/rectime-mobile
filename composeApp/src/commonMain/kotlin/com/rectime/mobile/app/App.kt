@@ -18,22 +18,22 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
-import coil3.disk.DiskCache
-import coil3.network.cachecontrol.CacheControlCacheStrategy
-import coil3.network.ktor3.KtorNetworkFetcherFactory
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.NavigationHost
 import com.rectime.mobile.core.config.apiBaseUrlConfigurationError
 import com.rectime.mobile.core.haptics.HapticPreference
+import com.rectime.mobile.core.haptics.HapticCapability
 import com.rectime.mobile.core.haptics.LocalHapticPreference
-import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
-import com.rectime.mobile.core.network.createHttpClient
 import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
 import com.rectime.mobile.feature.schedule.ScheduleScreen
+import com.rectime.mobile.feature.liveactivity.ScheduleLiveActivityEffect
+import com.rectime.mobile.feature.liveactivity.PersonalPlanNavigation
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
+import com.rectime.mobile.feature.ranking.RankingViewModel
+import com.rectime.mobile.feature.ranking.rankingViewModelFactory
 import com.rectime.mobile.feature.schedule.scheduleViewModelFactory
 import com.rectime.mobile.feature.event.EventDetailScreen
 import com.rectime.mobile.feature.notifications.NotificationFeedStore
@@ -45,7 +45,6 @@ import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import com.rectime.mobile.ui.theme.AppTheme
 import com.rectime.mobile.ui.theme.ThemeStateHolder
-import okio.Path.Companion.toPath
 import kotlinx.coroutines.launch
 
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
@@ -68,30 +67,18 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         return
     }
 
+    LaunchedEffect(Unit) { HapticCapability.load() }
+
+    val attachmentContext = coil3.compose.LocalPlatformContext.current
+    remember(attachmentContext) {
+        com.rectime.mobile.core.attachment.AttachmentCaches.configure(getCacheDir(attachmentContext) + "/attachments")
+        Unit
+    }
+    // リモート画像の本体は添付キャッシュで取得する。Coilはローカルファイルの描画のみ。
     setSingletonImageLoaderFactory { context ->
-        ImageLoader.Builder(context)
-            .components {
-                add(
-                    KtorNetworkFetcherFactory(
-                        httpClient = {
-                            createHttpClient().config {
-                                install(MobileAuthHeadersPlugin)
-                            }
-                        },
-                        // 既定のCacheStrategyはディスクキャッシュがあれば無条件に返すため、
-                        // 差し替えた画像が二度と反映されない。Cache-ControlとETagを見て
-                        // 再検証させる。
-                        cacheStrategy = { CacheControlCacheStrategy() },
-                    )
-                )
-            }
-            .diskCache {
-                DiskCache.Builder()
-                    .directory((getCacheDir(context) + "/image_cache").toPath())
-                    .maxSizePercent(0.02)
-                    .build()
-            }
-            .build()
+        ImageLoader.Builder(context).diskCache(null).build().also { loader ->
+            com.rectime.mobile.core.attachment.AttachmentCaches.clearImageMemory = { loader.memoryCache?.clear() }
+        }
     }
 
     val navigationController = remember { NavigationController() }
@@ -99,6 +86,7 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
     }
+    var personalPlanEventId by remember { mutableStateOf<Int?>(null) }
     val themeStateHolder = remember { ThemeStateHolder() }
     val pushTokenLifecycle = remember { platformPushTokenLifecycle() }
     val authViewModel: AuthViewModel = viewModel(
@@ -135,11 +123,22 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
             notificationNavigationTarget = it
         }
     }
+    LaunchedEffect(Unit) {
+        PersonalPlanNavigation.targets.collect { personalPlanEventId = it }
+    }
 
     AppTheme(themeStateHolder = themeStateHolder) {
+        if (authState.session == null && !authState.isRestoringSession) {
+            ScheduleLiveActivityEffect("")
+        }
         AuthGate(viewModel = authViewModel) { session, onLogout ->
             // ScheduleScreenと同じアプリのViewModelStoreから取得し、他タブ表示中も更新する。
             val scheduleViewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
+            val rankingViewModel: RankingViewModel = viewModel(factory = rankingViewModelFactory())
+            LaunchedEffect(session.user.id, session.user.teamId) {
+                rankingViewModel.onSession(session.user.teamId)
+            }
+            ScheduleLiveActivityEffect(session.user.id)
             val foregroundScope = rememberCoroutineScope()
             val badgeViewModel: NotificationBadgeViewModel = viewModel(
                 factory = viewModelFactory {
@@ -155,8 +154,10 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                     authViewModel.onForeground()
                     // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
-                    if (hasResumed) badgeViewModel.onForeground(session.user.id)
-                    else badgeViewModel.onSession(session.user.id)
+                    if (hasResumed) {
+                        badgeViewModel.onForeground(session.user.id)
+                        rankingViewModel.onForeground()
+                    } else badgeViewModel.onSession(session.user.id)
                     hasResumed = true
                     foregroundScope.launch { scheduleViewModel.onForeground() }
                 }
@@ -168,6 +169,13 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                     if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
                         badgeViewModel.onPush(session.user.id)
                     }
+                }
+            }
+            LaunchedEffect(personalPlanEventId) {
+                personalPlanEventId?.let { id ->
+                    navigationController.reset(ScheduleScreen)
+                    navigationController.push(EventDetailScreen(id))
+                    personalPlanEventId = null
                 }
             }
             LaunchedEffect(notificationNavigationTarget) {

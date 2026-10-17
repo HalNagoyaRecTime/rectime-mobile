@@ -43,7 +43,7 @@ class AuthSessionStoreInstrumentedTest {
             displayName = "テスト 学生",
             studentIdNumber = STUDENT_ID,
             classRoomName = "IA12A203",
-            role = Role.Student,
+            isStudent = true,
         ),
     )
 

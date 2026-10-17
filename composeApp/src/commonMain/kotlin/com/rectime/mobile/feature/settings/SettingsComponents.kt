@@ -1,16 +1,13 @@
 package com.rectime.mobile.feature.settings
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import com.rectime.mobile.ui.component.AppBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,14 +17,20 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.font.FontWeight
-import com.rectime.mobile.core.config.appDisplayName
 import com.rectime.mobile.core.config.appVersion
-import com.rectime.mobile.core.platform.platformAppIconPainter
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.ui.component.AppTeamCredit
+import androidx.compose.material3.LocalTextStyle
+import com.rectime.mobile.ui.component.AppBrandTitle
+import com.rectime.mobile.ui.component.rememberBrandTitleJump
+import com.rectime.mobile.core.config.appDisplayName
+import com.rectime.mobile.core.platform.platformAppIconPainter
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.remember
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.painterResource
 import rectime_mobile.composeapp.generated.resources.Res
@@ -163,15 +166,10 @@ internal fun SettingsSeparator() {
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AppInformationSheet(onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = AppTheme.colors.commonBackground,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-    ) {
+    val jump = rememberBrandTitleJump()
+    AppBottomSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -179,14 +177,17 @@ internal fun AppInformationSheet(onDismiss: () -> Unit) {
             Image(
                 painter = platformAppIconPainter(),
                 contentDescription = "$appDisplayName アプリアイコン",
-                modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)),
+                modifier = Modifier.size(88.dp).clip(RoundedCornerShape(20.dp)).clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClickLabel = "タイトルを跳ねさせる",
+                    onClick = jump.onTap,
+                ),
             )
             Spacer(Modifier.height(16.dp))
-            Text(
-                text = appDisplayName,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppTheme.colors.userInformationBody,
+            AppBrandTitle(
+                textStyle = LocalTextStyle.current.copy(fontSize = 28.sp, fontWeight = FontWeight.Bold),
+                jumpOffset = jump.offset,
             )
             Spacer(Modifier.height(8.dp))
             Text(

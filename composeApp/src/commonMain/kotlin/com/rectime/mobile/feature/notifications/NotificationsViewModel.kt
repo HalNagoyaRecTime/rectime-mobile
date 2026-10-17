@@ -1,11 +1,11 @@
 package com.rectime.mobile.feature.notifications
 
-import com.rectime.mobile.core.network.MyEventsApi
+import com.rectime.mobile.feature.event.EventScheduleStore
 import com.rectime.mobile.core.network.MyEventsGateway
-import com.rectime.mobile.core.network.MY_EVENTS_CACHE_KEY
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
@@ -13,21 +13,19 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.util.nowMinuteStateFlow
+import com.rectime.mobile.feature.event.eventTimeStateFlow
+import com.rectime.mobile.core.util.LoadingMode
+import com.rectime.mobile.core.util.loadingVisibility
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -36,8 +34,6 @@ import kotlin.time.Clock
 
 enum class NotificationRefreshSource { Header, Pull }
 
-private enum class CenterLoadingMode { Hidden, Immediate, Delayed }
-private const val AutomaticLoadingDelayMillis = 1_000L
 
 data class NotificationsUiState(
     val notifications: List<UserNotification> = emptyList(),
@@ -83,30 +79,23 @@ class NotificationsViewModel(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, NotificationsUiState(isLoading = true))
 
     // 自動更新は短い通信で点滅させず、右上更新は操作直後から表示する。
-    @OptIn(ExperimentalCoroutinesApi::class)
     val showCenterLoading: StateFlow<Boolean> = uiState.map { state ->
         when {
-            state.isHeaderRefreshing -> CenterLoadingMode.Immediate
-            state.isPullRefreshing -> CenterLoadingMode.Hidden
-            state.isLoading || state.isUpdating -> CenterLoadingMode.Delayed
-            else -> CenterLoadingMode.Hidden
+            state.isHeaderRefreshing -> LoadingMode.Immediate
+            state.isPullRefreshing -> LoadingMode.Hidden
+            state.isLoading || state.isUpdating -> LoadingMode.Delayed
+            else -> LoadingMode.Hidden
         }
-    }.distinctUntilChanged().transformLatest { mode ->
-        if (mode == CenterLoadingMode.Delayed) {
-            emit(false)
-            delay(AutomaticLoadingDelayMillis)
-            emit(true)
-        } else {
-            emit(mode == CenterLoadingMode.Immediate)
-        }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    }.loadingVisibility().stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private var loadJob: Job? = null
+    private val refreshQueue = CacheRefreshQueue()
 
     init {
         loadNotifications()
         viewModelScope.launch { readStore.restore() }
     }
+
+    fun onEnter() = loadNotifications()
 
     fun refresh() {
         loadNotifications(NotificationRefreshSource.Header)
@@ -122,15 +111,12 @@ class NotificationsViewModel(
     }
 
     private fun loadNotifications(source: NotificationRefreshSource? = null) {
-        // 取得状態はストアだけが管理し、画面は手動更新のアニメーションのみを担当する。
-        if (refreshSource.value != null || loadJob?.isActive == true ||
-            feedStore.status.value.isUpdating || feedStore.status.value.isLoadingMore
-        ) return
-        refreshSource.value = source
-        loadJob = viewModelScope.launch {
+        refreshQueue.launch(viewModelScope, afterCurrent = source != null) {
+            refreshSource.value = source
             try {
                 val result = withMinimumRefreshDuration(source != null) {
-                    feedStore.load(force = source != null)
+                    if (source != null) feedStore.refreshAfterCurrentRequest()
+                    feedStore.load(force = source == null)
                 }
                 when (result) {
                     is CachedFetchResult.Cached -> result.error.printStackTrace()
@@ -155,28 +141,64 @@ data class NotificationDetailUiState(
     val isOffline: Boolean = false,
 )
 
-class NotificationDetailViewModel(
+class NotificationDetailViewModel internal constructor(
     private val notificationId: Int,
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),
     private val readStore: NotificationReadStore = NotificationReadStore.shared,
-    private val myEventsGateway: MyEventsGateway = MyEventsApi(),
+    myEventsGateway: MyEventsGateway? = null,
+    scheduleStore: EventScheduleStore? = null,
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
     private val refreshOnOpen: Boolean = false,
     private val feedStore: NotificationFeedStore? = null,
 ) : ViewModel() {
+    private val ownsScheduleStore = scheduleStore == null
+    private val scheduleStore = scheduleStore ?: if (myEventsGateway == null) {
+        EventScheduleStore(cache = cache)
+    } else {
+        EventScheduleStore(cache = cache, myEvents = myEventsGateway)
+    }
+    internal val eventTime = viewModelScope.eventTimeStateFlow(cache, clock)
     val nowMinute: StateFlow<Int> = viewModelScope.nowMinuteStateFlow(clock, timeZone)
 
     private val _uiState = MutableStateFlow(NotificationDetailUiState())
     val uiState: StateFlow<NotificationDetailUiState> = _uiState.asStateFlow()
 
     private val history = NotificationHistoryCache(cache)
+    private val updateOrder = NotificationUpdateOrder(cache)
 
-    private var loadJob: Job? = null
+    private val refreshQueue = CacheRefreshQueue()
     private val detailSession = CacheRequestGeneration()
 
     init {
+        viewModelScope.launch {
+            this@NotificationDetailViewModel.scheduleStore.participationChanges.collect { participation ->
+                if (participation == null && detailSession.isCurrent) return@collect
+                val eventId = _uiState.value.notification?.relatedEvent?.id
+                _uiState.update { it.copy(isParticipatingInRelatedEvent = participation.orEmpty().any { p -> p.eventId == eventId }) }
+            }
+        }
+        viewModelScope.launch {
+            cache.observe<List<UserNotification>>("notifications_v1").collect { notifications ->
+                val latest = notifications?.firstOrNull { it.id == notificationId }
+                if (latest != null) publishCachedNotification(latest)
+                else if (!detailSession.isCurrent) _uiState.value = NotificationDetailUiState(isLoading = false)
+            }
+        }
+        viewModelScope.launch {
+            cache.observe<UserNotification>(notificationDetailCacheKey(notificationId)).collect { latest ->
+                if (latest != null) publishCachedNotification(latest)
+                else if (!detailSession.isCurrent) _uiState.value = NotificationDetailUiState(isLoading = false)
+            }
+        }
+        if (feedStore != null) viewModelScope.launch {
+            feedStore.notifications.collect { notifications ->
+                notifications.firstOrNull { it.id == notificationId }?.let { latest ->
+                    publishCachedNotification(latest)
+                }
+            }
+        }
         loadNotification(force = refreshOnOpen)
     }
 
@@ -193,15 +215,14 @@ class NotificationDetailViewModel(
     }
 
     private fun loadNotification(force: Boolean) {
-        if (loadJob?.isActive == true) return
-
-        _uiState.value = _uiState.value.copy(
-            isLoading = _uiState.value.notification == null,
-            isUpdating = true,
-            error = null,
-        )
-        loadJob = viewModelScope.launch {
+        refreshQueue.launch(viewModelScope, afterCurrent = force) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = _uiState.value.notification == null,
+                isUpdating = true,
+                error = null,
+            )
             val request = CacheRequestGeneration()
+            var contentRequest = updateOrder.beginRequest()
             try {
                 var available = _uiState.value.notification ?: feedStore?.findNotification(notificationId)
                 var fetched = false
@@ -211,18 +232,44 @@ class NotificationDetailViewModel(
                             if (!force && available != null) requireNotNull(available)
                             else {
                                 fetched = true
-                                gateway.getNotification(notificationId)
+                                val response = try {
+                                    cache.requests.run("notification:$notificationId") {
+                                        val revision = updateOrder.beginRequest()
+                                        try { NotificationFetch(gateway.getNotification(notificationId), revision) }
+                                        catch (e: CancellationException) { throw e }
+                                        catch (e: Exception) { throw NotificationFetchFailure(e, revision) }
+                                    }
+                                } catch (failure: NotificationFetchFailure) {
+                                    contentRequest = failure.revision
+                                    val error = failure.original
+                                    val newer = if (error.invalidatesNotificationCache())
+                                        updateOrder.newerValue(notificationId, contentRequest) else null
+                                    if (newer == null) throw error
+                                    NotificationFetch(newer, contentRequest)
+                                }
+                                contentRequest = response.revision
+                                updateOrder.acceptDetail(response.notification, contentRequest)
+                                    ?: throw HttpStatusException(HttpStatusCode.NotFound)
                             }
                         },
                         loadCache = {
-                            available = available ?: history.load()?.firstOrNull { it.id == notificationId }
+                            available = cache.load<UserNotification>(notificationDetailCacheKey(notificationId))
+                                ?: available ?: history.load()?.firstOrNull { it.id == notificationId }
                             available
+                        },
+                        invalidateCache = {
+                            if (updateOrder.remove(notificationId, contentRequest)) {
+                            cache.invalidateMemory(notificationDetailCacheKey(notificationId))
+                            val remaining = history.load()?.filterNot { it.id == notificationId }
+                            if (remaining != null) history.saveList(remaining, refreshFetchedAt = false)
+                            feedStore?.removeNotification(notificationId, contentRequest)
+                            }
                         },
                         saveCache = {
                             if (fetched) {
                                 // 保存前に取得済み内容を登録し、同時進行の一覧更新にも反映する。
-                                if (request.isCurrent) feedStore?.updateNotification(it)
-                                history.saveDetail(it)
+                                if (request.isCurrent) feedStore?.updateNotification(it, contentRequest)
+                                history.saveDetail(it, contentRequest)
                             }
                         },
                         onCached = {
@@ -239,27 +286,40 @@ class NotificationDetailViewModel(
                     )
                 ) {
                     is CachedFetchResult.Fresh -> {
+                        val accepted = updateOrder.reconcile(listOf(result.value)).firstOrNull()
+                        if (accepted == null) {
+                            _uiState.value = NotificationDetailUiState(isLoading = false, error = "通知が見つかりません")
+                            return@launch
+                        }
                         // 関連イベントの参加情報を取得する前に、通知本文を表示する。
-                        val cachedParticipation = cachedParticipation(result.value)
+                        val cachedParticipation = cachedParticipation(accepted)
                         if (!request.isCurrent) {
                             _uiState.value = NotificationDetailUiState(isLoading = false)
                             return@launch
                         }
                         _uiState.value = _uiState.value.copy(
-                            notification = result.value,
+                            notification = accepted,
                             isLoading = false,
                             isUpdating = false,
                             isParticipatingInRelatedEvent = cachedParticipation,
                         )
-                        val isParticipating = fetchIsParticipating(result.value)
+                        val isParticipating = fetchIsParticipating(accepted)
+                        if (!request.isCurrent) {
+                            _uiState.value = NotificationDetailUiState(isLoading = false)
+                            return@launch
+                        }
+                        val latest = _uiState.value.notification ?: accepted
+                        val latestParticipation = if (latest.relatedEvent?.id == accepted.relatedEvent?.id) {
+                            isParticipating
+                        } else cachedParticipation(latest)
                         if (!request.isCurrent) {
                             _uiState.value = NotificationDetailUiState(isLoading = false)
                             return@launch
                         }
                         _uiState.value = NotificationDetailUiState(
-                            notification = result.value,
+                            notification = latest,
                             isLoading = false,
-                            isParticipatingInRelatedEvent = isParticipating,
+                            isParticipatingInRelatedEvent = latestParticipation,
                         )
                     }
 
@@ -297,6 +357,7 @@ class NotificationDetailViewModel(
                     }
                 }
             } catch (e: CancellationException) {
+                if (!request.isCurrent) _uiState.value = NotificationDetailUiState(isLoading = false)
                 throw e
             } catch (e: Exception) {
                 if (_uiState.value.notification != null && request.canRetainDisplayedContent(e, detailSession)) {
@@ -311,10 +372,18 @@ class NotificationDetailViewModel(
         }
     }
 
+    private suspend fun publishCachedNotification(notification: UserNotification) {
+        val participating = cachedParticipation(notification)
+        if (detailSession.isCurrent && _uiState.value.error == null) {
+            _uiState.update { it.copy(notification = notification, isLoading = false,
+                isParticipatingInRelatedEvent = participating) }
+        }
+    }
+
     private suspend fun cachedParticipation(notification: UserNotification): Boolean {
         val eventId = notification.relatedEvent?.id ?: return false
         return try {
-            eventId in cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY).orEmpty()
+            eventId in scheduleStore.cachedParticipatingEventIds().orEmpty()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -324,22 +393,19 @@ class NotificationDetailViewModel(
 
     private suspend fun fetchIsParticipating(notification: UserNotification): Boolean {
         val eventId = notification.relatedEvent?.id ?: return false
-        return when (val result = fetchWithCacheFirst(
-            fetchLive = { myEventsGateway.getMyEventIds() },
-            loadCache = { cache.load<Set<Int>>(MY_EVENTS_CACHE_KEY) },
-            saveCache = { cache.save(MY_EVENTS_CACHE_KEY, it) },
-            onCached = {},
-        )) {
-            is CachedFetchResult.Fresh -> eventId in result.value
-            is CachedFetchResult.Cached -> !result.error.invalidatesNotificationCache() && eventId in result.value
-            is CachedFetchResult.Failed -> false
+        return try {
+            scheduleStore.refreshParticipation().any { it.eventId == eventId }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            !e.invalidatesNotificationCache() && cachedParticipation(notification)
         }
     }
 
     override fun onCleared() {
         super.onCleared()
-        gateway.close()
-        myEventsGateway.close()
+        cache.requests.afterRequests { gateway.close() }
+        if (ownsScheduleStore) scheduleStore.close()
     }
 }
 
@@ -352,3 +418,7 @@ private fun Exception.toNotificationErrorMessage(): String = when {
 
 internal fun Exception.invalidatesNotificationCache(): Boolean =
     invalidatesDisplayedContent()
+
+// 通信を共有した呼び出し元も、実際に通信を開始した時点の順序を引き継ぐ。
+private data class NotificationFetch(val notification: UserNotification, val revision: Long)
+private class NotificationFetchFailure(val original: Exception, val revision: Long) : Exception(original)

@@ -1,5 +1,7 @@
 package com.rectime.mobile.ui.component
 
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -25,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +39,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.rectime.mobile.app.navigation.LocalNavigationInputEnabled
 import com.rectime.mobile.ui.theme.AppTheme
 
 private val SnackbarBottomOffset = (-60).dp // ボトムナビゲーションとの重なりを避けるためのオフセット
@@ -58,6 +62,7 @@ fun RootScreenScaffold(
     contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
+    val inputEnabled = navigationScrollEnabled(lazyListState)
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
     var headerHeightPx by remember { mutableIntStateOf(0) }
@@ -79,13 +84,15 @@ fun RootScreenScaffold(
         0.dp
     }
 
+    // 既定の背景より画面側の指定を優先し、バウンス用背景を上書きしない。
     Box(modifier = modifier.fillMaxSize()) {
         val listContent: @Composable () -> Unit = {
             Box(Modifier.fillMaxSize()) {
                 contentBackground()
                 LazyColumn(
+                    userScrollEnabled = inputEnabled,
                     state = lazyListState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().lockVerticalScrollAxis(),
                     overscrollEffect = if (onRefresh == null) rememberOverscrollEffect() else null,
                     contentPadding = PaddingValues(
                         top = topInset,
@@ -102,7 +109,7 @@ fun RootScreenScaffold(
         } else {
             PullToRefreshContainer(
                 isRefreshing = isRefreshing,
-                refreshEnabled = refreshEnabled,
+                refreshEnabled = refreshEnabled && inputEnabled,
                 onRefresh = onRefresh,
                 indicatorTopInset = headerBottom,
                 modifier = Modifier.fillMaxSize(),
@@ -154,9 +161,12 @@ fun PushScreenScaffold(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
+    titleVisible: Boolean = true,
+    lazyListState: LazyListState = rememberLazyListState(),
     contentBackground: @Composable BoxScope.() -> Unit = {},
     content: LazyListScope.() -> Unit,
 ) {
+    val inputEnabled = navigationScrollEnabled(lazyListState)
     val hPad = AppTheme.layout.screenHorizontalPadding
     val spacing = AppTheme.layout.headerSpacing
 
@@ -166,13 +176,16 @@ fun PushScreenScaffold(
         0.dp
     }
 
-    Box(modifier = modifier
-        .fillMaxSize()
-        .background(AppTheme.colors.commonBackground),
+    Box(modifier = Modifier
+        .background(AppTheme.colors.commonBackground)
+        .then(modifier)
+        .fillMaxSize(),
     ) {
         contentBackground()
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = lazyListState,
+            userScrollEnabled = inputEnabled,
+            modifier = Modifier.fillMaxSize().lockVerticalScrollAxis(),
             contentPadding = PaddingValues(
                 top = topInset,
                 start = if (horizontalPadding) hPad else 0.dp,
@@ -197,6 +210,7 @@ fun PushScreenScaffold(
         }
         PushHeader(
             title = title,
+            titleVisible = titleVisible,
             onBack = onBack,
             onTrailingClick = onTrailingClick,
             trailing = trailing,
@@ -227,6 +241,7 @@ fun SheetScaffold(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .lockVerticalScrollAxis()
                 .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(top = spacing + AppTheme.layout.headerAction + spacing, bottom = 24.dp)
                 .then(if (horizontalPadding) Modifier.padding(horizontal = hPad) else Modifier),
@@ -241,4 +256,14 @@ fun SheetScaffold(
                 .padding(top = spacing),
         )
     }
+}
+
+/** 画面の種類によらず、横操作中は縦ドラッグと直前の慣性を同じ方法で止める。 */
+@Composable
+private fun navigationScrollEnabled(listState: LazyListState): Boolean {
+    val enabled = LocalNavigationInputEnabled.current
+    LaunchedEffect(listState, enabled) {
+        if (!enabled) listState.stopScroll(MutatePriority.PreventUserInput)
+    }
+    return enabled
 }

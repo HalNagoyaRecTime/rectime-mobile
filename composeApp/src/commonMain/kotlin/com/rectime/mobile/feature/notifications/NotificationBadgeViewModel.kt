@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,7 +9,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 class NotificationBadgeViewModel(
     private val feedStore: NotificationFeedStore = NotificationFeedStore.shared,
@@ -22,14 +22,13 @@ class NotificationBadgeViewModel(
     private var loadedUserId: String? = null
     private var loadedSession: CacheRequestGeneration? = null
     private var refreshJob: Job? = null
-    private var pendingRefresh = false
+    private val refreshQueue = CacheRefreshQueue()
 
     fun onSession(userId: String) {
         if (loadedUserId == userId && loadedSession?.isCurrent == true) return
         refreshJob?.cancel()
         loadedUserId = userId
         loadedSession = CacheRequestGeneration()
-        pendingRefresh = false
         startRefresh(userId)
     }
 
@@ -42,29 +41,17 @@ class NotificationBadgeViewModel(
     private fun requestLatest(userId: String) {
         if (loadedUserId != userId || loadedSession?.isCurrent != true) {
             onSession(userId)
-        } else if (refreshJob?.isActive == true) {
-            // 復帰・プッシュ後の新着は、すでに進行中の応答に含まれない可能性がある。
-            pendingRefresh = true
         } else {
             startRefresh(userId, afterCurrentRequest = true)
         }
     }
 
     private fun startRefresh(userId: String, afterCurrentRequest: Boolean = false) {
-        if (refreshJob?.isActive == true) return
-        refreshJob = viewModelScope.launch {
+        refreshJob = refreshQueue.launch(viewModelScope, afterCurrent = afterCurrentRequest) {
             feedStore.bindSession(userId)
             readStore.restore()
-            var waitForPreviousRequest = afterCurrentRequest
-            do {
-                pendingRefresh = false
-                if (waitForPreviousRequest) {
-                    feedStore.refreshAfterCurrentRequest()
-                } else {
-                    feedStore.load(force = true)
-                }
-                waitForPreviousRequest = true
-            } while (pendingRefresh && loadedUserId == userId)
+            if (afterCurrentRequest) feedStore.refreshAfterCurrentRequest()
+            else feedStore.load(force = true)
         }
     }
 }

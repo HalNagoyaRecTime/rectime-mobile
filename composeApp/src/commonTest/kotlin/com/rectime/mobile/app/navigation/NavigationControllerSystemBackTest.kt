@@ -48,21 +48,48 @@ class NavigationControllerSystemBackTest {
 
         controller.handleSystemBack()
 
-        assertEquals(1L, controller.state.pushDismissRequestId)
+        assertEquals(PushTransitionMode.Exit, controller.state.pushTransition.mode)
         // Push画面を戻すだけで、タブは切り替わらない
         assertEquals<Screen?>(DummyScreen, controller.state.rootScreen)
     }
 
     @Test
-    fun dismissesSheetBeforePushScreen() {
+    fun ignoresRepeatedBackDuringExitAndReturnsToTabBeforeSchedule() {
+        val controller = NavigationController(initialRoot = DummyScreen)
+        controller.pushAndFinishEnter(DummyScreen)
+        val key = controller.state.pushStack.last().key
+        controller.handleSystemBack()
+        controller.handleSystemBack()
+        assertEquals(DummyScreen, controller.state.rootScreen)
+        assertEquals(1, controller.state.pushStack.size)
+        controller.completePop(key)
+        assertTrue(controller.canHandleSystemBack)
+        controller.handleSystemBack()
+        assertEquals(ScheduleScreen, controller.state.rootScreen)
+        assertFalse(controller.canHandleSystemBack)
+    }
+
+    @Test
+    fun ignoresSystemBackWhileFingerOwnsGesture() {
         val controller = NavigationController()
         controller.pushAndFinishEnter(DummyScreen)
-        controller.presentSheet(DummyScreen)
-
+        val key = controller.beginBackGesture()!!
+        controller.setBackDragOffset(key, 50f)
         controller.handleSystemBack()
+        assertEquals(ActiveGesture.Back, controller.state.activeGesture)
+        assertEquals(50f, controller.backDragOffsetPx)
+        assertEquals(PushTransitionMode.Idle, controller.state.pushTransition.mode)
+    }
 
-        assertEquals(1L, controller.state.sheetDismissRequestId)
-        assertEquals(0L, controller.state.pushDismissRequestId)
+    @Test
+    fun ignoresSystemBackDuringSwipeReturn() {
+        val controller = NavigationController()
+        controller.pushAndFinishEnter(DummyScreen)
+        val key = controller.beginBackGesture()!!
+        controller.finishBackGesture(key, dismiss = false)
+        controller.handleSystemBack()
+        assertEquals(PushTransitionMode.Return, controller.state.pushTransition.mode)
+        assertTrue(controller.canHandleSystemBack)
     }
 
     @Test
@@ -72,6 +99,6 @@ class NavigationControllerSystemBackTest {
 
         controller.handleSystemBack()
 
-        assertEquals(0L, controller.state.pushDismissRequestId)
+        assertEquals(PushTransitionMode.Enter, controller.state.pushTransition.mode)
     }
 }

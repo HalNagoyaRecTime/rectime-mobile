@@ -1,0 +1,22 @@
+// Repository-managed iOS build settings.
+// Developer-specific signing and Debug API overrides belong in Local.xcconfig.
+
+TEAM_ID =
+DEBUG_API_BASE_URL = https:/$()/rectime-api-development.rectime-project.workers.dev
+
+PRODUCT_NAME = RECREATION
+PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime
+CURRENT_PROJECT_VERSION = 1
+MARKETING_VERSION = 1.0
+
+#include? "Local.xcconfig"
+
+API_BASE_URL[config=Debug] = $(DEBUG_API_BASE_URL)
+API_BASE_URL[config=Staging] = https:/$()/rectime-api-staging.rectime-project.workers.dev
+API_BASE_URL[config=Release] = https:/$()/rectime-api.rectime-project.workers.dev
+
+APP_ENVIRONMENT[config=Debug] = Development
+APP_ENVIRONMENT[config=Staging] = Staging
+APP_ENVIRONMENT[config=Release] = Production
+
+KOTLIN_FRAMEWORK_BUILD_TYPE[config=Staging] = release

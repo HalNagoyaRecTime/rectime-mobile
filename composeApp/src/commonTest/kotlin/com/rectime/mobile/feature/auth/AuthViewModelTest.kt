@@ -829,6 +829,47 @@ class AuthViewModelTest {
         assertNull(viewModel.uiState.value.session)
     }
 
+    @Test
+    fun confirmedUserChangeClearsSharedPrivateCache() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        cache.save("private-data", 123)
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            respond(meBody.replace("\"id\":\"6\"", "\"id\":\"7\""), HttpStatusCode.OK, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("7", viewModel.uiState.value.session?.user?.id)
+        assertNull(cache.load<Int>("private-data"))
+    }
+
+    @Test
+    fun userChangeDoesNotRestorePreviousCacheWhenDiskClearFails() = runTest(testDispatcher) {
+        val values = mutableMapOf("unopened-private-data" to "456")
+        val cache = LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String) = values[key]
+            override suspend fun putString(key: String, value: String) { values[key] = value }
+            override suspend fun clear() { throw IllegalStateException("disk unavailable") }
+        })
+        cache.save("private-data", 123)
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(AuthApi(mockClient {
+            respond(meBody.replace("\"id\":\"6\"", "\"id\":\"7\""), HttpStatusCode.OK, jsonHeaders)
+        }), store, cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(storedSession.user.id, viewModel.uiState.value.session?.user?.id)
+        assertEquals(storedSession.user.id, store.session?.user?.id)
+        assertNull(cache.load<Int>("private-data"))
+        assertNull(cache.load<Int>("unopened-private-data"))
+        val restartedStorage = object : KeyValueStore {
+            override suspend fun getString(key: String) = values[key]
+            override suspend fun putString(key: String, value: String) { values[key] = value }
+            override suspend fun clear() { values.clear() }
+        }
+        // プロセス内のメモリを共有しない再起動でも、保存値の本人へだけ復元する。
+        assertEquals(456, LocalCache(restartedStorage).load<Int>("unopened-private-data"))
+        assertEquals(storedSession.user.id, store.session?.user?.id)
+    }
+
     // ---- restoreSession 異常系 ----
 
     @Test
@@ -1042,6 +1083,8 @@ class AuthViewModelTest {
     @Test
     fun startLoginReportsFailureWhenBrowserCannotBeOpened() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage()
+        val prepared = mutableListOf<String>()
+        val canceled = mutableListOf<String>()
         val viewModel = buildViewModel(
             api = AuthApi(
                 mockClient {
@@ -1054,6 +1097,8 @@ class AuthViewModelTest {
             ),
             store = store,
             openUrl = { false },
+            prepareCallback = { prepared += it; null },
+            cancelCallback = { canceled += it },
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -1065,11 +1110,15 @@ class AuthViewModelTest {
         assertTrue(state.error.orEmpty().startsWith(AUTH_FAILED_MESSAGE), state.error.orEmpty())
         assertNull(state.pendingAuth)
         assertNull(store.pendingAuth)
+        assertEquals(1, prepared.size)
+        assertEquals(prepared, canceled)
     }
 
     @Test
     fun startLoginReportsFailureWhenAuthUrlRequestFails() = runTest(testDispatcher) {
         val store = FakeAuthSessionStorage()
+        val prepared = mutableListOf<String>()
+        val canceled = mutableListOf<String>()
         val viewModel = buildViewModel(
             api = AuthApi(
                 mockClient {
@@ -1082,6 +1131,8 @@ class AuthViewModelTest {
             ),
             store = store,
             openUrl = { error("ブラウザを開いてはいけない") },
+            prepareCallback = { prepared += it; null },
+            cancelCallback = { canceled += it },
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -1092,6 +1143,8 @@ class AuthViewModelTest {
         assertEquals(false, state.isLoading)
         assertTrue(state.error.orEmpty().startsWith(AUTH_FAILED_MESSAGE), state.error.orEmpty())
         assertNull(store.pendingAuth)
+        assertEquals(1, prepared.size)
+        assertEquals(prepared, canceled)
     }
 
     @Test
@@ -1693,43 +1746,6 @@ class AuthViewModelTest {
         assertNotNull(store.pendingAuth)
     }
 
-    // ---- DEV_BYPASS_AUTH ----
-
-    @Test
-    fun devBypassRestoresLocalSessionWithoutTouchingApiOrStore() = runTest(testDispatcher) {
-        val store = FakeAuthSessionStorage()
-        val viewModel = buildViewModel(
-            api = failingApi(),
-            store = store,
-            devAuthBypassEnabled = true,
-        )
-
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertEquals(false, state.isLoading)
-        assertEquals("dev-bypass-token", state.session?.accessToken)
-        assertEquals("Dev User", state.session?.user?.displayName)
-        assertNull(store.session)
-    }
-
-    @Test
-    fun devBypassLogoutSkipsServerCall() = runTest(testDispatcher) {
-        val viewModel = buildViewModel(
-            api = failingApi(),
-            store = FakeAuthSessionStorage(),
-            devAuthBypassEnabled = true,
-        )
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.logout()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val state = viewModel.uiState.value
-        assertNull(state.session)
-        assertEquals("Logged out", state.message)
-    }
-
     @Test
     fun logoutWithoutSessionDoesNotTouchPushLifecycle() = runTest(testDispatcher) {
         val events = mutableListOf<String>()
@@ -1802,19 +1818,21 @@ class AuthViewModelTest {
         api: AuthApi,
         store: FakeAuthSessionStorage,
         cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
-        devAuthBypassEnabled: Boolean = false,
         openUrl: suspend (String) -> Boolean = { true },
         nowMillis: () -> Long = { 1_000L },
         // 単体テストではOSの共有状態や別Dispatcherの通知処理を呼び出さない。
         pushTokenLifecycle: PushTokenLifecycle = RecordingPushTokenLifecycle(mutableListOf()),
+        prepareCallback: (String) -> String? = { null },
+        cancelCallback: (String) -> Unit = {},
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
         cache = cache,
-        devAuthBypassEnabled = devAuthBypassEnabled,
         openUrl = openUrl,
         nowMillis = nowMillis,
         pushTokenLifecycle = pushTokenLifecycle,
+        prepareCallback = prepareCallback,
+        cancelCallback = cancelCallback,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })
@@ -1950,7 +1968,7 @@ class AuthViewModelTest {
                 id = "6",
                 email = "test@example.com",
                 displayName = "テスト太郎",
-                role = Role.Student,
+                isStudent = true,
             ),
         )
 

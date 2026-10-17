@@ -14,7 +14,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "39E1B94B440EEBE6C9B613CE"
-               BuildableName = "Rectimemobile.app"
+               BuildableName = "RECREATION.app"
                BlueprintName = "iosApp"
                ReferencedContainer = "container:iosApp.xcodeproj">
             </BuildableReference>
@@ -43,7 +43,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "39E1B94B440EEBE6C9B613CE"
-            BuildableName = "Rectimemobile.app"
+            BuildableName = "RECREATION.app"
             BlueprintName = "iosApp"
             ReferencedContainer = "container:iosApp.xcodeproj">
          </BuildableReference>
