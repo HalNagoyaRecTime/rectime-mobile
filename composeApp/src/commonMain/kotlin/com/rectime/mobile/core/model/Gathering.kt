@@ -9,4 +9,5 @@ data class Gathering(
     val eventName: String,
     val gatheringSpotName: String,
     val roundStartTime: String? = null,
+    val gatheringSpotImageUrl: String? = null,
 )

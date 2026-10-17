@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 data class EventVenue(
     val venueId: Int,
     val venueName: String,
+    val imageUrl: String? = null,
 )
 
 /**

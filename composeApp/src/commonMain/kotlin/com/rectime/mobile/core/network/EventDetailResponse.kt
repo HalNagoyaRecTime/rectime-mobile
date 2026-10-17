@@ -53,6 +53,7 @@ data class EventRoundGatheringResponse(
 data class EventGatheringSpotResponse(
     @SerialName("gathering_spot_id") val id: Int,
     @SerialName("gathering_spot_name") val name: String,
+    @SerialName("image_url") val imageUrl: String? = null,
 )
 
 /** 集合時刻はAPIの値をそのまま使い、ラウンド開始時刻には読み替えない。 */
@@ -62,6 +63,7 @@ fun EventDetailResponse.toGatherings(): List<com.rectime.mobile.core.model.Gathe
             com.rectime.mobile.core.model.Gathering(
                 it.gatheringId, eventId, it.gatheringSpot.id, it.gatheringTime,
                 round.round, eventName, it.gatheringSpot.name, roundStartTime = round.startTime,
+                gatheringSpotImageUrl = it.gatheringSpot.imageUrl,
             )
         }
     }

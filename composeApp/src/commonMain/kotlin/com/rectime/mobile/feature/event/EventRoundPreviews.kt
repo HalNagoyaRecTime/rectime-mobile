@@ -45,6 +45,7 @@ import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Chevron
 import com.rectime.mobile.ui.component.AppTimeText
 import com.rectime.mobile.ui.component.AppBottomSheet
 import com.rectime.mobile.ui.component.AppIconButton
+import com.rectime.mobile.ui.component.PlaceImageModal
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Xmark
 import com.rectime.mobile.ui.theme.AppTheme
@@ -138,14 +139,27 @@ private fun GatheringDetails(gathering: Gathering, times: RoundDisplayTimes) {
                     fontWeight = FontWeight.Bold, color = colors.textDetailsScreenBody)
             }
         }
-        Column(Modifier.weight(1f)) {
+        var isImageVisible by remember { mutableStateOf(false) }
+        Column(Modifier.weight(1f).clickable(
+            interactionSource = remember { MutableInteractionSource() }, indication = null,
+            role = Role.Button, onClickLabel = "画像を開く",
+        ) { isImageVisible = true }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Icon(painterResource(Res.drawable.ic_location_outline), contentDescription = null,
                     tint = colors.textMuted, modifier = Modifier.size(14.dp))
                 Text("集合場所", fontSize = 12.sp, color = colors.textMuted)
             }
-            Text(gathering.gatheringSpotName.ifBlank { "未定" }, fontSize = 14.sp, lineHeight = 20.sp,
-                color = colors.textDetailsScreenBody, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(gathering.gatheringSpotName.ifBlank { "未定" }, fontSize = 14.sp, lineHeight = 20.sp,
+                    color = colors.textDetailsScreenBody, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false))
+                Icon(SolidGroup.ChevronRight, contentDescription = null, tint = colors.textDetailsScreenBody,
+                    modifier = Modifier.size(10.dp))
+            }
+        }
+        if (isImageVisible) {
+            PlaceImageModal(gathering.gatheringSpotName, gathering.gatheringSpotImageUrl,
+                onDismiss = { isImageVisible = false })
         }
     }
 }
