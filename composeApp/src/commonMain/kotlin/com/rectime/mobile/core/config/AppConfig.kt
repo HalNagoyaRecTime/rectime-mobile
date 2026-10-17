@@ -10,6 +10,10 @@ val apiBaseUrlConfigurationError: String?
 
 expect val isDebugBuild: Boolean
 
+enum class AppEnvironment { Development, Staging, Production }
+
+expect val appEnvironment: AppEnvironment
+
 expect val appVersion: String
 
 // アプリ内の表示は各OSが持つ表示名を参照する。識別子・実行ファイル名とは分離する。

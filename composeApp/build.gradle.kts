@@ -10,6 +10,8 @@ val localProperties = Properties().apply {
 // 本番APIの公開オリジン。秘匿値ではなく公開設定であり、
 // PublicWebConfig.kt の productionWebOrigin と同じ扱いをする。
 val productionApiOrigin = "https://rectime-api.rectime-project.workers.dev"
+val stagingApiOrigin = "https://rectime-api-staging.rectime-project.workers.dev"
+val developmentApiOrigin = "https://rectime-api-development.rectime-project.workers.dev"
 
 val httpsOriginPattern = Regex("^https://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[1-9][0-9]{0,4})?$")
 
@@ -201,17 +203,23 @@ android {
     }
     buildTypes {
         getByName("debug") {
-            val apiBaseUrl = localProperties.getProperty("API_BASE_URL")
-                ?: findProperty("API_BASE_URL") as String?
-                ?: providers.environmentVariable("API_BASE_URL").orNull
-                ?: "http://10.0.2.2:8787"
+            val apiBaseUrl = resolveBuildProperty("API_BASE_URL") ?: developmentApiOrigin
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Development\"")
         }
         getByName("release") {
             isMinifyEnabled = false
             val apiBaseUrl = requireProductionApiOrigin(productionApiOrigin)
             buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Production\"")
             signingConfig = signingConfigs.findByName("release")
+        }
+        // チームで配って確かめるbuildなので、アップロード鍵が無くても作れるようdebug鍵で署名する。
+        create("staging") {
+            initWith(getByName("release"))
+            buildConfigField("String", "API_BASE_URL", "\"$stagingApiOrigin\"")
+            buildConfigField("String", "APP_ENVIRONMENT", "\"Staging\"")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
