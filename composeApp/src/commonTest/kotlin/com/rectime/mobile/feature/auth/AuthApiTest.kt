@@ -566,8 +566,9 @@ class AuthApiTest {
                 }
                 respond(content, HttpStatusCode.OK, jsonHeaders)
             }) {
-                install(MobileAuthHeadersPlugin)
+                install(MobileAuthHeadersPlugin) { baseUrl = BASE }
             },
+            baseUrl = BASE,
         )
         try {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
@@ -733,6 +734,8 @@ class AuthApiTest {
     }
 
     private companion object {
+        const val BASE = "https://api.example.test"
+
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
 
         val storedSession = AuthSession(

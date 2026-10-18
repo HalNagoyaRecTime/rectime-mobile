@@ -368,10 +368,11 @@ class AuthRequestRecoveryTest {
 
     @Test
     fun doesNotDuplicateHeadersTheCallerAlreadySet() = runTest {
-        val sent = mutableListOf<Pair<List<String>?, List<String>?>>()
+        val sent = mutableListOf<Pair<List<String>, List<String>>>()
         SessionTokenHolder.accessToken = "session-token"
         val client = HttpClient(MockEngine { request ->
-            sent += request.headers.getAll("X-Client-Type") to request.headers.getAll(HttpHeaders.Authorization)
+            sent += request.headers.getAll("X-Client-Type").orEmpty() to
+                request.headers.getAll(HttpHeaders.Authorization).orEmpty()
             respond("", HttpStatusCode.OK)
         }) {
             install(MobileAuthHeadersPlugin) { baseUrl = BASE }
@@ -383,7 +384,7 @@ class AuthRequestRecoveryTest {
                 header(HttpHeaders.Authorization, "Bearer request-token")
             }
             client.get("$BASE/api/v1/events")
-            assertEquals<List<Pair<List<String>?, List<String>?>>>(
+            assertEquals(
                 listOf(
                     listOf("mobile") to listOf("Bearer session-token"),
                     listOf("mobile") to listOf("Bearer request-token"),
