@@ -366,6 +366,36 @@ class AuthRequestRecoveryTest {
         }
     }
 
+    @Test
+    fun doesNotDuplicateHeadersTheCallerAlreadySet() = runTest {
+        val sent = mutableListOf<Pair<List<String>?, List<String>?>>()
+        SessionTokenHolder.accessToken = "session-token"
+        val client = HttpClient(MockEngine { request ->
+            sent += request.headers.getAll("X-Client-Type") to request.headers.getAll(HttpHeaders.Authorization)
+            respond("", HttpStatusCode.OK)
+        }) {
+            install(MobileAuthHeadersPlugin) { baseUrl = BASE }
+        }
+        try {
+            client.post("$BASE/api/v1/auth/refresh") { header("X-Client-Type", "mobile") }
+            client.get("$BASE/api/v1/me/events") {
+                header("X-Client-Type", "mobile")
+                header(HttpHeaders.Authorization, "Bearer request-token")
+            }
+            client.get("$BASE/api/v1/events")
+            assertEquals<List<Pair<List<String>?, List<String>?>>>(
+                listOf(
+                    listOf("mobile") to listOf("Bearer session-token"),
+                    listOf("mobile") to listOf("Bearer request-token"),
+                    listOf("mobile") to listOf("Bearer session-token"),
+                ),
+                sent,
+            )
+        } finally {
+            client.close()
+        }
+    }
+
     private companion object {
         const val BASE = "https://api.example.test"
     }
