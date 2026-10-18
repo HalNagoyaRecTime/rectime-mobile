@@ -103,7 +103,7 @@ internal class EventScheduleStore(
     suspend fun cachedDetailEntry(eventId: Int): FetchedCache<EventDetailResponse>? =
         EventCache(cache).loadDetailEntry(eventId)
 
-    /** 同時に開かれた詳細や将来のLive Activityも、イベントごとに通信を共有できる。 */
+    /** 同時に開かれた詳細でも、イベントごとに通信を共有する。 */
     suspend fun refreshDetail(eventId: Int, reason: EventRefreshReason = EventRefreshReason.Required): EventDetailResponse {
         if (reason == EventRefreshReason.Foreground) {
             cache.requests.awaitCurrent("event_detail_v1_$eventId")
