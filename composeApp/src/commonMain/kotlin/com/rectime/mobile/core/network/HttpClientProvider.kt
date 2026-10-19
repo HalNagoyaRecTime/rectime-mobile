@@ -22,10 +22,12 @@ expect fun createHttpClient(): HttpClient
 // 実際のリクエスト先を反映しない(常に isApiUrl=false になり、ヘッダーが一切付与されない)。
 // per-call URLが確定した後に発火するonRequestフックを使う必要がある。
 //
-// 呼び出し元が既にAuthorizationヘッダーをセット済みの場合は上書きしない。
-// SessionTokenHolder(現在のログインセッション用のグローバル状態)と異なる
+// 呼び出し元が既にセット済みのヘッダーは上書き・追加しない。
+// Authorizationは、SessionTokenHolder(現在のログインセッション用のグローバル状態)と異なる
 // トークンをリクエスト単位で使いたいケース(FirebaseTokenApi.register()など)
 // を、グローバル状態を書き換えずに実現できるようにするため。
+// X-Client-Typeは、ログイン中に認証API(refreshなど)が自前で付けた値へ追加すると
+// `mobile,mobile` になり、APIに不正なクライアント種別として拒否されるため。
 internal class MobileAuthHeadersConfig {
     var baseUrl: String = apiBaseUrl
     var refreshToken: suspend (String) -> String? = AuthSessionInvalidationHandler::refreshToken
@@ -42,10 +44,9 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
     val accountDeactivated = pluginConfig.accountDeactivated
     val accountDeleted = pluginConfig.accountDeleted
     onRequest { request, _ ->
-        if (request.headers.contains(HttpHeaders.Authorization)) return@onRequest
         val token = SessionTokenHolder.accessToken?.takeIf(String::isNotBlank) ?: return@onRequest
         mobileAuthHeaders(request.url.toString(), token, baseUrl)?.forEach { (name, value) ->
-            request.headers.append(name, value)
+            if (!request.headers.contains(name)) request.headers.append(name, value)
         }
     }
     on(Send) { request ->

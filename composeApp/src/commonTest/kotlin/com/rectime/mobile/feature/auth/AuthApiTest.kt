@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -552,6 +553,48 @@ class AuthApiTest {
     }
 
     @Test
+    fun authRequestsWhileLoggedInSendExactlyOneClientTypeHeader() = runTest {
+        val clientTypes = mutableMapOf<String, List<String>?>()
+        SessionTokenHolder.accessToken = "session-token"
+        val api = AuthApi(
+            HttpClient(MockEngine { request ->
+                clientTypes[request.url.encodedPath] = request.headers.getAll("X-Client-Type")
+                val content = if (request.url.encodedPath.endsWith("/login")) {
+                    """{"auth_url":"https://login.microsoftonline.com/authorize"}"""
+                } else {
+                    sessionJson
+                }
+                respond(content, HttpStatusCode.OK, jsonHeaders)
+            }) {
+                install(MobileAuthHeadersPlugin) { baseUrl = BASE }
+            },
+            baseUrl = BASE,
+        )
+        try {
+            api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
+            api.exchangeCode(code = "auth-code", state = "state-abc", codeVerifier = "verifier-123")
+            api.currentUser("access-token")
+            api.refresh(storedSession)
+            api.logout(storedSession)
+
+            assertEquals(
+                listOf(
+                    "/api/v1/auth/microsoft/login",
+                    "/api/v1/auth/microsoft/token",
+                    "/api/v1/auth/me",
+                    "/api/v1/auth/refresh",
+                    "/api/v1/auth/logout",
+                ),
+                clientTypes.keys.toList(),
+            )
+            clientTypes.forEach { (path, values) -> assertEquals(listOf("mobile"), values, path) }
+        } finally {
+            SessionTokenHolder.accessToken = null
+            api.close()
+        }
+    }
+
+    @Test
     fun refreshKeepsPreviousRefreshTokenIdAndExpiresInWhenOmitted() = runTest {
         val api = AuthApi(
             mockClient {
@@ -691,6 +734,8 @@ class AuthApiTest {
     }
 
     private companion object {
+        const val BASE = "https://api.example.test"
+
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
 
         val storedSession = AuthSession(
