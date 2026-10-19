@@ -37,11 +37,6 @@ internal fun eventTimeContext(date: String?, now: Instant): EventTimeContext {
         else -> EventTimeContext(EventDay.Today, current.hour * 60 + current.minute)
     }
 }
-internal fun eventInstant(date: String?, time: String?): Long? = runCatching {
-    val minute = time?.let(::minuteOf) ?: return null
-    LocalDateTime(LocalDate.parse(requireNotNull(date)), LocalTime(minute / 60, minute % 60))
-        .toInstant(EventTimeZone).epochSeconds
-}.getOrNull()
 internal fun CoroutineScope.eventTimeStateFlow(cache: LocalCache, clock: Clock = Clock.System) =
     combine(cache.observe<EventsResponse>("schedule_events_v1"), flow {
         while (true) {
