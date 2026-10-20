@@ -258,6 +258,42 @@ class AuthApiTest {
     }
 
     @Test
+    fun exchangeCodeReadsStudentProfileMissing() = runTest {
+        val api = AuthApi(
+            mockClient {
+                respond(
+                    content = """
+                        {
+                          "access_token": "access-token",
+                          "refresh_token_id": "refresh-token-id",
+                          "user": { "id": "6", "email": "nhs00123@example.com", "display_name": "d", "student_profile_missing": true }
+                        }
+                    """.trimIndent(),
+                    status = HttpStatusCode.OK,
+                    headers = jsonHeaders,
+                )
+            },
+        )
+
+        val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
+
+        assertTrue(session.user.studentProfileMissing)
+    }
+
+    @Test
+    fun currentUserTreatsMissingStudentProfileMissingAsFalse() = runTest {
+        // フラグを返さない古いAPIでは案内を出さない。
+        val api = AuthApi(mockClient {
+            respond("""{"user":{"id":"6","is_student":false}}""", HttpStatusCode.OK, jsonHeaders)
+        })
+        try {
+            assertFalse(api.currentUser("token").studentProfileMissing)
+        } finally {
+            api.close()
+        }
+    }
+
+    @Test
     fun exchangeCodeDefaultsExpiresInToZeroWhenMissing() = runTest {
         val api = AuthApi(
             mockClient {
