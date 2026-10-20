@@ -16,6 +16,8 @@ data class AuthUser(
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
     val teacher: AuthTeacher? = null,
+    // 学生メールでログインしたのに学生情報が見つからなかった状態。
+    val studentProfileMissing: Boolean = false,
 ) {
     val role: Role?
         get() = Role.fromCategories(isStudent, isStaff, isTeacher)
