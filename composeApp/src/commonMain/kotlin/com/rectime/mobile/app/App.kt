@@ -28,6 +28,7 @@ import com.rectime.mobile.feature.auth.AuthGate
 import com.rectime.mobile.feature.auth.AuthViewModel
 import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.feature.auth.ProfilePhotoRepository
+import com.rectime.mobile.feature.auth.StudentProfileMissingSheet
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.schedule.ScheduleViewModel
 import com.rectime.mobile.feature.ranking.RankingViewModel
@@ -48,7 +49,11 @@ import kotlinx.coroutines.launch
 @OptIn(coil3.annotation.ExperimentalCoilApi::class)
 @Composable
 @Preview
-fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
+fun App(
+    notificationPermissionStartup: NotificationPermissionStartup? = null,
+    // Androidの起動演出の表示中はtrue。シートは別ウィンドウで演出より前面に出るため、終わるまで待つ。
+    isStartupSplashVisible: Boolean = false,
+) {
     val platformContext = LocalPlatformContext.current
     val configurationError = apiBaseUrlConfigurationError
     if (configurationError != null) {
@@ -195,6 +200,9 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
                         notificationPermissionStartup = notificationPermissionStartup,
                     )
                 }
+            }
+            if (authState.showStudentProfileMissingNotice && !isStartupSplashVisible) {
+                StudentProfileMissingSheet(onDismiss = authViewModel::dismissStudentProfileMissingNotice)
             }
         }
     }

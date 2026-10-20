@@ -55,4 +55,7 @@ data class AuthUiState(
     val pendingAuth: PendingAuth? = null,
     val message: String = "",
     val error: String? = null,
+    // ログイン直後と、アプリ起動後に最初にユーザー情報を取得したときだけtrueにする。
+    // 前面復帰では立てず、ログアウトで初期化される。
+    val showStudentProfileMissingNotice: Boolean = false,
 )
