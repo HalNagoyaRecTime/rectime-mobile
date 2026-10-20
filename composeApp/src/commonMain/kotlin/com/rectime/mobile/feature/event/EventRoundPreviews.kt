@@ -6,6 +6,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -191,29 +192,39 @@ private fun GatheringAccentTag(label: String, fontSize: TextUnit = 14.sp) {
 private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids: Set<Int>, now: Int, onOpenRound: (Int) -> Unit) {
     var expanded by remember(event.eventId) { mutableStateOf(false) }
     val timed = rounds.filter { it.minute != null }
+    // 同時刻のラウンドは1つのタグにまとめる。
+    val groups = timed.groupBy { it.minute!! }
     val eventStart = minuteOf(event.startTime)
     val eventEnd = minuteOf(event.endTime)
-    val first = listOfNotNull(eventStart, timed.firstOrNull()?.minute).minOrNull() ?: 0
+    val eventSpan = if (eventStart != null && eventEnd != null && eventEnd > eventStart) eventStart..eventEnd else null
+    val first = eventSpan?.first ?: listOfNotNull(eventStart, timed.firstOrNull()?.minute).minOrNull() ?: 0
     val roundHeight = (48f * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
     val roundGap = 6.dp
-    val last = maxOf(eventEnd ?: first + 60, timed.lastOrNull()?.minute ?: first + 60, first + 1)
+    val last = eventSpan?.last ?: maxOf(eventEnd ?: first + 60, timed.lastOrNull()?.minute ?: first + 60, first + 1)
     val smallestGap = timed.mapNotNull { it.minute }.distinct().zipWithNext { a, b -> b - a }.minOrNull() ?: 30
-    val minuteScale = maxOf(2f, (roundHeight + roundGap).value / smallestGap.coerceAtLeast(1))
+    val spanScale = eventSpan?.let { (groups.size * (roundHeight + roundGap).value + roundGap.value) / (it.last - it.first) } ?: 0f
+    val minuteScale = maxOf(2f, (roundHeight + roundGap).value / smallestGap.coerceAtLeast(1), spanScale)
     val axisStart = first
     val axisEnd = ((last + 29) / 30 * 30).coerceAtLeast(axisStart + 30)
     val topPadding = roundHeight / 2 + roundGap
     val fullHeight = ((axisEnd - axisStart) * minuteScale).dp + topPadding * 2
     val visibleHeight = if (expanded) fullHeight else minOf(fullHeight, 180.dp)
     fun position(minute: Int) = topPadding + ((minute - axisStart) * minuteScale).dp
+    val timeTops = groups.keys.map { position(it) - roundHeight / 2 }
+    val fittedTops = eventSpan?.let { span ->
+        fitRoundTagTops(timeTops.map { it.value }, height = roundHeight.value, gap = roundGap.value,
+            bandTop = position(span.first).value, bandBottom = position(span.last).value).map { it.dp }
+    } ?: timeTops
+    val tagTops = groups.keys.zip(fittedTops).toMap()
     val focus = timed.firstOrNull { it.isMine(ids) }?.minute
         ?: timed.firstOrNull { it.number == 1 }?.minute ?: timed.firstOrNull()?.minute ?: first
     val density = LocalDensity.current
     val indicator = (if (eventEnd != null && now >= eventEnd) eventEnd else now)
         .takeIf { it in axisStart..axisEnd }
     fun viewportOffset(): Int = with(density) {
-        val anchor = indicator ?: focus
+        val anchor = indicator?.let(::position) ?: tagTops[focus]?.plus(roundHeight / 2) ?: position(focus)
         val inset = if (indicator != null) visibleHeight / 2 else topPadding
-        roundViewportOffset(position(anchor).value, inset.value, fullHeight.value, visibleHeight.value).dp.roundToPx()
+        roundViewportOffset(anchor.value, inset.value, fullHeight.value, visibleHeight.value).dp.roundToPx()
     }
     val scrollState = rememberScrollState(initial = viewportOffset())
     val animatedHeight by animateDpAsState(visibleHeight, animationSpec = tween(250))
@@ -234,7 +245,10 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
     val progress = AppTheme.colors.surfaceAccentStrong
     val live = AppTheme.colors.themeColorSecond
     val band = live.copy(alpha = 0.3f)
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(SettingsCornerRadius))
+    val calendarShape = RoundedCornerShape(SettingsCornerRadius)
+    Box(Modifier.fillMaxWidth()
+        .outerShadow(shape = calendarShape, color = AppTheme.colors.dropShadow.copy(alpha = 0.06f), blurRadius = 5.dp, offsetY = 2.dp)
+        .clip(calendarShape)
         .background(AppTheme.colors.surfacePrimary)
         .height(animatedHeight)
         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null,
@@ -247,9 +261,9 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
             val annotationLeft = targetLeft + roundGap
             val annotationWidth = (targetWidth - roundGap * 2).coerceAtLeast(1.dp)
             Canvas(Modifier.fillMaxSize()) {
-                if (eventStart != null && eventEnd != null && eventEnd > eventStart) {
-                    val bounds = androidx.compose.ui.geometry.Size(targetWidth.toPx(), ((eventEnd - eventStart) * minuteScale).dp.toPx())
-                    val origin = Offset(targetLeft.toPx(), position(eventStart).toPx())
+                if (eventSpan != null) {
+                    val bounds = androidx.compose.ui.geometry.Size(targetWidth.toPx(), ((eventSpan.last - eventSpan.first) * minuteScale).dp.toPx())
+                    val origin = Offset(targetLeft.toPx(), position(eventSpan.first).toPx())
                     val radius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx())
                     drawRoundRect(band, topLeft = origin, size = bounds, cornerRadius = radius)
                     drawRoundRect(live.copy(alpha = 0.65f), topLeft = origin, size = bounds,
@@ -271,25 +285,27 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
             for (minute in ((axisStart + 29) / 30 * 30)..axisEnd step 30) {
                 TimelineTimeLabel(displayMinute(minute), modifier = Modifier.offset(y = position(minute) - 10.dp).width(labelWidth))
             }
-            // 同時刻のラウンドは1つのタグにまとめる。
-            timed.groupBy { it.minute!! }.forEach { (minute, group) ->
-                val top = position(minute) - roundHeight / 2
+            groups.forEach { (minute, group) ->
+                val top = tagTops.getValue(minute)
                 val mine = group.any { it.isMine(ids) }
                 val hasStarted = group.any { it.times.startMinute?.let { start -> start <= now } == true }
                 val title = "第${group.joinToString("・") { "${it.number}" }}ラウンド"
                 val start = group.firstNotNullOfOrNull { it.times.startMinute }
                 val tagColor = if (hasStarted) progress else AppTheme.colors.surfacePrimary
                 val textColor = if (hasStarted) Color.White else AppTheme.colors.textDetailsScreenBody
+                val pill = RoundedCornerShape(50)
                 Row(Modifier.offset(x = annotationLeft, y = top)
                     .width(annotationWidth).height(roundHeight), verticalAlignment = Alignment.CenterVertically) {
                     Row(
                         modifier = Modifier.weight(1f, fill = false).heightIn(min = 36.dp)
-                            .clip(RoundedCornerShape(50))
+                            .clip(pill)
                             .then(if (expanded) Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() }, indication = null,
                                 role = Role.Button, onClickLabel = "$title の集合情報を見る",
                             ) { onOpenRound(group.first().number) } else Modifier)
-                            .background(tagColor).padding(horizontal = 12.dp, vertical = 4.dp),
+                            .background(tagColor)
+                            .then(if (hasStarted) Modifier else Modifier.border(1.dp, live.copy(alpha = 0.65f), pill))
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
