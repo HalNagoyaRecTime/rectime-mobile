@@ -155,7 +155,7 @@ jobs:
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Release)"
-          echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime"
+          echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime.ios"
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api.rectime-project.workers.dev"
 
       - name: Verify iOS Staging settings
