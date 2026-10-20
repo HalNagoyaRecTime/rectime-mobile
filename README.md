@@ -148,7 +148,7 @@ API 接続先と Microsoft ログインの設定は [Desktop 認証の手順](se
 
 `iosApp/` を Xcode で開いて実行、または IDE のツールバーから Run Configuration `composeApp [mobile]` を使う（macOS 必須）。
 
-ステージングで動かすときは、Scheme の Run の Build Configuration を `Staging` にする。
+ステージングで動かす・TestFlight へ Archive するときは、Scheme `iosApp-Staging` を選ぶ。
 
 ## テスト
 
