@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -14,11 +15,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.rectime.mobile.ui.theme.AppTheme
 
-/** 閉じるボタンも標準シートの退場アニメーションを通してから画面から外す。 */
+/**
+ * 閉じるボタンも標準シートの退場アニメーションを通してから画面から外す。
+ * [dismissOnBackPressOrOutsideTap]がfalseの場合、戻る操作とシート外のタップでは閉じず、
+ * 下スワイプと閉じるボタンだけで閉じる。
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AppBottomSheet(
     onDismiss: () -> Unit,
+    dismissOnBackPressOrOutsideTap: Boolean = true,
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -40,6 +46,10 @@ internal fun AppBottomSheet(
         dragHandle = { SheetDragHandle() },
         containerColor = AppTheme.colors.commonBackground,
         shape = RoundedCornerShape(topStart = AppTheme.radius.sheet, topEnd = AppTheme.radius.sheet),
+        properties = ModalBottomSheetProperties(
+            shouldDismissOnBackPress = dismissOnBackPressOrOutsideTap,
+            shouldDismissOnClickOutside = dismissOnBackPressOrOutsideTap,
+        ),
         content = { content(close) },
     )
 }
