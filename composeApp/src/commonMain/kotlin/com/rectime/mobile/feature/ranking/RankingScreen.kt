@@ -191,6 +191,7 @@ private fun RankingRow(item: RankingItem) {
             fontSize = bodyFontSize,
             fontWeight = FontWeight.Bold,
         )
+        Spacer(modifier = Modifier.width(14.dp))
     }
 }
 
