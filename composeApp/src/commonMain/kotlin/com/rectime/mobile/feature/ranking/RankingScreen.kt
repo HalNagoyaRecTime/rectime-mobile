@@ -181,6 +181,7 @@ private fun RankingRow(item: RankingItem) {
             modifier = Modifier.weight(1f),
             color = AppTheme.colors.textPrimary,
             fontSize = bodyFontSize,
+            fontWeight = FontWeight.Bold,
         )
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -209,11 +210,13 @@ private fun MarqueeText(
     modifier: Modifier = Modifier,
     color: Color = AppTheme.colors.textPrimary,
     fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+    fontWeight: FontWeight
 ) {
     Text(
         text = text,
         color = color,
         fontSize = fontSize,
+        fontWeight = fontWeight,
         maxLines = 1,
         overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
         modifier = modifier.basicMarquee(
