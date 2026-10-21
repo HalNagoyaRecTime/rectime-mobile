@@ -1,0 +1,17 @@
+package com.rectime.mobile.core.config
+
+actual val isDebugBuild: Boolean =
+    System.getenv("DEBUG_BUILD")?.toBoolean() ?: System.getProperty("DEBUG_BUILD")?.toBoolean() ?: true
+
+actual val appEnvironment: AppEnvironment =
+    if (isDebugBuild) AppEnvironment.Development else AppEnvironment.Production
+
+actual val apiBaseUrlResult: ApiBaseUrlResult = resolveApiBaseUrl(
+    System.getenv("API_BASE_URL") ?: System.getProperty("API_BASE_URL"),
+    isDebugBuild,
+)
+
+actual val appVersion: String
+    get() = System.getProperty("jpackage.app-version") ?: "開発版"
+
+actual val appDisplayName: String = DefaultAppDisplayName

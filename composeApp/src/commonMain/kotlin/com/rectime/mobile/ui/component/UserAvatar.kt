@@ -1,55 +1,94 @@
 package com.rectime.mobile.ui.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import com.rectime.mobile.core.model.UserProfile
+import coil3.compose.LocalPlatformContext
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
+import com.rectime.mobile.feature.auth.LocalProfilePhotoRepository
 import com.rectime.mobile.ui.theme.AppTheme
+import okio.ByteString.Companion.toByteString
 
-@Composable
-fun UserAvatar(
-    profile: UserProfile,
-    modifier: Modifier = Modifier
-) {
-    UserAvatar(
-        initials = profile.initials,
-        imageUrl = profile.imageUrl,
-        modifier = modifier
-    )
+internal val AvatarBackgrounds = listOf(
+    Color(0xFFD4EEF0), Color(0xFFF5DDD5), Color(0xFFF5EBCB),
+    Color(0xFFDFE4F5), Color(0xFFEADDF1), Color(0xFFDDEEDF),
+)
+
+// 同じユーザーは起動・ログアウト・名前変更を経ても同じ色になる。
+internal fun avatarBackground(userId: String): Color {
+    return AvatarBackgrounds[avatarSeed(userId) % AvatarBackgrounds.size]
 }
 
+/** 写真のない時や画像の描画失敗時も、スポーツのピクトグラムを表示する。追加通信は行わない。 */
 @Composable
-fun UserAvatar(
-    initials: String,
-    imageUrl: String? = null,
-    modifier: Modifier = Modifier
+internal fun UserAvatar(
+    userId: String,
+    photoBytes: ByteArray?,
+    modifier: Modifier = Modifier,
+    sportOverride: SportAvatarPictogram? = null,
+    usePhoto: Boolean = true,
+    colorIndex: Int? = null,
+    borderColor: Color = AppTheme.colors.settingBackground,
 ) {
+    val platformContext = LocalPlatformContext.current
+    val photoRepository = LocalProfilePhotoRepository.current
+    val photoImageLoader = photoRepository?.imageLoader(platformContext)
+    val background = AvatarBackgrounds.getOrNull(colorIndex ?: -1)
+        ?: remember(userId) { avatarBackground(userId) }
+    val sport = sportOverride ?: remember(userId) { avatarSport(userId) }
+    val request = remember(platformContext, userId, photoBytes, photoImageLoader) {
+        photoBytes?.let { bytes ->
+            ImageRequest.Builder(platformContext)
+                .data(bytes)
+                // 写真の保存・削除はProfilePhotoRepositoryだけで管理する。
+                // 同じ写真のデコード結果を再利用し、タブ復帰時の描画待ちを減らす。
+                .memoryCacheKey("profile:$userId:${bytes.toByteString().sha256().hex()}")
+                .memoryCachePolicy(if (photoImageLoader != null) CachePolicy.ENABLED else CachePolicy.DISABLED)
+                .diskCachePolicy(CachePolicy.DISABLED)
+                .build()
+        }
+    }
     Box(
         modifier = modifier
             .clip(CircleShape)
-            .background(AppTheme.colors.surfaceAccentStrong),
+            .background(borderColor)
+            .border(3.dp, borderColor, CircleShape)
+            .padding(3.dp)
+            .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        if (imageUrl != null) {
-            AsyncImage(
-                model = imageUrl,
+        Box(Modifier.fillMaxSize().clip(CircleShape).background(background), contentAlignment = Alignment.Center) {
+            Icon(
+                painter = sportAvatarPainter(sport),
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                tint = Color(0xFF354657),
+                // 手足・用具を含む矩形全体が丸の内側に収まる大きさにする。
+                modifier = Modifier.fillMaxSize(0.64f),
             )
-        } else {
-            Text(text = initials, color = AppTheme.colors.textOnAccent, fontWeight = FontWeight.Bold)
+            if (usePhoto && request != null) {
+                AsyncImage(
+                    model = request,
+                    imageLoader = photoImageLoader ?: coil3.SingletonImageLoader.get(platformContext),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                )
+            }
         }
     }
 }

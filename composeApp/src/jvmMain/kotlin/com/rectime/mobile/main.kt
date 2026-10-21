@@ -9,7 +9,7 @@ import com.rectime.mobile.app.App
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
-        title = "rectime-mobile",
+        title = "RE:CREATION",
         state = rememberWindowState(width = 412.dp, height = 915.dp),
     ) {
         App()

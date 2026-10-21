@@ -1,0 +1,226 @@
+package com.rectime.mobile.feature.auth
+
+import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.network.apiErrorException
+import com.rectime.mobile.core.network.createAppHttpClient
+import io.ktor.client.HttpClient
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.Url
+import io.ktor.http.contentType
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNamingStrategy
+
+class AuthApi(
+    private val client: HttpClient = createAppHttpClient(),
+    private val baseUrl: String = apiBaseUrl,
+) {
+    suspend fun requestAuthUrl(state: String, codeChallenge: String, desktopRedirectUri: String? = null): String {
+        val response = client.get("$baseUrl/api/v1/auth/microsoft/login") {
+            header("X-Client-Type", "mobile")
+            header("X-State", state)
+            header("X-PKCE-Code-Challenge", codeChallenge)
+            desktopRedirectUri?.let { header("X-Desktop-Redirect-Uri", it) }
+        }
+        val body = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            throw response.toAuthApiException(body, "認証 URL の取得に失敗しました")
+        }
+        val authUrl = decodeBody<AuthUrlResponse>(body)?.authUrl
+            ?: throw IllegalStateException("認証 URL のレスポンスが不正です")
+        if (desktopRedirectUri != null && Url(authUrl).parameters["redirect_uri"] != desktopRedirectUri) {
+            throw IllegalStateException("APIがDesktopの認証戻り先に対応していません")
+        }
+        return authUrl
+    }
+
+    suspend fun exchangeCode(code: String, state: String, codeVerifier: String): AuthSession {
+        val response = client.post("$baseUrl/api/v1/auth/microsoft/token") {
+            header("X-Client-Type", "mobile")
+            contentType(ContentType.Application.Json)
+            setBody(
+                json.encodeToString(
+                    TokenExchangeRequest(code = code, state = state, codeVerifier = codeVerifier),
+                ),
+            )
+        }
+        val body = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            throw response.toAuthApiException(body, "トークン交換に失敗しました")
+        }
+
+        val parsed = decodeBody<AuthSessionResponse>(body)
+        return AuthSession(
+            accessToken = parsed?.accessToken
+                ?: throw IllegalStateException("access_token がありません"),
+            refreshTokenId = parsed.refreshTokenId
+                ?: throw IllegalStateException("refresh_token_id がありません"),
+            expiresIn = parsed.expiresIn ?: 0L,
+            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(baseUrl),
+        )
+    }
+
+    suspend fun currentUser(accessToken: String): AuthUser {
+        val response = client.get("$baseUrl/api/v1/auth/me") {
+            header("X-Client-Type", "mobile")
+            header(HttpHeaders.Authorization, "Bearer $accessToken")
+        }
+        val body = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            throw response.toAuthApiException(body, "セッション確認に失敗しました")
+        }
+
+        val user = decodeBody<UserEnvelope>(body)?.user
+            ?: throw IllegalStateException("ユーザー情報のレスポンスが不正です")
+        return user.toAuthUser(baseUrl)
+    }
+
+    suspend fun refresh(session: AuthSession): AuthSession {
+        val response = client.post("$baseUrl/api/v1/auth/refresh") {
+            header("X-Client-Type", "mobile")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(RefreshRequest(refreshTokenId = session.refreshTokenId)))
+        }
+        val body = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            // currentUser()と同様、明示的な非2xxのみAuthApiExceptionとして扱う。
+            // AuthViewModel側で401をセッション失効と判定するため、2xxの本文不正は
+            // 別の例外型のままにする。
+            throw response.toAuthApiException(body, "セッション更新に失敗しました")
+        }
+
+        val parsed = decodeBody<AuthSessionResponse>(body)
+        return session.copy(
+            accessToken = parsed?.accessToken
+                ?: throw IllegalStateException("access_token がありません"),
+            refreshTokenId = parsed.refreshTokenId ?: session.refreshTokenId,
+            expiresIn = parsed.expiresIn ?: session.expiresIn,
+        )
+    }
+
+    suspend fun logout(session: AuthSession, fcmToken: String? = null) {
+        val response = client.post("$baseUrl/api/v1/auth/logout") {
+            header("X-Client-Type", "mobile")
+            header(HttpHeaders.Authorization, "Bearer ${session.accessToken}")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(LogoutRequest(refreshTokenId = session.refreshTokenId, fcmToken = fcmToken)))
+        }
+        val body = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            throw response.toAuthApiException(body, "ログアウトに失敗しました")
+        }
+    }
+
+    fun close() {
+        client.close()
+    }
+}
+
+@OptIn(ExperimentalSerializationApi::class)
+private val json = Json {
+    ignoreUnknownKeys = true
+    namingStrategy = JsonNamingStrategy.SnakeCase
+    explicitNulls = false
+}
+
+private inline fun <reified T> decodeBody(body: String): T? =
+    runCatching { json.decodeFromString<T>(body) }.getOrNull()
+
+private fun io.ktor.client.statement.HttpResponse.toAuthApiException(
+    body: String,
+    fallbackMessage: String,
+): AuthApiException {
+    // AuthViewModelはAuthApiExceptionだけを401によるセッション失効候補として
+    // 扱う。エラー本文の解析は共通パーサーに寄せ、APIのcode/status/messageを
+    // 保持したまま認証機能の例外へ明示的に写像する。
+    val parsed = apiErrorException(status, body, fallbackMessage)
+    return AuthApiException(
+        statusCode = status.value,
+        errorCode = parsed.code,
+        message = parsed.message ?: fallbackMessage,
+        details = parsed.details,
+    )
+}
+
+private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
+    return AuthUser(
+        id = id,
+        email = email,
+        displayName = displayName,
+        avatarUrl = avatarUrl?.let {
+            val base = if (it.startsWith("http")) it else "$baseUrl$it"
+            if (!avatarUpdatedAt.isNullOrBlank()) "$base?v=$avatarUpdatedAt" else base
+        },
+        avatarUpdatedAt = avatarUpdatedAt,
+        studentIdNumber = studentIdNumber,
+        classRoomName = classRoomName,
+        teamId = teamId,
+        classCode = classCode,
+        isStudent = isStudent,
+        isStaff = isStaff,
+        isTeacher = isTeacher,
+        teacher = teacher.takeIf { isTeacher },
+    )
+}
+
+@Serializable
+private data class AuthUrlResponse(
+    val authUrl: String? = null,
+)
+
+@Serializable
+private data class TokenExchangeRequest(
+    val code: String,
+    val state: String,
+    val codeVerifier: String,
+)
+
+@Serializable
+private data class RefreshRequest(
+    val refreshTokenId: String,
+)
+
+@Serializable
+private data class LogoutRequest(
+    val refreshTokenId: String,
+    val fcmToken: String? = null,
+)
+
+@Serializable
+private data class AuthSessionResponse(
+    val accessToken: String? = null,
+    val refreshTokenId: String? = null,
+    val expiresIn: Long? = null,
+    val user: AuthUserResponse? = null,
+)
+
+@Serializable
+private data class UserEnvelope(
+    val user: AuthUserResponse? = null,
+)
+
+@Serializable
+private data class AuthUserResponse(
+    val id: String = "",
+    val email: String = "",
+    val displayName: String = "",
+    val avatarUrl: String? = null,
+    val avatarUpdatedAt: String? = null,
+    val studentIdNumber: String? = null,
+    val classRoomName: String? = null,
+    val teamId: Int? = null,
+    val classCode: String? = null,
+    val isStudent: Boolean = false,
+    val isStaff: Boolean = false,
+    val isTeacher: Boolean = false,
+    val teacher: AuthTeacher? = null,
+)

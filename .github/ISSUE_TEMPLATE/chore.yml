@@ -1,0 +1,73 @@
+name: Chore
+description: 雑務（設定・依存更新・環境整備など）
+title: "[Chore] "
+labels: ["chore"]
+
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 優先度
+      default: 3
+      options:
+        - 高
+        - 中
+        - 低
+        - 未定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 種別
+      options:
+        - 設定
+        - 依存更新
+        - 環境整備
+        - 調査
+        - CI/CD
+        - インフラ
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 対応する内容を簡潔に記載してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: 背景
+      description: なぜこの対応が必要なのかを記載してください
+    validations:
+      required: true
+
+  - type: textarea
+    id: flow
+    attributes:
+      label: 実装フロー
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考URL
+      description: 参考になる資料やリンクがあれば記載してください（任意）
+
+  - type: textarea
+    id: done
+    attributes:
+      label: 完了条件
+      value: |
+        - [ ] 対応が完了している
+        - [ ] レビューが完了している
+    validations:
+      required: true

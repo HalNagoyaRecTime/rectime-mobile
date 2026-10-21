@@ -1,0 +1,265 @@
+package com.rectime.mobile.feature.notifications
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rectime.mobile.app.navigation.NavigationState
+import com.rectime.mobile.app.navigation.NavigationController
+import com.rectime.mobile.app.navigation.Screen
+import com.rectime.mobile.core.util.toFormattedTime
+import com.rectime.mobile.feature.event.EventDetailScreen
+import com.rectime.mobile.ui.component.AppLoadingIndicator
+import com.rectime.mobile.ui.component.AppMarkdown
+import com.rectime.mobile.ui.component.AppDivider
+import com.rectime.mobile.ui.component.EventCard
+import com.rectime.mobile.ui.component.PressSurface
+import com.rectime.mobile.ui.component.PushScreenScaffold
+import com.rectime.mobile.ui.component.headerTitleBarHeight
+import com.rectime.mobile.ui.theme.AppTheme
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
+import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.ChevronRight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
+import kotlin.time.Instant
+
+private val LoadingIndicatorPadding = 24.dp
+private val ErrorContentPadding = 32.dp
+private val ErrorContentSpacing = 12.dp
+private val NotificationContentHorizontalPadding = 10.dp
+private val NotificationContentVerticalPadding = 12.dp
+private val NotificationContentSpacing = 12.dp
+private val NotificationTitleTopPadding = 16.dp
+private val NotificationDateTimeOffsetY = (-8).dp
+private val NotificationBodyLineHeight = 30.sp
+private val RelatedEventSpacing = 6.dp
+private val RelatedEventTitleTopPadding = 8.dp
+private val EventCardHeight = 80.dp
+
+data class NotificationDetailScreen(val id: Int, val refreshOnOpen: Boolean = false) : Screen {
+    override val key: String = "notification_detail_${id}_${refreshOnOpen}"
+
+    @Composable
+    override fun Content(navigationController: NavigationController) {
+        val viewModel = viewModel(key = key) {
+            NotificationDetailViewModel(id, refreshOnOpen = refreshOnOpen, feedStore = NotificationFeedStore.shared,
+                scheduleStore = com.rectime.mobile.feature.event.EventScheduleStore.shared)
+        }
+        val uiState by viewModel.uiState.collectAsState()
+        val eventTime by viewModel.eventTime.collectAsStateWithLifecycle()
+        val nowMinute = eventTime.minute
+        var titleScrolledOut by remember(id) { mutableStateOf(false) }
+        val headerBottomPx = with(LocalDensity.current) { headerTitleBarHeight().toPx() }
+        val fullyVisible = isNotificationDetailFullyVisible(navigationController.state, this)
+        LaunchedEffect(fullyVisible, uiState.notification?.id) {
+            if (fullyVisible && uiState.notification != null) viewModel.onContentVisible()
+        }
+
+        PushScreenScaffold(
+            title = uiState.notification?.title.orEmpty(),
+            titleVisible = uiState.notification != null && titleScrolledOut,
+            onBack = { navigationController.requestPop() },
+        ) {
+            item {
+                Column {
+                    if (uiState.isUpdating && !uiState.isLoading) {
+                        Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                            AppLoadingIndicator(modifier = Modifier.size(32.dp))
+                        }
+                    }
+                    if (uiState.error != null && uiState.notification != null) {
+                        Text(requireNotNull(uiState.error), color = AppTheme.colors.textSecondary)
+                        Button(onClick = viewModel::retry) { Text("再読み込み") }
+                    }
+                    when {
+                        uiState.isLoading -> {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = LoadingIndicatorPadding),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                AppLoadingIndicator(modifier = Modifier.size(32.dp))
+                            }
+                        }
+
+                        uiState.error != null && uiState.notification == null -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = ErrorContentPadding),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(ErrorContentSpacing),
+                            ) {
+                                Text(
+                                    text = requireNotNull(uiState.error),
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                                Button(onClick = viewModel::retry) {
+                                    Text("再読み込み")
+                                }
+                            }
+                        }
+
+                        uiState.notification != null -> {
+                            NotificationDetailContent(
+                                notification = requireNotNull(uiState.notification),
+                                isParticipatingInRelatedEvent = uiState.isParticipatingInRelatedEvent,
+                                nowMinute = nowMinute,
+                                onTitleBottomChanged = { bottom -> titleScrolledOut = bottom <= headerBottomPx },
+                                onRelatedEventClick = { eventId ->
+                                    navigationController.push(
+                                        EventDetailScreen(eventId = eventId),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+internal fun isNotificationDetailFullyVisible(state: NavigationState, screen: NotificationDetailScreen): Boolean {
+    val entry = state.pushStack.lastOrNull() ?: return false
+    return entry.screen == screen && state.isPushInteractive(entry.key)
+}
+
+@Composable
+private fun NotificationDetailContent(
+    notification: UserNotification,
+    isParticipatingInRelatedEvent: Boolean,
+    nowMinute: Int,
+    onTitleBottomChanged: (Float) -> Unit,
+    onRelatedEventClick: (Int) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = NotificationContentHorizontalPadding, vertical = NotificationContentVerticalPadding),
+        verticalArrangement = Arrangement.spacedBy(NotificationContentSpacing),
+    ) {
+        Text(
+            text = notification.title,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.ExtraBold,
+            color = AppTheme.colors.textDetailsScreenTitle,
+            modifier = Modifier.padding(top = NotificationTitleTopPadding)
+                .onGloballyPositioned { onTitleBottomChanged(it.boundsInRoot().bottom) },
+        )
+        Text(
+            text = notification.scheduledAt.toNotificationDateTime(),
+            style = MaterialTheme.typography.labelLarge,
+            color = AppTheme.colors.textDetailsScreenTime,
+            modifier = Modifier.offset(y = NotificationDateTimeOffsetY),
+        )
+        AppDivider()
+        AppMarkdown(
+            content = notification.body,
+            imageTitle = notification.title,
+            bodyStyle = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = FontWeight.Medium,
+                lineHeight = NotificationBodyLineHeight,
+            ),
+        )
+        notification.relatedEvent?.let { event ->
+            Column(verticalArrangement = Arrangement.spacedBy(RelatedEventSpacing)) {
+                Text(
+                    text = "イベント",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = AppTheme.colors.textRelationEvent,
+                    modifier = Modifier.padding(top = RelatedEventTitleTopPadding),
+                )
+                NotificationRelatedEventLink(
+                    event = event,
+                    isParticipating = isParticipatingInRelatedEvent,
+                    nowMinute = nowMinute,
+                    onClick = { onRelatedEventClick(event.id) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationRelatedEventLink(
+    event: NotificationRelatedEvent,
+    isParticipating: Boolean,
+    nowMinute: Int,
+    onClick: () -> Unit,
+) {
+    EventCard(
+        time = "${event.startTime.toShortFormattedTime()}-${event.endTime.toShortFormattedTime()}",
+        title = event.name,
+        venues = event.venues.map { it.venueName },
+        isLive = isEventLiveAt(event.startTime, event.endTime, nowMinute),
+        isParticipating = isParticipating,
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(EventCardHeight),
+    )
+}
+
+private fun String.toIsoDateTime(): String =
+    this.replace(" ", "T")
+        .let { if (it.contains("+") || it.endsWith("Z")) it else "${it}Z" }
+
+internal fun String.toNotificationDateTime(
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): String = runCatching {
+    val dateTime = Instant.parse(this.toIsoDateTime()).toLocalDateTime(timeZone)
+    "${dateTime.year}/${(dateTime.month.ordinal + 1).toTwoDigits()}/${dateTime.day.toTwoDigits()} " +
+            "${dateTime.hour}:${dateTime.minute.toTwoDigits()}"
+}.getOrElse { this }
+
+internal fun String.toShortFormattedTime(): String {
+    val formatted = toFormattedTime()
+    if (formatted == "--:--") return formatted
+    val hour = formatted.substring(0, 2).toIntOrNull() ?: return formatted
+    val minute = formatted.substring(3, 5)
+    return "$hour:$minute"
+}
+
+private fun Int.toTwoDigits(): String = toString().padStart(2, '0')
+
+internal fun String.toMinuteOfDay(): Int {
+    if (length < 4) return 0
+    val hour = substring(0, 2).toIntOrNull() ?: return 0
+    val minute = substring(2, 4).toIntOrNull() ?: return 0
+    return hour * 60 + minute
+}
+
+internal fun isEventLiveAt(startTime: String, endTime: String, nowMinute: Int): Boolean =
+    com.rectime.mobile.feature.event.minuteOf(startTime)?.let { start ->
+        com.rectime.mobile.feature.event.minuteOf(endTime)?.let { end -> start < end && nowMinute >= start && nowMinute < end }
+    } == true

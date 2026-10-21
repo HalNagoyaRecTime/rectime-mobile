@@ -1,0 +1,5 @@
+sdk.dir=<your-android-sdk-path>
+RELEASE_STORE_FILE=<upload-keystore-absolute-path>
+RELEASE_STORE_PASSWORD=<upload-keystore-password>
+RELEASE_KEY_ALIAS=<upload-key-alias>
+RELEASE_KEY_PASSWORD=<upload-key-password>

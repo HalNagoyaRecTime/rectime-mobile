@@ -1,0 +1,376 @@
+package com.rectime.mobile.feature.event
+
+import com.rectime.mobile.core.cache.CacheGeneration
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.feature.schedule.EventResponse
+import com.rectime.mobile.feature.schedule.EventsResponse
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.serialization.json.Json
+import kotlin.test.assertFalse
+import kotlinx.coroutines.CancellationException
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertTrue
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class EventCacheTest {
+    @BeforeTest
+    fun resetGeneration() { CacheGeneration.resetForTest() }
+
+    @Test
+    fun scheduleUpdateIsUsedForDetailPreview() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        cache.saveDetail(detail("old"))
+        cache.saveEvents(events("new"))
+        assertEquals("new", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun detailUpdateChangesExistingListEntryAndPreservesOtherEvents() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val feed = events("old")
+        cache.saveEvents(feed.copy(events = feed.events + feed.events.first().copy(eventId = 2)))
+        cache.saveDetail(detail("new"))
+        assertEquals(listOf("new", "old"), cache.loadEvents()?.events?.map { it.eventName })
+        assertEquals("new", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun detailAloneDoesNotCreateIncompleteScheduleFeed() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        cache.saveDetail(detail("new"))
+        assertNull(cache.loadEvents())
+        assertEquals("new", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun corruptedListDoesNotHideValidSavedDetail() = runTest {
+        val storage = MemoryStore()
+        val cache = EventCache(LocalCache(storage))
+        cache.saveDetail(detail("saved"))
+        storage.putString("schedule_events_v1", "invalid JSON")
+        assertEquals("saved", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun logoutDuringListReadPreventsDetailMergeFromRestoringOldList() = runTest {
+        val storage = MemoryStore()
+        val local = LocalCache(storage)
+        val cache = EventCache(local)
+        storage.putString("schedule_events_v1", Json.encodeToString(events("old")))
+        storage.clearOnListRead = true
+        cache.saveDetail(detail("new"))
+        assertNull(cache.loadEvents())
+        assertNull(local.load<EventDetailResponse>("event_detail_v1_1"))
+    }
+
+    @Test
+    fun delayedListCannotOverwriteDetailSavedByALaterRequest() = runTest {
+        val local = LocalCache(MemoryStore())
+        val listCache = EventCache(local)
+        val detailCache = EventCache(local)
+        val listRequest = listCache.beginRequest()
+        val detailRequest = detailCache.beginRequest()
+        detailCache.saveDetail(detail("B").copy(updatedAt = "2026-01-01T10:00:01Z"), detailRequest)
+        val displayed = listCache.saveEvents(events("A").copy(events = events("A").events.map {
+            it.copy(updatedAt = "2026-01-01T10:00:00Z")
+        }), listRequest)
+        assertEquals("B", displayed.events.single().eventName)
+        assertEquals("B", listCache.loadEvents()?.events?.single()?.eventName)
+        assertEquals("B", detailCache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun sameSecondUsesTheLaterStartedRequestInBothCompletionOrders() = runTest {
+        for (detailFirst in listOf(false, true)) {
+            val cache = EventCache(LocalCache(MemoryStore()))
+            val listRequest = cache.beginRequest()
+            val detailRequest = cache.beginRequest()
+            val list = events("A").copy(events = events("A").events.map { it.copy(updatedAt = "2026-01-01T10:00:00Z") })
+            val detail = detail("B").copy(updatedAt = "2026-01-01T10:00:00Z")
+            if (detailFirst) {
+                cache.saveDetail(detail, detailRequest)
+                cache.saveEvents(list, listRequest)
+            } else {
+                cache.saveEvents(list, listRequest)
+                cache.saveDetail(detail, detailRequest)
+            }
+            assertEquals("B", cache.loadDetail(1)?.eventName)
+            assertEquals("B", cache.loadEvents()?.events?.single()?.eventName)
+        }
+    }
+
+    @Test
+    fun delayedOldDetailCannotOverwriteANewerList() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val detailRequest = cache.beginRequest()
+        val listRequest = cache.beginRequest()
+        cache.saveEvents(events("B"), listRequest)
+        val displayed = cache.saveDetail(detail("A"), detailRequest)
+        assertEquals("B", displayed.eventName)
+        assertEquals("B", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun freshResponsesReplaceSavedValuesEvenWhenApiTimestampMovesBackwards() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        cache.saveDetail(detail("B").copy(updatedAt = "2026-01-01 10:00:02"))
+        cache.saveEvents(events("A").copy(events = events("A").events.map {
+            it.copy(updatedAt = "2026-01-01T10:00:01Z")
+        }))
+        assertEquals("A", cache.loadDetail(1)?.eventName)
+        cache.saveEvents(events("C").copy(events = events("C").events.map {
+            it.copy(updatedAt = "2026-01-01T10:00:03Z")
+        }))
+        cache.saveDetail(detail("A").copy(updatedAt = "2026-01-01T10:00:01Z"))
+        assertEquals("A", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun simultaneousDetailsFromDifferentCacheInstancesPreserveBothEvents() = runTest {
+        val storage = MemoryStore()
+        val local = LocalCache(storage)
+        val first = EventCache(local)
+        val second = EventCache(local)
+        first.saveEvents(events("old").copy(events = events("old").events + events("old").events.single().copy(eventId = 2)))
+        val firstRequest = first.beginRequest()
+        val secondRequest = second.beginRequest()
+        val gate = CompletableDeferred<Unit>()
+        storage.pauseNextListWrite = gate
+        val a = async { first.saveDetail(detail("A"), firstRequest) }
+        runCurrent()
+        val b = async { second.saveDetail(detail("B").copy(eventId = 2), secondRequest) }
+        runCurrent()
+        assertFalse(b.isCompleted)
+        gate.complete(Unit)
+        a.await()
+        b.await()
+        assertEquals(listOf("A", "B"), first.loadEvents()?.events?.map { it.eventName })
+    }
+
+    @Test
+    fun requestFromBeforeLogoutCannotSaveIntoTheNextSession() = runTest {
+        val local = LocalCache(MemoryStore())
+        val cache = EventCache(local)
+        val request = cache.beginRequest()
+        local.clearAll()
+        cache.saveEvents(events("old-user"), request)
+        cache.saveDetail(detail("old-user"), request)
+        assertNull(cache.loadEvents())
+        assertNull(cache.loadDetail(1))
+    }
+
+    @Test
+    fun cacheWriteFailureStillReturnsTheSuccessfulNetworkData() = runTest {
+        val cache = EventCache(LocalCache(object : KeyValueStore {
+            override suspend fun getString(key: String): String? = null
+            override suspend fun putString(key: String, value: String): Unit = error("storage failed")
+            override suspend fun clear() = Unit
+        }))
+        assertEquals("fresh", cache.saveEvents(events("fresh")).events.single().eventName)
+        assertEquals("fresh", cache.saveDetail(detail("fresh")).eventName)
+    }
+
+    @Test
+    fun detailWithoutUpdatedAtRemainsReadableAfterUpgrade() = runTest {
+        val saved = Json.decodeFromString<EventDetailResponse>(
+            """{"event_id":1,"event_name":"old","venues":[],"start_time":"0900","end_time":"0930","rule_text":null}""",
+        )
+        assertNull(saved.updatedAt)
+        assertEquals("old", saved.eventName)
+    }
+
+    @Test
+    fun failedDetailWriteUsesSuccessfullyUpdatedListEvenWhenTimestampsCannotDecide() = runTest {
+        for (timestamp in listOf(null, "2026-01-01T10:00:00Z")) {
+            val storage = MemoryStore()
+            val local = LocalCache(storage)
+            val cache = EventCache(local)
+            cache.saveEvents(events("A"))
+            cache.saveDetail(detail("A").copy(updatedAt = timestamp))
+            val delayedList = cache.beginRequest()
+            storage.failWriteKey = "event_detail_v1_1"
+
+            assertEquals("B", cache.saveDetail(detail("B").copy(updatedAt = timestamp)).eventName)
+            assertEquals("B", local.load<EventDetailResponse>("event_detail_v1_1")?.eventName)
+            assertEquals("B", cache.loadEvents()?.events?.single()?.eventName)
+            assertEquals("B", cache.loadDetail(1)?.eventName)
+            // 先に開始していた古い一覧応答が後から届いても、保存できた新しい内容を保持する。
+            cache.saveEvents(events("A"), delayedList)
+            assertEquals("B", cache.loadDetail(1)?.eventName)
+        }
+    }
+
+    @Test
+    fun failedListWriteUsesSuccessfullyUpdatedDetailEvenWhenTimestampsCannotDecide() = runTest {
+        for (timestamp in listOf(null, "2026-01-01T10:00:00Z")) {
+            val storage = MemoryStore()
+            val cache = EventCache(LocalCache(storage))
+            cache.saveEvents(events("A"))
+            cache.saveDetail(detail("A").copy(updatedAt = timestamp))
+            storage.failWriteKey = "schedule_events_v1"
+
+            cache.saveDetail(detail("B").copy(updatedAt = timestamp))
+            assertEquals("B", cache.loadEvents()?.events?.single()?.eventName)
+            assertEquals("B", cache.loadDetail(1)?.eventName)
+        }
+    }
+
+    @Test
+    fun olderDetailCannotReplaceNewerRoundsDuringSaveOrReconciliation() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        fun rounds(id: Int) = listOf(com.rectime.mobile.core.network.EventRoundResponse(1,
+            listOf(com.rectime.mobile.core.network.EventRoundGatheringResponse(id, "08:45",
+                com.rectime.mobile.core.network.EventGatheringSpotResponse(1, "体育館")))))
+        val earlier = cache.beginRequest()
+        val old = detail("古い本文").copy(rounds = rounds(10))
+        val newer = cache.beginRequest()
+        val fresh = detail("新しい本文").copy(rounds = rounds(20))
+        cache.saveDetail(fresh, newer)
+        assertEquals(fresh, cache.reconcileDetail(old, earlier))
+        cache.saveDetail(old, earlier)
+        assertEquals(fresh, cache.loadDetail(1))
+    }
+
+    @Test
+    fun laterListRequestDoesNotRejectFreshRoundsInEitherCompletionOrder() = runTest {
+        for (listFirst in listOf(false, true)) {
+            val cache = EventCache(LocalCache(MemoryStore()))
+            cache.saveDetail(detail("保存済み").copy(updatedAt = "2026-01-01T10:00:00Z", rounds = rounds(10)))
+            val detailRequest = cache.beginRequest()
+            val listRequest = cache.beginRequest()
+            val fresh = detail("詳細").copy(updatedAt = "2026-01-01T10:00:00Z", rounds = rounds(20))
+            val list = events("一覧").copy(events = events("一覧").events.map {
+                it.copy(updatedAt = "2026-01-01T10:00:01Z")
+            })
+            if (listFirst) {
+                cache.saveEvents(list, listRequest)
+                assertEquals(rounds(20), cache.saveDetail(fresh, detailRequest).rounds)
+            } else {
+                cache.saveDetail(fresh, detailRequest)
+                cache.saveEvents(list, listRequest)
+            }
+            val saved = cache.loadDetail(1)!!
+            assertEquals("一覧", saved.eventName)
+            assertEquals(rounds(20), saved.rounds)
+            assertEquals(rounds(20), cache.reconcileDetail(fresh, detailRequest).rounds)
+        }
+    }
+
+    @Test
+    fun laterListCannotMaskNewerDetailRequestWhenOlderDetailArrivesLast() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val oldRequest = cache.beginRequest()
+        val newRequest = cache.beginRequest()
+        cache.saveDetail(detail("新しい詳細").copy(rounds = rounds(20)), newRequest)
+        cache.saveEvents(events("一覧"))
+        cache.saveDetail(detail("古い詳細").copy(rounds = rounds(10)), oldRequest)
+        assertEquals(rounds(20), cache.loadDetail(1)?.rounds)
+    }
+
+    @Test
+    fun roundsCanChangeAndBeRemovedWithoutChangingEventTimestamp() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val original = detail("本文").copy(updatedAt = "2026-01-01T10:00:00Z", rounds = rounds(10))
+        cache.saveDetail(original)
+        cache.saveDetail(original.copy(rounds = rounds(20)))
+        assertEquals(rounds(20), cache.loadDetail(1)?.rounds)
+        cache.saveDetail(original.copy(rounds = emptyList()))
+        assertEquals(emptyList(), cache.loadDetail(1)?.rounds)
+        cache.saveEvents(events("一覧"))
+        assertEquals(emptyList(), cache.loadDetail(1)?.rounds)
+    }
+
+    @Test
+    fun newerListMembershipIsNotRolledBackByAnOlderResponse() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        val older = cache.beginRequest()
+        cache.saveEvents(events("latest").copy(events = emptyList(), total = 0))
+        assertEquals(emptyList(), cache.saveEvents(events("old"), older).events)
+        assertEquals(emptyList(), cache.reconcileEvents(events("old"), older).events)
+    }
+
+    @Test
+    fun deletedDetailCannotBeRestoredByRequestsStartedBeforeInvalidation() = runTest {
+        val cache = EventCache(LocalCache(MemoryStore()))
+        cache.saveEvents(events("old"))
+        cache.saveDetail(detail("old"))
+        val older = cache.beginRequest()
+        cache.invalidateDetail(1)
+        assertEquals(emptyList(), cache.reconcileEvents(events("old"), older).events)
+        assertTrue(runCatching { cache.saveDetail(detail("old"), older) }.isFailure)
+        assertNull(cache.loadDetail(1))
+        // 削除後に開始した取得で存在が再確認された場合は復元できる。
+        cache.saveDetail(detail("restored"))
+        assertEquals("restored", cache.loadDetail(1)?.eventName)
+    }
+
+    @Test
+    fun invalidationSurvivesRestartWhenListCleanupFails() = runTest {
+        for (failedKey in listOf("schedule_events_v1", "event_detail_v1_1")) {
+            val storage = MemoryStore()
+            val cache = EventCache(LocalCache(storage))
+            cache.saveEvents(events("removed"))
+            cache.saveDetail(detail("removed"))
+            storage.failWriteKey = failedKey
+            cache.invalidateDetail(1)
+            // 別の保存先インスタンスで、プロセス内の共有メモリを使わずに再起動を再現する。
+            val reopened = object : KeyValueStore {
+                override suspend fun getString(key: String) = storage.getString(key)
+                override suspend fun putString(key: String, value: String) = storage.putString(key, value)
+                override suspend fun clear() = storage.clear()
+            }
+            val restored = EventCache(LocalCache(reopened))
+            assertNull(restored.loadDetail(1))
+            assertEquals(emptyList(), restored.loadEvents()?.events)
+            storage.failWriteKey = null
+            restored.saveDetail(detail("reconfirmed"))
+            assertEquals("reconfirmed", restored.loadDetail(1)?.eventName)
+        }
+    }
+
+    private fun rounds(id: Int) = listOf(com.rectime.mobile.core.network.EventRoundResponse(1,
+        listOf(com.rectime.mobile.core.network.EventRoundGatheringResponse(id, "08:45",
+            com.rectime.mobile.core.network.EventGatheringSpotResponse(1, "体育館")))))
+
+    private fun detail(name: String) = EventDetailResponse(1, name, emptyList(), "0900", "0930", null)
+    private fun events(name: String) = EventsResponse(listOf(EventResponse(
+        1, name, null, emptyList(), "0900", "0930", "2026-01-01", "2026-01-01",
+    )), 1, 100, 0)
+
+    private class MemoryStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+        var clearOnListRead = false
+        var pauseNextListRead: CompletableDeferred<Unit>? = null
+        var pauseNextListWrite: CompletableDeferred<Unit>? = null
+        var failWriteKey: String? = null
+        override suspend fun getString(key: String): String? {
+            if (key == "schedule_events_v1") {
+                pauseNextListRead?.let { gate -> pauseNextListRead = null; gate.await() }
+            }
+            val value = values[key]
+            if (clearOnListRead && key == "schedule_events_v1") {
+                clearOnListRead = false
+                CacheGeneration.bump()
+                values.clear()
+            }
+            return value
+        }
+        override suspend fun putString(key: String, value: String) {
+            if (key == "schedule_events_v1") {
+                pauseNextListWrite?.let { gate -> pauseNextListWrite = null; gate.await() }
+            }
+            if (key == failWriteKey) error("storage failed for $key")
+            values[key] = value
+        }
+        override suspend fun clear() { values.clear() }
+    }
+}

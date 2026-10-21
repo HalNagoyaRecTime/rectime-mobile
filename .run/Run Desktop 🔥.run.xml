@@ -5,6 +5,7 @@
       <option name="externalProjectPath" value="$PROJECT_DIR$/composeApp" />
       <option name="externalSystemIdString" value="GRADLE" />
       <option name="scriptParameters" value="" />
+      <option name="passParentEnvs" value="true" />
       <option name="taskDescriptions">
         <list />
       </option>

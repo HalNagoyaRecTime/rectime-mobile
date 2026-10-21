@@ -1,0 +1,214 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - develop-v2
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-jvm:
+    name: Test (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Run commonTest on JVM target
+        run: ./gradlew :composeApp:jvmTest
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: jvm-test-report
+          path: composeApp/build/reports/tests/jvmTest
+          retention-days: 7
+
+  test-ios:
+    name: Test (iOS Simulator)
+    # iosSimulatorArm64Test も Kotlin/Native のリンクで Xcode を使うため、build-ios と同じ環境に揃える
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+
+      - name: Test splash scene playback
+        run: |
+          swiftc iosApp/iosApp/SplashScenePlayback.swift iosApp/tests/main.swift -o /tmp/splash-scene-tests
+          /tmp/splash-scene-tests
+
+      - name: Run commonTest on iOS simulator target
+        run: ./gradlew :composeApp:iosSimulatorArm64Test
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ios-test-report
+          path: composeApp/build/reports/tests/iosSimulatorArm64Test
+          retention-days: 7
+
+  build-android:
+    name: Build (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # 通常CIはFirebaseへ接続しない。Git管理するCI専用dummyを実ファイル名へコピーし、
+      # google-services Gradle PluginによるJSON形式とapplicationIdの整合性を検証する。
+      - name: Setup CI Firebase config
+        run: cp composeApp/google-services.ci.json composeApp/google-services.json
+
+      - name: Assemble debug and staging APK
+        run: ./gradlew :composeApp:assembleDebug :composeApp:assembleStaging
+
+      # 本番のアップロード鍵はCIに置かないため、使い捨ての鍵で署名設定が効くことだけを確かめる。
+      - name: Build signed release AAB
+        env:
+          RELEASE_STORE_FILE: ${{ runner.temp }}/ci-upload.jks
+          RELEASE_STORE_PASSWORD: ci-password
+          RELEASE_KEY_ALIAS: ci
+          RELEASE_KEY_PASSWORD: ci-password
+        run: |
+          keytool -genkeypair -keystore "$RELEASE_STORE_FILE" -storepass "$RELEASE_STORE_PASSWORD" -keypass "$RELEASE_KEY_PASSWORD" -alias "$RELEASE_KEY_ALIAS" -keyalg RSA -keysize 2048 -validity 1 -dname "CN=rectime-ci"
+          ./gradlew :composeApp:bundleRelease
+          keytool -printcert -jarfile composeApp/build/outputs/bundle/release/composeApp-release.aab | grep -F "CN=rectime-ci"
+
+  build-ios:
+    name: Build (iOS)
+    # macos-latest は将来別の OS を指すため、test-ios と同じ macOS 26 (arm64) に固定する
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      # Kotlin 2.4.x の互換表に載っている Xcode 26.4 系を使う。
+      # パッチ更新で旧パッチは置き換えられるため、パッチ番号を含まないパスを指定する。
+      # Kotlin を更新する際は互換表を確認し、ここも見直すこと。
+      DEVELOPER_DIR: /Applications/Xcode_26.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify Xcode
+        run: |
+          if [ ! -d "$DEVELOPER_DIR" ]; then
+            echo "::error::$DEVELOPER_DIR が見つかりません。ランナーイメージの Xcode 一覧を確認してください"
+            ls -d /Applications/Xcode*
+            exit 1
+          fi
+          xcodebuild -version
+
+      # Xcode のビルドフェーズから embedAndSignAppleFrameworkForXcode が呼ばれるため、JDK と Gradle が必要
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+
+      # GoogleService-Info.plist が無い場合は実行時に FCM を無効化する作りのため、ビルド検証では配置しない。
+      # 署名しないためProvisioning Profile自体は検証できないが、署名時に使うentitlements設定は検証する。
+      - name: Build app for iOS Simulator (Debug)
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -disableAutomaticPackageResolution \
+            -resultBundlePath build/ios-debug-build.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify iOS Release settings
+        run: |
+          settings="$(xcodebuild -showBuildSettings \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release)"
+          echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime.ios"
+          echo "$settings" | grep -F "API_BASE_URL = https://rectime-api.rectime-project.workers.dev"
+          echo "$settings" | grep -F "CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements"
+          echo "$settings" | grep -F "CODE_SIGN_STYLE = Automatic"
+          echo "$settings" | grep -F "APS_ENVIRONMENT = development"
+          grep -F "com.apple.Push" iosApp/iosApp.xcodeproj/project.pbxproj
+
+      - name: Verify iOS Staging settings
+        run: |
+          settings="$(xcodebuild -showBuildSettings \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Staging)"
+          echo "$settings" | grep -F "API_BASE_URL = https://rectime-api-staging.rectime-project.workers.dev"
+          echo "$settings" | grep -F "APP_ENVIRONMENT = Staging"
+          echo "$settings" | grep -F "KOTLIN_FRAMEWORK_BUILD_TYPE = release"
+          echo "$settings" | grep -F "CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements"
+          echo "$settings" | grep -F "APS_ENVIRONMENT = development"
+
+      - name: Verify iOS release entitlement checker
+        run: bash -n scripts/verify-ios-release-entitlements.sh
+
+      # -configuration を付けると Scheme の Archive の Build Configuration が使われず、Scheme のずれを検出できないため指定しない。
+      - name: Archive app with iosApp-Staging scheme
+        run: |
+          xcodebuild archive \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp-Staging \
+            -destination 'generic/platform=iOS' \
+            -disableAutomaticPackageResolution \
+            -archivePath build/ios-staging.xcarchive \
+            -resultBundlePath build/ios-staging-archive.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify iosApp-Staging archive connects to staging API
+        run: |
+          plist=build/ios-staging.xcarchive/Products/Applications/RECREATION.app/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :API_BASE_URL' "$plist")" = "https://rectime-api-staging.rectime-project.workers.dev"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :APP_ENVIRONMENT' "$plist")" = "Staging"
+
+      - name: Build app for iOS Simulator (Release)
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -disableAutomaticPackageResolution \
+            -resultBundlePath build/ios-release-build.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ios-build-result
+          path: build/*.xcresult
+          retention-days: 7

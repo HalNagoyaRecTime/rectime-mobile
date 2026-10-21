@@ -2,28 +2,17 @@ package com.rectime.mobile.app.navigation
 
 enum class ActiveGesture {
     None,
-    Menu,
     Back,
-    Sheet,
-}
-
-enum class PushTransitionSource {
-    Default,
-    SideMenu,
 }
 
 enum class PushTransitionMode {
     Idle,
     Enter,
+    Exit,
+    Return,
 }
 
 data class PushEntry(
-    val key: String,
-    val screen: Screen,
-    val source: PushTransitionSource,
-)
-
-data class SheetEntry(
     val key: String,
     val screen: Screen,
 )
@@ -31,20 +20,25 @@ data class SheetEntry(
 data class PushTransitionState(
     val mode: PushTransitionMode = PushTransitionMode.Idle,
     val routeKey: String? = null,
-    val progress: Float = 0f,
-    val sourceProgress: Float = 0f,
+    val releaseVelocityPxPerSecond: Float = 0f,
 )
 
 data class NavigationState(
     val rootScreen: Screen? = null,
     val pushStack: List<PushEntry> = emptyList(),
-    val sheet: SheetEntry? = null,
-    val menuProgress: Float = 0f,
-    val menuSettleVelocity: Float = 0f,
     val activeGesture: ActiveGesture = ActiveGesture.None,
     val pushTransition: PushTransitionState = PushTransitionState(),
-    val pushDismissRequestId: Long = 0,
-    val sheetDismissRequestId: Long = 0,
-    val backDragOffsetPx: Float = 0f,
-    val isTransitioning: Boolean = false,
-)
+) {
+    val isTransitioning: Boolean
+        get() = pushTransition.mode != PushTransitionMode.Idle
+
+    // 表示、入力、戻る操作で同じ判断を使う。
+    val interactionLocked: Boolean
+        get() = isTransitioning || activeGesture != ActiveGesture.None
+
+    val rootInteractive: Boolean
+        get() = pushStack.isEmpty() && !interactionLocked
+
+    fun isPushInteractive(key: String): Boolean =
+        pushStack.lastOrNull()?.key == key && !interactionLocked
+}

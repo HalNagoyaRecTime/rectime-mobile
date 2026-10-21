@@ -1,0 +1,139 @@
+package com.rectime.mobile.core.cache
+
+import com.rectime.mobile.core.network.HttpStatusException
+import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
+
+sealed class CachedFetchResult<out T> {
+    data class Fresh<T>(val value: T) : CachedFetchResult<T>()
+
+    // 元の例外を保持し、呼び出し側が401/404のような具体的な状態を
+    // オフライン扱いに紛れさせず区別できるようにする。
+    data class Cached<T>(val value: T, val error: Exception) : CachedFetchResult<T>()
+    data class Failed(val error: Exception) : CachedFetchResult<Nothing>()
+}
+
+// ログアウト・新規ログイン等でこの通信中にキャッシュ世代が切り替わった場合に
+// 呼び出し元へ返す例外。値そのもの(前セッションのものである可能性がある)を
+// 呼び出し元(ViewModel)に渡してしまうと、書き込みだけ止めても画面に表示され
+// てしまうため、この関数自体の結果としてFailed扱いにする。
+private class StaleCacheGenerationException : Exception("キャッシュ世代が変化したため、この結果は破棄します")
+
+// 通信後にアニメーションや関連情報の取得を待つ場合も、画面への反映直前にセッションを確認する。
+internal class CacheRequestGeneration {
+    private val generation = CacheGeneration.value
+    val isCurrent: Boolean get() = generation == CacheGeneration.value
+
+    fun <T> validate(result: CachedFetchResult<T>): CachedFetchResult<T> =
+        if (isCurrent) result else CachedFetchResult.Failed(StaleCacheGenerationException())
+}
+
+/** 同じログイン中の通信失敗では表示を維持する。失効の判断は共通の認証管理に任せる。 */
+internal fun CacheRequestGeneration.canRetainDisplayedContent(
+    error: Exception,
+    contentSession: CacheRequestGeneration,
+): Boolean = isCurrent && contentSession.isCurrent && !error.invalidatesDisplayedContent()
+
+/** 閲覧拒否・削除が確認できた内容は、通信失敗時の代替表示に使わない。 */
+internal fun Exception.invalidatesDisplayedContent(): Boolean =
+    this is HttpStatusException && (
+        status == HttpStatusCode.Forbidden || status == HttpStatusCode.NotFound ||
+            code in setOf("NOTIFICATION_NOT_FOUND", "NOT_FOUND")
+        )
+
+// 保存済みの内容を先に表示し、既存の通信失敗・セッション変更のガードを使って更新する。
+suspend fun <T> fetchWithCacheFirst(
+    fetchLive: suspend () -> T,
+    loadCache: suspend () -> T?,
+    saveCache: suspend (T) -> Unit,
+    onCached: suspend (T) -> Unit,
+    invalidateCache: suspend (Exception) -> Unit = {},
+): CachedFetchResult<T> {
+    val request = CacheRequestGeneration()
+    val cached = try {
+        loadCache()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+    if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
+    if (cached != null) onCached(cached)
+    if (!request.isCurrent) return CachedFetchResult.Failed(StaleCacheGenerationException())
+    return request.validate(fetchWithCacheFallback(fetchLive, loadCache, saveCache, invalidateCache))
+}
+
+suspend fun <T> fetchWithCacheFallback(
+    fetchLive: suspend () -> T,
+    loadCache: suspend () -> T?,
+    saveCache: suspend (T) -> Unit,
+    invalidateCache: suspend (Exception) -> Unit = {},
+): CachedFetchResult<T> {
+    // fetchLive/loadCache実行中にログアウト・新規ログイン等でLocalCache.clearAll()が
+    // 走った場合、この通信は前ユーザー(または前セッション)のものである可能性が
+    // あるため、キャッシュへの書き込みだけでなく、呼び出し元への返却(画面表示)も
+    // 行ってはならない(CacheGeneration参照)。
+    val generationAtStart = CacheGeneration.value
+    fun staleResultOrNull(): CachedFetchResult<T>? =
+        if (generationAtStart != CacheGeneration.value) {
+            CachedFetchResult.Failed(StaleCacheGenerationException())
+        } else {
+            null
+        }
+
+    val value = try {
+        fetchLive()
+    } catch (e: CancellationException) {
+        staleResultOrNull()?.let { return it }
+        throw e
+    } catch (e: Exception) {
+        staleResultOrNull()?.let { return it }
+
+        if (e.invalidatesDisplayedContent()) {
+            try {
+                invalidateCache(e)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                // 無効化の永続化が失敗しても、拒否された本文は返さない。
+            }
+            return staleResultOrNull() ?: CachedFetchResult.Failed(e)
+        }
+
+        // キャッシュの読み込み自体が失敗した場合も、キャッシュなし(Failed)として
+        // 扱う。ここで例外を伝播させると、この関数自体の「例外を投げない」契約が
+        // 崩れてしまう。
+        val cached = try {
+            loadCache()
+        } catch (cacheError: CancellationException) {
+            throw cacheError
+        } catch (cacheError: Exception) {
+            null
+        }
+
+        staleResultOrNull()?.let { return it }
+
+        return if (cached != null) CachedFetchResult.Cached(cached, e) else CachedFetchResult.Failed(e)
+    }
+
+    staleResultOrNull()?.let { return it }
+
+    // キャッシュへの書き込み失敗はベストエフォートとして無視する。ここでの
+    // 失敗をfetchLive()の失敗と同様に扱うと、通信自体は成功しているのに
+    // 古いキャッシュへフォールバックしてしまう(オンラインなのに
+    // 「オフライン」表示になる)ため。
+    try {
+        saveCache(value)
+    } catch (e: CancellationException) {
+        staleResultOrNull()?.let { return it }
+        throw e
+    } catch (e: Exception) {
+        // no-op
+    }
+
+    // saveCache自体もsuspend関数のため、その実行中に世代が変わっている可能性が
+    // ある。呼び出し元への返却直前に再確認する。
+    staleResultOrNull()?.let { return it }
+
+    return CachedFetchResult.Fresh(value)
+}

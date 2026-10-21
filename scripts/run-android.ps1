@@ -38,4 +38,4 @@ Write-Host "Building and installing..."
 .\gradlew :composeApp:installDebug
 
 Write-Host "Launching app..."
-& $adb @adbArgs shell am start -n com.rectime.mobile/.MainActivity
+& $adb @adbArgs shell am start -n io.github.halnagoyarectime/com.rectime.mobile.MainActivity

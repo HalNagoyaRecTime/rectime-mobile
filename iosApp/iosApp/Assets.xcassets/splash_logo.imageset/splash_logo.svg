@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Android の ic_splash_logo.xml と同じロゴ。表示サイズは Android のスプラッシュアイコン（240dp）に合わせる -->
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 108 108">
+  <path d="M82.21,61.2c-26.95,14.13-40.19-13.88-25.96-39.32-29.63,36.69,7.82,84.11,25.96,39.32Z" fill="#2AB3BF" fill-opacity="0.8"/>
+  <path d="M61.64,31.87 L28.4,79.29 L46.13,76.22 Z" fill="#FCB100" fill-opacity="0.8"/>
+  <path d="M23.93,55.79c19.89-24.31,88.62-26.16,37.87,7.3,14.12-30.4-30.85-15.21-37.87-7.3Z" fill="#FF4000" fill-opacity="0.8"/>
+</svg>

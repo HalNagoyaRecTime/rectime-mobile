@@ -2,129 +2,130 @@ package com.rectime.mobile.app.navigation
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.setValue
-import com.rectime.mobile.feature.home.HomeScreen
+import com.rectime.mobile.feature.schedule.ScheduleScreen
 
 class NavigationController(
-    initialRoot: Screen = HomeScreen
+    initialRoot: Screen = ScheduleScreen
 ) {
     var state by mutableStateOf(NavigationState(rootScreen = initialRoot))
         private set
 
+    private var lastEntryId = 0L
+
+    // 毎フレーム変わる値は履歴と分け、配置処理だけが監視する。
+    internal var backDragOffsetPx by mutableFloatStateOf(0f)
+        private set
+    internal var enterProgress by mutableFloatStateOf(0f)
+        private set
+
     fun setRoot(screen: Screen) {
-        state = state.copy(
-            rootScreen = screen,
-            menuProgress = 0f,
-            activeGesture = ActiveGesture.None
-        )
+        if (state.interactionLocked || state.pushStack.isNotEmpty()) return
+        state = state.copy(rootScreen = screen)
     }
 
-    fun push(screen: Screen, source: PushTransitionSource = PushTransitionSource.Default) {
+    fun reset(screen: Screen) {
+        Snapshot.withMutableSnapshot {
+            backDragOffsetPx = 0f
+            enterProgress = 0f
+            state = NavigationState(rootScreen = screen)
+        }
+    }
+
+    fun push(screen: Screen) {
+        if (state.interactionLocked || state.pushStack.lastOrNull()?.screen?.key == screen.key) return
         val entry = PushEntry(
-            key = "${screen.key}_${Clock.nextId()}",
-            screen = screen,
-            source = source
+            key = "${screen.key}_${++lastEntryId}",
+            screen = screen
         )
-        state = state.copy(
-            pushStack = state.pushStack + entry,
-            pushTransition = PushTransitionState(
-                mode = PushTransitionMode.Enter,
-                routeKey = entry.key,
-                sourceProgress = state.menuProgress
+        Snapshot.withMutableSnapshot {
+            enterProgress = 0f
+            state = state.copy(
+                pushStack = state.pushStack + entry,
+                pushTransition = PushTransitionState(
+                    mode = PushTransitionMode.Enter,
+                    routeKey = entry.key,
+                ),
             )
-        )
+        }
     }
 
     fun requestPop() {
-        if (state.pushStack.isEmpty()) return
-        state = state.copy(pushDismissRequestId = state.pushDismissRequestId + 1)
+        if (state.pushStack.isEmpty() || state.interactionLocked) return
+        startBackTransition(PushTransitionMode.Exit)
     }
 
-    fun completePop(key: String) {
+    private fun startBackTransition(mode: PushTransitionMode, velocityPxPerSecond: Float = 0f) {
+        val key = state.pushStack.lastOrNull()?.key ?: return
         state = state.copy(
-            pushStack = state.pushStack.filter { it.key != key },
-            menuProgress = 0f,
-            backDragOffsetPx = 0f,
+            activeGesture = ActiveGesture.None,
+            pushTransition = PushTransitionState(mode = mode, routeKey = key, releaseVelocityPxPerSecond = velocityPxPerSecond),
         )
     }
 
-    fun presentSheet(screen: Screen) {
-        val entry = SheetEntry(
-            key = "${screen.key}_${Clock.nextId()}",
-            screen = screen
-        )
-        state = state.copy(sheet = entry)
-    }
+    fun completePop(key: String) = finishTransition(key, PushTransitionMode.Exit, removeTop = true)
 
-    fun requestDismissSheet() {
-        if (state.sheet == null) return
-        state = state.copy(sheetDismissRequestId = state.sheetDismissRequestId + 1)
-    }
+    fun finishBackReturn(key: String) = finishTransition(key, PushTransitionMode.Return)
 
-    fun clearSheet(key: String) {
-        if (state.sheet?.key == key) {
-            state = state.copy(sheet = null)
-        }
-    }
+    fun finishPushEnter(key: String) = finishTransition(key, PushTransitionMode.Enter)
 
-    fun resolveHorizontalGesture(): ActiveGesture = when {
-        state.isTransitioning -> ActiveGesture.None
-        state.sheet != null -> ActiveGesture.None
-        state.pushStack.isNotEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Back
-        state.pushStack.isEmpty() && state.pushTransition.mode == PushTransitionMode.Idle -> ActiveGesture.Menu
-        else -> ActiveGesture.None
-    }
-
-    fun setTransitioning(value: Boolean) {
-        state = state.copy(isTransitioning = value)
-    }
-
-    fun setBackDragOffset(px: Float) {
-        state = state.copy(backDragOffsetPx = px.coerceAtLeast(0f))
-    }
-
-    // Gesture control
-    fun beginGesture(gesture: ActiveGesture) {
-        state = state.copy(activeGesture = gesture)
-    }
-
-    fun endGesture() {
-        state = state.copy(activeGesture = ActiveGesture.None)
-    }
-
-    fun setMenuProgress(progress: Float) {
-        state = state.copy(menuProgress = progress.coerceIn(0f, 1f))
-    }
-
-    fun openMenu(velocityProgress: Float = 0f) {
-        state = state.copy(menuProgress = 1f, menuSettleVelocity = velocityProgress, activeGesture = ActiveGesture.None)
-    }
-
-    fun closeMenu(velocityProgress: Float = 0f) {
-        state = state.copy(menuProgress = 0f, menuSettleVelocity = velocityProgress, activeGesture = ActiveGesture.None)
-    }
-
-    fun setPushEnterProgress(progress: Float) {
-        state = state.copy(
-            pushTransition = state.pushTransition.copy(progress = progress),
-            menuProgress = if (state.pushTransition.sourceProgress > 0) {
-                state.pushTransition.sourceProgress * (1f - progress)
-            } else 0f
-        )
-    }
-
-    fun finishPushEnter(key: String) {
-        if (state.pushTransition.routeKey == key) {
+    private fun finishTransition(key: String, mode: PushTransitionMode, removeTop: Boolean = false) {
+        if (!isCurrentTransition(key, mode)) return
+        // 履歴と位置を同時に確定し、前の画面が一瞬だけ移動する状態を作らない。
+        Snapshot.withMutableSnapshot {
+            backDragOffsetPx = 0f
+            enterProgress = 1f
             state = state.copy(
-                pushTransition = PushTransitionState(mode = PushTransitionMode.Idle),
-                menuProgress = 0f,
-                menuSettleVelocity = 0f,
+                pushStack = if (removeTop) state.pushStack.dropLast(1) else state.pushStack,
+                pushTransition = PushTransitionState(),
             )
         }
     }
-}
 
-private object Clock {
-    private var lastId = 0L
-    fun nextId(): Long = ++lastId
+    private fun isCurrentTransition(key: String, mode: PushTransitionMode): Boolean =
+        state.pushStack.lastOrNull()?.key == key && state.pushTransition.routeKey == key &&
+            state.pushTransition.mode == mode
+
+    /** 開始できた画面のキーを返し、終了時も同じ画面か確認する。 */
+    fun beginBackGesture(): String? {
+        if (state.interactionLocked) return null
+        val key = state.pushStack.lastOrNull()?.key ?: return null
+        state = state.copy(activeGesture = ActiveGesture.Back)
+        return key
+    }
+
+    fun finishBackGesture(key: String, dismiss: Boolean, velocityPxPerSecond: Float = 0f) {
+        if (state.pushStack.lastOrNull()?.key != key || state.activeGesture != ActiveGesture.Back) return
+        startBackTransition(if (dismiss) PushTransitionMode.Exit else PushTransitionMode.Return, velocityPxPerSecond)
+    }
+
+    fun setBackDragOffset(key: String, px: Float) {
+        if (state.pushStack.lastOrNull()?.key != key || state.activeGesture != ActiveGesture.Back) return
+        backDragOffsetPx = px.coerceAtLeast(0f)
+    }
+
+    fun setBackTransitionOffset(key: String, mode: PushTransitionMode, px: Float) {
+        if (!isCurrentTransition(key, mode)) return
+        backDragOffsetPx = px.coerceAtLeast(0f)
+    }
+
+    fun setPushEnterProgress(key: String, progress: Float) {
+        if (!isCurrentTransition(key, PushTransitionMode.Enter)) return
+        enterProgress = progress.coerceIn(0f, 1f)
+    }
+
+    // 遷移中もOSの戻るを受け取り、アプリ終了へ流さず操作だけを無視する。
+    val canHandleSystemBack: Boolean
+        get() = state.pushStack.isNotEmpty() || state.rootScreen != ScheduleScreen
+
+    fun handleSystemBack() {
+        if (state.interactionLocked) return
+        when {
+            state.pushStack.isNotEmpty() -> requestPop()
+            state.rootScreen != ScheduleScreen -> setRoot(ScheduleScreen)
+        }
+        // ModalBottomSheet / Dialog の戻るは各標準コンポーネントが先に処理する。
+    }
 }

@@ -1,0 +1,11 @@
+<!-- AndroidのRecreationSplashViewの既存ピクトグラムから抽出。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="26.1266dp" android:height="48dp" android:viewportWidth="43" android:viewportHeight="79">
+    <group android:translateX="17" android:translateY="49">
+        <path android:fillColor="#FF000000" android:pathData="M-5,-23a5,5 0,1 0,10,0a5,5 0,1 0,-10,0z" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M0,-13L1,4L-7,17L-9,26" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M1,4L11,18L14,26" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M0,-12L-12,-21L-13,-31" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="6" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M0,-12L12,-22L15,-31" />
+        <path android:fillColor="#00000000" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M12,-40a5,5 0,1 0,10,0a5,5 0,1 0,-10,0" />
+    </group>
+</vector>

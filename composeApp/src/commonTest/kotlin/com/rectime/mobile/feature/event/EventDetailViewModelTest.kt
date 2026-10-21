@@ -1,0 +1,707 @@
+package com.rectime.mobile.feature.event
+
+import com.rectime.mobile.core.cache.KeyValueStore
+import com.rectime.mobile.core.cache.CacheGeneration
+import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.network.EventDetailResponse
+import com.rectime.mobile.core.network.EventVenueResponse
+import com.rectime.mobile.core.network.EventRoundResponse
+import com.rectime.mobile.core.network.EventRoundGatheringResponse
+import com.rectime.mobile.core.network.EventGatheringSpotResponse
+import com.rectime.mobile.core.network.MyEventParticipation
+import com.rectime.mobile.feature.auth.SessionTokenHolder
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.HttpRequestData
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.json.Json
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class EventDetailViewModelTest {
+
+    private val testDispatcher = StandardTestDispatcher()
+    private var previousToken: String? = null
+
+    @BeforeTest
+    fun setUp() {
+        previousToken = SessionTokenHolder.accessToken
+        SessionTokenHolder.accessToken = "test-access"
+        Dispatchers.setMain(testDispatcher)
+        CacheGeneration.resetForTest()
+    }
+
+    @AfterTest
+    fun tearDown() {
+        SessionTokenHolder.accessToken = previousToken
+        Dispatchers.resetMain()
+    }
+
+    private val validEventBody = """
+        {
+          "event_id": 1,
+          "event_name": "100m走",
+          "venues": [
+            {"venue_id": 1, "venue_name": "第1グラウンド"}
+          ],
+          "start_time": "0900",
+          "end_time": "0930",
+          "rule_text": "スパイク禁止",
+          "rounds": [{"round":1,"gatherings":[{"gathering_id":10,"gathering_time":"08:45","gathering_spot":{"gathering_spot_id":5,"gathering_spot_name":"第1集合場所"}}]}]
+        }
+    """.trimIndent()
+
+    private val validParticipationBody = """{"events":[{"event_id":1,"gathering_ids":[10]}]}"""
+
+    private fun buildClient(
+        eventsHandler: MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData,
+        participationHandler: MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData,
+        dispatcher: CoroutineDispatcher = testDispatcher,
+    ): HttpClient {
+        return HttpClient(MockEngine) {
+            engine {
+                this.dispatcher = dispatcher
+                addHandler { request ->
+                    val url = request.url.toString()
+                    when {
+                        request.url.encodedPath.endsWith("/me/events") -> participationHandler(request)
+                        else -> eventsHandler(request)
+                    }
+                }
+            }
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+        }
+    }
+
+    private fun jsonOk(body: String): MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData =
+        {
+            respond(
+                content = body,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+    private fun statusOnly(status: HttpStatusCode): MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData =
+        {
+            respond(
+                content = """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"error"}}""",
+                status = status,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+
+    private fun throwing(): MockRequestHandleScope.(HttpRequestData) -> io.ktor.client.request.HttpResponseData =
+        { throw RuntimeException("network down") }
+
+    private fun gatedClient(
+        gate: CompletableDeferred<Unit>, blockedPath: String,
+    ): HttpClient = HttpClient(MockEngine) {
+        engine {
+            dispatcher = testDispatcher
+            addHandler { request ->
+                if (request.url.encodedPath.endsWith(blockedPath)) gate.await()
+                val body = when {
+                    request.url.encodedPath.endsWith("/me/events") -> validParticipationBody
+                    else -> validEventBody
+                }
+                respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            }
+        }
+        install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+    }
+
+    @Test
+    fun failedDetailRequestUsesNewerDetailSavedWhileItWasWaiting() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(1, cache)
+        val gate = CompletableDeferred<Unit>()
+        val client = HttpClient(MockEngine) {
+            engine {
+                dispatcher = testDispatcher
+                addHandler { gate.await(); throw RuntimeException("offline") }
+            }
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val viewModel = EventDetailViewModel(1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        EventCache(cache).saveDetail(EventDetailResponse(1, "別の取得で更新", emptyList(), "0900", "0930", null))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("別の取得で更新", viewModel.uiState.value.eventDetail?.eventName)
+        assertTrue(viewModel.uiState.value.isOffline)
+    }
+
+    @Test
+    fun savedDetailAndGatheringsAreVisibleBeforeEventRequestCompletes() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(1, cache)
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/events/1"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("100m走", viewModel.uiState.value.eventDetail?.eventName)
+        assertEquals(10, viewModel.uiState.value.gatherings.single().gatheringId)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun cacheRestoredBeforeRefreshStartsIsVisibleWithoutWaitingForNetwork() = runTest(testDispatcher) {
+        Dispatchers.setMain(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler))
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(1, cache)
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/events/1"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("100m走", viewModel.uiState.value.eventDetail?.eventName)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun freshEventBodyIsVisibleBeforeParticipationRequestCompletes() = runTest(testDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/me/events"),
+            cache = LocalCache(InMemoryKeyValueStore()))
+        testDispatcher.scheduler.runCurrent()
+        assertEquals("100m走", viewModel.uiState.value.eventDetail?.eventName)
+        assertFalse(viewModel.uiState.value.isLoading)
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(10, viewModel.uiState.value.gatherings.single().gatheringId)
+    }
+
+    @Test
+    fun logoutDuringDetailRequestDoesNotRestoreEvent() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1, httpClient = gatedClient(gate, "/events/1"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.eventDetail)
+        assertNull(cache.load<EventDetailResponse>("event_detail_v1_1"))
+        assertNull(cache.load<List<MyEventParticipation>>("event_participation_v1"))
+    }
+
+    @Test
+    fun logoutDuringParticipationRequestDoesNotSaveParticipationOrRestoreEvent() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = EventDetailViewModel(1,
+            httpClient = gatedClient(gate, "/me/events"), cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        cache.clearAll()
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.eventDetail)
+        assertNull(cache.load<List<MyEventParticipation>>("event_participation_v1"))
+    }
+
+    // ---- 正常系 ----
+
+    @Test
+    fun firstResumeDoesNotDuplicateInitialFetchAndLaterResumeRefreshesBothApis() = runTest(testDispatcher) {
+        var detailCalls = 0
+        var participationCalls = 0
+        var body = validEventBody
+        var participating = validParticipationBody
+        val client = buildClient(
+            eventsHandler = { detailCalls++; jsonOk(body).invoke(this, it) },
+            participationHandler = { participationCalls++; jsonOk(participating).invoke(this, it) },
+        )
+        var now = kotlin.time.Instant.parse("2026-10-15T02:00:00Z")
+        val clock = object : kotlin.time.Clock { override fun now() = now }
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, detailCalls)
+        assertEquals(1, participationCalls)
+        assertEquals(setOf(10), vm.uiState.value.attendingGatheringIds)
+
+        now += kotlin.time.Duration.parse("30s")
+        body = validEventBody.replace("100m走", "変更された競技").replace("08:45", "08:55")
+        participating = """{"events":[]}"""
+        vm.onForeground()
+        assertEquals("100m走", vm.uiState.value.eventDetail?.eventName)
+        assertFalse(vm.uiState.value.isLoading)
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, detailCalls)
+        assertEquals(2, participationCalls)
+        assertEquals("変更された競技", vm.uiState.value.eventDetail?.eventName)
+        assertEquals("08:55", vm.uiState.value.gatherings.single().gatheringTime)
+        assertTrue(vm.uiState.value.attendingGatheringIds.isEmpty())
+    }
+
+    @Test
+    fun resumeUpdatesParticipationEvenWhenDetailFetchFails() = runTest(testDispatcher) {
+        var failDetail = false
+        var participating = validParticipationBody
+        val client = buildClient(
+            eventsHandler = {
+                if (failDetail) throw RuntimeException("detail unavailable")
+                jsonOk(validEventBody).invoke(this, it)
+            },
+            participationHandler = { jsonOk(participating).invoke(this, it) },
+        )
+        var now = kotlin.time.Instant.parse("2026-10-15T02:00:00Z")
+        val clock = object : kotlin.time.Clock { override fun now() = now }
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        now += kotlin.time.Duration.parse("30s")
+        failDetail = true
+        participating = """{"events":[]}"""
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("100m走", vm.uiState.value.eventDetail?.eventName)
+        assertEquals(10, vm.uiState.value.gatherings.single().gatheringId)
+        assertTrue(vm.uiState.value.attendingGatheringIds.isEmpty())
+        assertTrue(vm.uiState.value.isOffline)
+        assertNull(vm.uiState.value.error)
+        failDetail = false
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertFalse(vm.uiState.value.isOffline)
+    }
+
+    @Test
+    fun resumeDoesNotHideDeletedDetailBehindCache() = runTest(testDispatcher) {
+        var deleted = false
+        val client = buildClient(
+            eventsHandler = {
+                if (deleted) statusOnly(HttpStatusCode.NotFound).invoke(this, it)
+                else jsonOk(validEventBody).invoke(this, it)
+            },
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        var now = kotlin.time.Instant.parse("2026-10-15T02:00:00Z")
+        val clock = object : kotlin.time.Clock { override fun now() = now }
+        val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        now += kotlin.time.Duration.parse("30s")
+        deleted = true
+        vm.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(vm.uiState.value.eventDetail)
+        assertEquals("イベントが見つかりません", vm.uiState.value.error)
+    }
+
+    @Test
+    fun fetchEventDetailSucceedsAndPopulatesEventDetail() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = jsonOk(validEventBody),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertEquals(listOf("第1グラウンド"), state.eventDetail?.venues?.map { it.venueName })
+        assertEquals("スパイク禁止", state.eventDetail?.ruleText)
+        assertEquals("第1集合場所", state.gatherings.singleOrNull()?.gatheringSpotName)
+    }
+
+
+
+    @Test
+    fun fetchEventDetailHandlesNullRuleTextCorrectly() = runTest(testDispatcher) {
+        val responseBody = """
+            {
+              "event_id": 2,
+              "event_name": "走り高跳び",
+              "venues": [
+                {"venue_id": 2, "venue_name": "第2グラウンド"}
+              ],
+              "start_time": "1000",
+              "end_time": "1100",
+              "rule_text": null,
+              "rounds": []
+            }
+        """.trimIndent()
+
+        val client = buildClient(
+            eventsHandler = jsonOk(responseBody),
+            participationHandler = jsonOk("""{"events":[]}"""),
+        )
+        val viewModel = EventDetailViewModel(eventId = 2, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertNull(state.eventDetail?.ruleText)
+    }
+
+    @Test
+    fun fetchEventDetailSucceedsWithEventButEmptyGatheringsList() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = jsonOk(validEventBody.replace(Regex("\"rounds\":.*"), "\"rounds\": []")),
+            participationHandler = jsonOk("""{"events":[]}"""),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertTrue(state.gatherings.isEmpty())
+    }
+
+    // ---- 本人の参加情報だけ失敗しても本文と全ラウンドは表示する ----
+
+    @Test
+    fun fetchEventDetailKeepsEventDetailWhenParticipationApiFails() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = jsonOk(validEventBody),
+            participationHandler = statusOnly(HttpStatusCode.InternalServerError),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertEquals(10, state.gatherings.single().gatheringId)
+        assertTrue(state.isOffline)
+    }
+
+    @Test
+    fun fetchEventDetailKeepsEventDetailWhenParticipationApiThrows() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = jsonOk(validEventBody),
+            participationHandler = throwing(),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertEquals(10, state.gatherings.single().gatheringId)
+        assertTrue(state.isOffline)
+    }
+
+    // ---- 詳細取得のエラー表示 ----
+
+    @Test
+    fun fetchEventDetailReturns404SetsNotFoundError() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = statusOnly(HttpStatusCode.NotFound),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        val viewModel = EventDetailViewModel(eventId = 999, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("イベントが見つかりません", state.error)
+        assertNull(state.eventDetail)
+        assertTrue(state.gatherings.isEmpty())
+    }
+
+    @Test
+    fun fetchEventDetailReturns500SetsGenericError() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = statusOnly(HttpStatusCode.InternalServerError),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("イベント情報の取得に失敗しました", state.error)
+        assertNull(state.eventDetail)
+        assertTrue(state.gatherings.isEmpty())
+    }
+
+    @Test
+    fun fetchEventDetailThrowsExceptionSetsGenericError() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = throwing(),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("イベント情報の取得に失敗しました", state.error)
+        assertNull(state.eventDetail)
+        assertTrue(state.gatherings.isEmpty())
+    }
+
+    @Test
+    fun fetchEventDetailHandlesMalformedJsonAsGenericError() = runTest(testDispatcher) {
+        val malformedBody = """{"event_id": 1}"""
+
+        val client = buildClient(
+            eventsHandler = jsonOk(malformedBody),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("イベント情報の取得に失敗しました", state.error)
+        assertNull(state.eventDetail)
+        assertTrue(state.gatherings.isEmpty())
+    }
+
+    @Test
+    fun fetchEventDetailKeepsEventDetailWhenParticipationJsonIsMalformed() = runTest(testDispatcher) {
+        val client = buildClient(
+            eventsHandler = jsonOk(validEventBody),
+            participationHandler = jsonOk("""[{"gathering_id": 1}]"""),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertEquals(10, state.gatherings.single().gatheringId)
+        assertTrue(state.isOffline)
+    }
+
+    @Test
+    fun missingRoundsDoesNotTriggerLegacyGatheringRequests() = runTest(testDispatcher) {
+        var requests = 0
+        val client = HttpClient(MockEngine) {
+            engine {
+                dispatcher = testDispatcher
+                addHandler { request ->
+                    requests++
+                    if (request.url.encodedPath.endsWith("/me/events")) {
+                        respond(validParticipationBody, HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType, "application/json"))
+                    } else {
+                        assertTrue(request.url.encodedPath.endsWith("/events/1"))
+                        respond(validEventBody.replace(Regex("\"rounds\":.*"), "\"unused\": []"),
+                            HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+                    }
+                }
+            }
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val vm = EventDetailViewModel(1, httpClient = client, cache = LocalCache(InMemoryKeyValueStore()))
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, requests)
+        assertEquals("イベント情報の取得に失敗しました", vm.uiState.value.error)
+    }
+
+    // ---- オフラインキャッシュフォールバック ----
+
+    private suspend fun seedCache(
+        eventId: Int,
+        cache: LocalCache,
+        withGathering: Boolean = true,
+        venues: List<EventVenueResponse> = emptyList(),
+    ) {
+        cache.save(
+            "event_detail_v1_$eventId",
+            EventDetailResponse(
+                eventId = eventId,
+                eventName = "100m走",
+                venues = venues,
+                startTime = "0900",
+                endTime = "0930",
+                ruleText = "スパイク禁止",
+                rounds = if (withGathering) listOf(EventRoundResponse(1, listOf(EventRoundGatheringResponse(10, "08:45", EventGatheringSpotResponse(5, "第1集合場所"))))) else emptyList(),
+            ),
+        )
+        cache.save("event_participation_v1", listOf(MyEventParticipation(eventId, if (withGathering) listOf(10) else emptyList())))
+    }
+
+    @Test
+    fun fetchEventDetailFallsBackToCachedEventAndGatheringWhenBothRequestsFail() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(eventsHandler = throwing(), participationHandler = throwing())
+
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertTrue(state.isOffline)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertEquals("第1集合場所", state.gatherings.singleOrNull()?.gatheringSpotName)
+    }
+
+    @Test
+    fun fetchEventDetailFallsBackToCachedVenuesWhenBothRequestsFail() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(
+            eventId = 1,
+            cache,
+            venues = listOf(EventVenueResponse(venueId = 1, venueName = "第1グラウンド")),
+        )
+        val client = buildClient(eventsHandler = throwing(), participationHandler = throwing())
+
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.isOffline)
+        assertEquals(listOf("第1グラウンド"), state.eventDetail?.venues?.map { it.venueName })
+    }
+
+    @Test
+    fun fetchEventDetailKeepsCacheWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(
+            eventsHandler = statusOnly(HttpStatusCode.Unauthorized),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertFalse(state.gatherings.isEmpty())
+        assertTrue(state.isOffline)
+    }
+
+    @Test
+    fun forbiddenResponseRemovesCachedDetailPreview() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(
+            eventsHandler = statusOnly(HttpStatusCode.Forbidden),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+        val state = viewModel.uiState.value
+        assertEquals("イベントを表示する権限がありません", state.error)
+        assertNull(state.eventDetail)
+        assertTrue(state.gatherings.isEmpty())
+        assertFalse(state.isLoading)
+        assertFalse(state.isOffline)
+    }
+
+    @Test
+    fun fetchEventDetailIgnoresCacheAndShowsNotFoundOn404() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(
+            eventsHandler = statusOnly(HttpStatusCode.NotFound),
+            participationHandler = jsonOk(validParticipationBody),
+        )
+
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals("イベントが見つかりません", state.error)
+        assertNull(state.eventDetail)
+        assertTrue(state.gatherings.isEmpty())
+        assertFalse(state.isOffline)
+    }
+
+    @Test
+    fun fetchEventDetailKeepsCachedGatheringWhenUnauthorizedIsNotConfirmedAsExpired() = runTest(testDispatcher) {
+        // 本人の参加情報の401だけではセッション失効と断定しない。
+        val cache = LocalCache(InMemoryKeyValueStore())
+        seedCache(eventId = 1, cache)
+        val client = buildClient(
+            eventsHandler = jsonOk(validEventBody),
+            participationHandler = statusOnly(HttpStatusCode.Unauthorized),
+        )
+
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertNull(state.error)
+        assertEquals("100m走", state.eventDetail?.eventName)
+        assertFalse(state.gatherings.isEmpty())
+        assertTrue(state.isOffline)
+    }
+
+    @Test
+    fun detailUpdateDuringParticipationFetchIsUsedForFinalVisibleBody() = runTest(testDispatcher) {
+        val cache = LocalCache(InMemoryKeyValueStore())
+        val gate = CompletableDeferred<Unit>()
+        val client = gatedClient(gate, "/me/events")
+        val viewModel = EventDetailViewModel(eventId = 1, httpClient = client, cache = cache)
+        testDispatcher.scheduler.runCurrent()
+        val saved = requireNotNull(EventCache(cache).loadDetail(1))
+        EventCache(cache).saveDetail(saved.copy(eventName = "更新後", rounds = listOf(EventRoundResponse(2, listOf(EventRoundGatheringResponse(20, "09:00", EventGatheringSpotResponse(5, "新しい集合場所")))))))
+        gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals("更新後", viewModel.uiState.value.eventDetail?.eventName)
+        assertEquals(20, viewModel.uiState.value.gatherings.single().gatheringId)
+        assertEquals(emptySet(), viewModel.uiState.value.attendingGatheringIds)
+    }
+
+    // LocalCache()のデフォルト実装は実OSのプリファレンスストアを使うため、
+    // テスト間でキャッシュが共有され干渉してしまう。テストごとに独立させるためのフェイク。
+    private class InMemoryKeyValueStore : KeyValueStore {
+        private val values = mutableMapOf<String, String>()
+
+        override suspend fun getString(key: String): String? = values[key]
+
+        override suspend fun putString(key: String, value: String) {
+            values[key] = value
+        }
+
+        override suspend fun clear() {
+            values.clear()
+        }
+    }
+}

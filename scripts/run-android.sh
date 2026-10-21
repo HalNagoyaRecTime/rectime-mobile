@@ -41,4 +41,4 @@ echo "Building and installing..."
 ./gradlew :composeApp:installDebug
 
 echo "Launching app..."
-"$ADB" "${ADB_ARGS[@]}" shell am start -n com.rectime.mobile/.MainActivity
+"$ADB" "${ADB_ARGS[@]}" shell am start -n io.github.halnagoyarectime/com.rectime.mobile.MainActivity
