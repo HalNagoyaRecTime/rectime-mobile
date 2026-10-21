@@ -192,39 +192,29 @@ private fun GatheringAccentTag(label: String, fontSize: TextUnit = 14.sp) {
 private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids: Set<Int>, now: Int, onOpenRound: (Int) -> Unit) {
     var expanded by remember(event.eventId) { mutableStateOf(false) }
     val timed = rounds.filter { it.minute != null }
-    // 同時刻のラウンドは1つのタグにまとめる。
-    val groups = timed.groupBy { it.minute!! }
     val eventStart = minuteOf(event.startTime)
     val eventEnd = minuteOf(event.endTime)
-    val eventSpan = if (eventStart != null && eventEnd != null && eventEnd > eventStart) eventStart..eventEnd else null
-    val first = eventSpan?.first ?: listOfNotNull(eventStart, timed.firstOrNull()?.minute).minOrNull() ?: 0
+    val first = listOfNotNull(eventStart, timed.firstOrNull()?.minute).minOrNull() ?: 0
     val roundHeight = (48f * LocalDensity.current.fontScale.coerceAtLeast(1f)).dp
     val roundGap = 6.dp
-    val last = eventSpan?.last ?: maxOf(eventEnd ?: first + 60, timed.lastOrNull()?.minute ?: first + 60, first + 1)
+    val last = maxOf(eventEnd ?: first + 60, timed.lastOrNull()?.minute ?: first + 60, first + 1)
     val smallestGap = timed.mapNotNull { it.minute }.distinct().zipWithNext { a, b -> b - a }.minOrNull() ?: 30
-    val spanScale = eventSpan?.let { (groups.size * (roundHeight + roundGap).value + roundGap.value) / (it.last - it.first) } ?: 0f
-    val minuteScale = maxOf(2f, (roundHeight + roundGap).value / smallestGap.coerceAtLeast(1), spanScale)
+    val minuteScale = maxOf(2f, (roundHeight + roundGap).value / smallestGap.coerceAtLeast(1))
     val axisStart = first
     val axisEnd = ((last + 29) / 30 * 30).coerceAtLeast(axisStart + 30)
     val topPadding = roundHeight / 2 + roundGap
     val fullHeight = ((axisEnd - axisStart) * minuteScale).dp + topPadding * 2
     val visibleHeight = if (expanded) fullHeight else minOf(fullHeight, 180.dp)
     fun position(minute: Int) = topPadding + ((minute - axisStart) * minuteScale).dp
-    val timeTops = groups.keys.map { position(it) - roundHeight / 2 }
-    val fittedTops = eventSpan?.let { span ->
-        fitRoundTagTops(timeTops.map { it.value }, height = roundHeight.value, gap = roundGap.value,
-            bandTop = position(span.first).value, bandBottom = position(span.last).value).map { it.dp }
-    } ?: timeTops
-    val tagTops = groups.keys.zip(fittedTops).toMap()
     val focus = timed.firstOrNull { it.isMine(ids) }?.minute
         ?: timed.firstOrNull { it.number == 1 }?.minute ?: timed.firstOrNull()?.minute ?: first
     val density = LocalDensity.current
     val indicator = (if (eventEnd != null && now >= eventEnd) eventEnd else now)
         .takeIf { it in axisStart..axisEnd }
     fun viewportOffset(): Int = with(density) {
-        val anchor = indicator?.let(::position) ?: tagTops[focus]?.plus(roundHeight / 2) ?: position(focus)
+        val anchor = indicator ?: focus
         val inset = if (indicator != null) visibleHeight / 2 else topPadding
-        roundViewportOffset(anchor.value, inset.value, fullHeight.value, visibleHeight.value).dp.roundToPx()
+        roundViewportOffset(position(anchor).value, inset.value, fullHeight.value, visibleHeight.value).dp.roundToPx()
     }
     val scrollState = rememberScrollState(initial = viewportOffset())
     val animatedHeight by animateDpAsState(visibleHeight, animationSpec = tween(250))
@@ -245,10 +235,7 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
     val progress = AppTheme.colors.surfaceAccentStrong
     val live = AppTheme.colors.themeColorSecond
     val band = live.copy(alpha = 0.3f)
-    val calendarShape = RoundedCornerShape(SettingsCornerRadius)
-    Box(Modifier.fillMaxWidth()
-        .outerShadow(shape = calendarShape, color = AppTheme.colors.dropShadow.copy(alpha = 0.06f), blurRadius = 5.dp, offsetY = 2.dp)
-        .clip(calendarShape)
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(SettingsCornerRadius))
         .background(AppTheme.colors.surfacePrimary)
         .height(animatedHeight)
         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null,
@@ -261,9 +248,9 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
             val annotationLeft = targetLeft + roundGap
             val annotationWidth = (targetWidth - roundGap * 2).coerceAtLeast(1.dp)
             Canvas(Modifier.fillMaxSize()) {
-                if (eventSpan != null) {
-                    val bounds = androidx.compose.ui.geometry.Size(targetWidth.toPx(), ((eventSpan.last - eventSpan.first) * minuteScale).dp.toPx())
-                    val origin = Offset(targetLeft.toPx(), position(eventSpan.first).toPx())
+                if (eventStart != null && eventEnd != null && eventEnd > eventStart) {
+                    val bounds = androidx.compose.ui.geometry.Size(targetWidth.toPx(), ((eventEnd - eventStart) * minuteScale).dp.toPx())
+                    val origin = Offset(targetLeft.toPx(), position(eventStart).toPx())
                     val radius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx())
                     drawRoundRect(band, topLeft = origin, size = bounds, cornerRadius = radius)
                     drawRoundRect(live.copy(alpha = 0.65f), topLeft = origin, size = bounds,
@@ -285,8 +272,9 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
             for (minute in ((axisStart + 29) / 30 * 30)..axisEnd step 30) {
                 TimelineTimeLabel(displayMinute(minute), modifier = Modifier.offset(y = position(minute) - 10.dp).width(labelWidth))
             }
-            groups.forEach { (minute, group) ->
-                val top = tagTops.getValue(minute)
+            // 同時刻のラウンドは1つのタグにまとめる。
+            timed.groupBy { it.minute!! }.forEach { (minute, group) ->
+                val top = position(minute) - roundHeight / 2
                 val mine = group.any { it.isMine(ids) }
                 val hasStarted = group.any { it.times.startMinute?.let { start -> start <= now } == true }
                 val title = "第${group.joinToString("・") { "${it.number}" }}ラウンド"
