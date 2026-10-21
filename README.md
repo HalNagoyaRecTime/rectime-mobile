@@ -61,6 +61,9 @@ Staging / Release API URLは `Config.xcconfig` の値から変更しません。
 
 詳細なセットアップ手順は [`setup/README.md`](setup/README.md) を参照。
 
+iOS API設定の確認結果と未確認項目は
+[`2026-10-20の検証記録`](docs/verification/ios-api-config-2026-10-20.md) を参照。
+
 ## ディレクトリ構成
 
 ```
