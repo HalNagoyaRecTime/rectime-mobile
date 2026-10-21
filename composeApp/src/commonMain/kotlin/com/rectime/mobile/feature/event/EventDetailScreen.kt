@@ -263,7 +263,7 @@ private fun EventTitleBand(
             status?.let {
                 Box(
                     Modifier.height(with(LocalDensity.current) { TitleLineHeight.toDp() }),
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.BottomCenter,
                 ) {
                     OverviewStatus(it)
                 }
