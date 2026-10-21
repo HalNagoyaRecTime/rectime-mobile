@@ -155,7 +155,7 @@ jobs:
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Release)"
-          echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime"
+          echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime.ios"
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api.rectime-project.workers.dev"
 
       - name: Verify iOS Staging settings
@@ -167,6 +167,24 @@ jobs:
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api-staging.rectime-project.workers.dev"
           echo "$settings" | grep -F "APP_ENVIRONMENT = Staging"
           echo "$settings" | grep -F "KOTLIN_FRAMEWORK_BUILD_TYPE = release"
+
+      # -configuration を付けると Scheme の Archive の Build Configuration が使われず、Scheme のずれを検出できないため指定しない。
+      - name: Archive app with iosApp-Staging scheme
+        run: |
+          xcodebuild archive \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp-Staging \
+            -destination 'generic/platform=iOS' \
+            -disableAutomaticPackageResolution \
+            -archivePath build/ios-staging.xcarchive \
+            -resultBundlePath build/ios-staging-archive.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify iosApp-Staging archive connects to staging API
+        run: |
+          plist=build/ios-staging.xcarchive/Products/Applications/RECREATION.app/Info.plist
+          test "$(/usr/libexec/PlistBuddy -c 'Print :API_BASE_URL' "$plist")" = "https://rectime-api-staging.rectime-project.workers.dev"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :APP_ENVIRONMENT' "$plist")" = "Staging"
 
       - name: Build app for iOS Simulator (Release)
         run: |

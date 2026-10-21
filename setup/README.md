@@ -1,6 +1,6 @@
 # Firebase iOS設定
 
-Firebase ConsoleでBundle ID `io.github.halnagoyarectime` のiOSアプリを登録し、
+Firebase ConsoleでBundle ID `io.github.halnagoyarectime.ios` のiOSアプリを登録し、
 設定ファイルを次の場所へ配置する。
 
 ```text
