@@ -79,7 +79,11 @@ fun App(notificationPermissionStartup: NotificationPermissionStartup? = null) {
         }
     }
 
-    val navigationController = remember { NavigationController() }
+    val navigationController: NavigationController = viewModel(
+        factory = viewModelFactory {
+            initializer { NavigationController() }
+        }
+    )
     val hapticPreference = remember { HapticPreference() }
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
