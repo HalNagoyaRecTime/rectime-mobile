@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +89,9 @@ private val BarShadowElevation = 6.dp
 internal val LocalBottomNavigationBottomMargin = staticCompositionLocalOf { 12.dp }
 internal val LocalBottomNavigationSafeAreaOverlap = staticCompositionLocalOf { 0.dp }
 
+// 画面下端からボトムナビゲーション上端（外側余白を含む）までの高さ。計測前は0。
+val LocalBottomNavigationHeight = compositionLocalOf { 0.dp }
+
 private const val IndicatorSpringDampingRatio = 0.8f
 private const val IndicatorSpringStiffness = 380f
 private val IndicatorShadowElevation = 4.dp
@@ -123,6 +128,7 @@ fun BottomNavigationBar(
     hasUnreadNotifications: Boolean,
     notificationPermissionStartup: NotificationPermissionStartup?,
     modifier: Modifier = Modifier,
+    onHeightChanged: (Dp) -> Unit = {},
 ) {
     val items = listOf(
     NavigationItemConfig(
@@ -187,6 +193,8 @@ fun BottomNavigationBar(
 
     Box(
         modifier = modifier
+            // offsetで下へずらした分は画面外に出るため、占有する高さから除く。
+            .onSizeChanged { onHeightChanged(with(density) { it.height.toDp() } - safeAreaOverlap) }
             .windowInsetsPadding(WindowInsets.navigationBars)
             .offset(y = safeAreaOverlap)
             .fillMaxWidth(),

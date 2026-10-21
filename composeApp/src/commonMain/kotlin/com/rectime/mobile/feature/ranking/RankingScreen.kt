@@ -5,6 +5,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -111,8 +112,10 @@ object RankingScreen : Screen {
                     else -> {
                         items(uiState.rankingItems, key = { it.teamId }) { item ->
                             RankingRow(item = item)
-                            // 自チームのハイライトが区切り線まで途切れなく見えるようにする
+                            // 自チームのハイライトが区切り線まで途切れなく見えるようにする。
+                            // 線とハイライトは同じ左右余白で揃え、画面端まで伸ばさない。
                             HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding),
                                 thickness = 1.dp,
                                 color = AppTheme.colors.commonSeparatorLine,
                             )
@@ -150,6 +153,8 @@ private fun RankingRow(item: RankingItem) {
         modifier = Modifier
             .fillMaxWidth()
             .height(if (isTopRank) RankingTopRowHeight else RankingRowHeight)
+            // ハイライトを区切り線と同じ範囲に収めるため、背景より先に左右余白を付ける。
+            .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
             .then(highlightModifier)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -159,10 +164,13 @@ private fun RankingRow(item: RankingItem) {
             modifier = Modifier
                 .width(accentBarWidth)
                 .height(accentBarHeight)
-                .background(color = accentColor ?: Color.Transparent)
+                .background(
+                    color = accentColor ?: Color.Transparent,
+                    shape = RoundedCornerShape(AppTheme.radius.full),
+                )
         )
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = "${item.rank}.",
@@ -181,6 +189,7 @@ private fun RankingRow(item: RankingItem) {
             modifier = Modifier.weight(1f),
             color = AppTheme.colors.textPrimary,
             fontSize = bodyFontSize,
+            fontWeight = FontWeight.Bold,
         )
 
         Spacer(modifier = Modifier.width(12.dp))
@@ -191,6 +200,7 @@ private fun RankingRow(item: RankingItem) {
             fontSize = bodyFontSize,
             fontWeight = FontWeight.Bold,
         )
+        Spacer(modifier = Modifier.width(16.dp))
     }
 }
 
@@ -208,11 +218,13 @@ private fun MarqueeText(
     modifier: Modifier = Modifier,
     color: Color = AppTheme.colors.textPrimary,
     fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+    fontWeight: FontWeight
 ) {
     Text(
         text = text,
         color = color,
         fontSize = fontSize,
+        fontWeight = fontWeight,
         maxLines = 1,
         overflow = androidx.compose.ui.text.style.TextOverflow.Clip,
         modifier = modifier.basicMarquee(
