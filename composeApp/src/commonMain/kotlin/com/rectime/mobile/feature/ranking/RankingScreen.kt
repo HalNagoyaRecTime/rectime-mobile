@@ -5,6 +5,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -152,6 +153,8 @@ private fun RankingRow(item: RankingItem) {
         modifier = Modifier
             .fillMaxWidth()
             .height(if (isTopRank) RankingTopRowHeight else RankingRowHeight)
+            // ハイライトを区切り線と同じ範囲に収めるため、背景より先に左右余白を付ける。
+            .padding(horizontal = AppTheme.layout.screenHorizontalPadding)
             .then(highlightModifier)
             .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -161,10 +164,13 @@ private fun RankingRow(item: RankingItem) {
             modifier = Modifier
                 .width(accentBarWidth)
                 .height(accentBarHeight)
-                .background(color = accentColor ?: Color.Transparent)
+                .background(
+                    color = accentColor ?: Color.Transparent,
+                    shape = RoundedCornerShape(AppTheme.radius.full),
+                )
         )
 
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Text(
             text = "${item.rank}.",
