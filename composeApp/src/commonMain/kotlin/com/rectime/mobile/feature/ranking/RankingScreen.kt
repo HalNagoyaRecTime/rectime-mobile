@@ -111,8 +111,10 @@ object RankingScreen : Screen {
                     else -> {
                         items(uiState.rankingItems, key = { it.teamId }) { item ->
                             RankingRow(item = item)
-                            // 自チームのハイライトが区切り線まで途切れなく見えるようにする
+                            // 自チームのハイライトが区切り線まで途切れなく見えるようにする。
+                            // 線とハイライトは同じ左右余白で揃え、画面端まで伸ばさない。
                             HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = AppTheme.layout.screenHorizontalPadding),
                                 thickness = 1.dp,
                                 color = AppTheme.colors.commonSeparatorLine,
                             )
