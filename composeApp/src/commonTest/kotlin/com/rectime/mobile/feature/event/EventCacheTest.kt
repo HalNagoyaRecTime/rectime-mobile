@@ -6,24 +6,39 @@ import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.network.EventDetailResponse
 import com.rectime.mobile.feature.schedule.EventResponse
 import com.rectime.mobile.feature.schedule.EventsResponse
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.async
-import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.serialization.json.Json
-import kotlin.test.assertFalse
-import kotlinx.coroutines.CancellationException
+import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertTrue
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.json.Json
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class EventCacheTest {
     @BeforeTest
-    fun resetGeneration() { CacheGeneration.resetForTest() }
+    fun resetGeneration() {
+        Dispatchers.setMain(StandardTestDispatcher())
+        CacheGeneration.resetForTest()
+    }
+
+    @AfterTest
+    fun tearDown() {
+        // 共有キャッシュの通信を、テスト用Mainが有効な間にキャンセルする。
+        CacheGeneration.resetForTest()
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun scheduleUpdateIsUsedForDetailPreview() = runTest {
