@@ -16,6 +16,8 @@ data class AuthUser(
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
     val teacher: AuthTeacher? = null,
+    // 学生メールでログインしたのに学生情報が見つからなかった状態。
+    val studentProfileMissing: Boolean = false,
 ) {
     val role: Role?
         get() = Role.fromCategories(isStudent, isStaff, isTeacher)
@@ -53,4 +55,7 @@ data class AuthUiState(
     val pendingAuth: PendingAuth? = null,
     val message: String = "",
     val error: String? = null,
+    // ログイン直後と、アプリ起動後に最初にユーザー情報を取得したときだけtrueにする。
+    // 前面復帰では立てず、ログアウトで初期化される。
+    val showStudentProfileMissingNotice: Boolean = false,
 )

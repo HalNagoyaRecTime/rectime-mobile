@@ -102,7 +102,7 @@ class MainActivity : ComponentActivity() {
                 Box(Modifier.fillMaxSize()) {
                     // 認証復元・キャッシュ読み込みは背後で開始し、演出中は操作対象から外す。
                     Box(if (showSplash) Modifier.clearAndSetSemantics {} else Modifier) {
-                        App(notificationPermissionStartup)
+                        App(notificationPermissionStartup, isStartupSplashVisible = showSplash)
                     }
                     if (showSplash) {
                         AndroidView(

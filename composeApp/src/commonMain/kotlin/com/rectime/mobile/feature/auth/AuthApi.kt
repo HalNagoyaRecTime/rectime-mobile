@@ -169,6 +169,7 @@ private fun AuthUserResponse.toAuthUser(baseUrl: String): AuthUser {
         isStaff = isStaff,
         isTeacher = isTeacher,
         teacher = teacher.takeIf { isTeacher },
+        studentProfileMissing = studentProfileMissing,
     )
 }
 
@@ -223,4 +224,6 @@ private data class AuthUserResponse(
     val isStaff: Boolean = false,
     val isTeacher: Boolean = false,
     val teacher: AuthTeacher? = null,
+    // 古いAPIは返さないため、未設定はfalseとして扱う。
+    val studentProfileMissing: Boolean = false,
 )

@@ -50,6 +50,9 @@ class AuthViewModel(
     private var refreshJob: Deferred<String?>? = null
     private var refreshRequestToken: String? = null
     private var sessionCheckJob: Job? = null
+    // アプリ起動後、最初に取得できたユーザー情報で学生登録漏れの案内を1回だけ判定する。
+    // 前面復帰やトークン更新のたびには判定しない。
+    private var startupNoticeCheckPending = true
 
     init {
         AuthSessionInvalidationHandler.register(this, ::refreshAfterUnauthorized, ::handleAccountDeactivated, ::handleAccountDeleted)
@@ -158,7 +161,15 @@ class AuthViewModel(
                         sessionStore.clearPendingAuth()
                     }
                     pushTokenLifecycle.updateSession(session)
-                    _uiState.update { it.copy(isLoading = false, session = session, message = "Logged in") }
+                    val showNotice = consumeStartupNoticeCheck(user)
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            session = session,
+                            message = "Logged in",
+                            showStudentProfileMissingNotice = it.showStudentProfileMissingNotice || showNotice,
+                        )
+                    }
                     if (refreshPhoto) fetchPhotoIfDue(session)
                 }
             }
@@ -346,6 +357,8 @@ class AuthViewModel(
                         sessionStore.save(session)
                         loggingOut = false
                         previousAccessToken = null
+                        // ログイン直後はこの場で判定するため、起動時の判定は不要になる。
+                        startupNoticeCheckPending = false
                         refreshAttemptCount = 0
                         refreshWindowStartedAt = 0L
                         SessionTokenHolder.accessToken = session.accessToken
@@ -357,6 +370,7 @@ class AuthViewModel(
                                 session = session,
                                 pendingAuth = null,
                                 message = "Login successful",
+                                showStudentProfileMissingNotice = session.user.studentProfileMissing,
                             )
                         }
                         true
@@ -383,6 +397,16 @@ class AuthViewModel(
                 }
             }
         }
+    }
+
+    private fun consumeStartupNoticeCheck(user: AuthUser): Boolean {
+        if (!startupNoticeCheckPending) return false
+        startupNoticeCheckPending = false
+        return user.studentProfileMissing
+    }
+
+    fun dismissStudentProfileMissingNotice() {
+        _uiState.update { it.copy(showStudentProfileMissingNotice = false) }
     }
 
     fun logout() {
@@ -577,7 +601,14 @@ class AuthViewModel(
                     val updated = refreshed.copy(user = user)
                     sessionStore.save(updated)
                     pushTokenLifecycle.updateSession(updated)
-                    _uiState.update { it.copy(session = updated) }
+                    // 起動直後にアクセストークンが期限切れだった場合は、更新後のこの取得で判定する。
+                    val showNotice = consumeStartupNoticeCheck(user)
+                    _uiState.update {
+                        it.copy(
+                            session = updated,
+                            showStudentProfileMissingNotice = it.showStudentProfileMissingNotice || showNotice,
+                        )
+                    }
                 }
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
@@ -622,6 +653,7 @@ class AuthViewModel(
     ) {
         previousAccessToken = null
         SessionTokenHolder.accessToken = null
+        startupNoticeCheckPending = false
         photoFetchJob?.cancel()
         _uiState.value = AuthUiState(isLoading = message == null, error = message)
         // 失効・無効化・ログアウトで同じ削除処理を使い、一箇所の失敗で残りを止めない。
