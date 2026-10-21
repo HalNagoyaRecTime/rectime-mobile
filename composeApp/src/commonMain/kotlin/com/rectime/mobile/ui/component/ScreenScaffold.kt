@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,8 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.rectime.mobile.app.navigation.LocalNavigationInputEnabled
 import com.rectime.mobile.ui.theme.AppTheme
-
-private val SnackbarBottomOffset = (-60).dp // ボトムナビゲーションとの重なりを避けるためのオフセット
 
 @Composable
 fun RootScreenScaffold(
@@ -139,11 +136,15 @@ fun RootScreenScaffold(
             trailing = trailing,
         )
         if (snackbarHostState != null){
+            // ボトムナビゲーションの実際の高さ分だけ持ち上げ、重ならないようにする。
+            // 計測前はコンテンツ下端の余白と同じ値で代用する。
+            val bottomNavigationHeight = LocalBottomNavigationHeight.current
+                .takeIf { it > 0.dp } ?: AppTheme.layout.rootBottomNavigationInset
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter).absoluteOffset(0.dp,SnackbarBottomOffset)
-                    .padding(16.dp),
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 16.dp, end = 16.dp, bottom = bottomNavigationHeight),
             )
         }
 
