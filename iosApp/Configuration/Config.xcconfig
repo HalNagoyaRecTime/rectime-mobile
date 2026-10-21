@@ -19,10 +19,8 @@ APP_ENVIRONMENT[config=Debug] = Development
 APP_ENVIRONMENT[config=Staging] = Staging
 APP_ENVIRONMENT[config=Release] = Production
 
-// The signed entitlement must match the provisioning profile used by Xcode.
-// App Store, TestFlight, and other distribution profiles use the production APNs environment.
-APS_ENVIRONMENT[config=Debug] = development
-APS_ENVIRONMENT[config=Staging] = development
-APS_ENVIRONMENT[config=Release] = production
+// Automatic Signing creates the archive with development signing.
+// Xcode replaces this with the production APNs entitlement when it exports or uploads for distribution.
+APS_ENVIRONMENT = development
 
 KOTLIN_FRAMEWORK_BUILD_TYPE[config=Staging] = release

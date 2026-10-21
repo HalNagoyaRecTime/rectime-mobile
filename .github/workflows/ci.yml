@@ -158,8 +158,8 @@ jobs:
           echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime"
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api.rectime-project.workers.dev"
           echo "$settings" | grep -F "CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements"
-          echo "$settings" | grep -F "CODE_SIGN_IDENTITY = Apple Distribution"
-          echo "$settings" | grep -F "APS_ENVIRONMENT = production"
+          echo "$settings" | grep -F "CODE_SIGN_STYLE = Automatic"
+          echo "$settings" | grep -F "APS_ENVIRONMENT = development"
           grep -F "com.apple.Push" iosApp/iosApp.xcodeproj/project.pbxproj
 
       - name: Verify iOS Staging settings
