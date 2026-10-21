@@ -19,4 +19,8 @@ APP_ENVIRONMENT[config=Debug] = Development
 APP_ENVIRONMENT[config=Staging] = Staging
 APP_ENVIRONMENT[config=Release] = Production
 
+// Automatic Signing creates the archive with development signing.
+// Xcode replaces this with the production APNs entitlement when it exports or uploads for distribution.
+APS_ENVIRONMENT = development
+
 KOTLIN_FRAMEWORK_BUILD_TYPE[config=Staging] = release

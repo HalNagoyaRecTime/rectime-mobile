@@ -14,9 +14,12 @@ Firebase ConsoleのCloud Messaging設定には、Apple Push Notification Authent
 （`.p8`、Key ID、Team ID）を登録する。Apple Developer側では同じBundle IDのApp IDで
 Push Notificationsを有効化し、`aps-environment`を含むProvisioning Profileを使用する。
 
-Apple Developer側の準備ができるまでは、`iosApp.entitlements`をXcodeの署名設定へ適用しない。
-準備後はDebugに`development`、Releaseに`production`の`aps-environment`を設定して、
-`CODE_SIGN_ENTITLEMENTS`に`iosApp/iosApp.entitlements`を指定する。
+リポジトリでは`iosApp.entitlements`をXcodeの署名設定へ適用し、
+Automatic Signingで作成するArchiveには`development`の`aps-environment`を設定している。
+TestFlight／App Store向けの配布処理では、Xcodeが配布用Profileに合わせて`production`へ再署名する。
+Apple Developer側の準備が未完了の場合は、署名付き実機ビルドを成功扱いにせず外部設定を完了する。
+
+配布前の署名確認は[`docs/ios-push-release-check.md`](../docs/ios-push-release-check.md)に従う。
 
 ## Bundle ID変更時の外部設定
 
