@@ -137,7 +137,7 @@ jobs:
 
 
       # GoogleService-Info.plist が無い場合は実行時に FCM を無効化する作りのため、ビルド検証では配置しない。
-      # 署名しないため、entitlements やProvisioning Profile自体はこのジョブでは検証されない。
+      # 署名しないためProvisioning Profile自体は検証できないが、署名時に使うentitlements設定は検証する。
       - name: Build app for iOS Simulator (Debug)
         run: |
           xcodebuild build \
@@ -157,6 +157,10 @@ jobs:
             -configuration Release)"
           echo "$settings" | grep -F "PRODUCT_BUNDLE_IDENTIFIER = io.github.halnagoyarectime"
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api.rectime-project.workers.dev"
+          echo "$settings" | grep -F "CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements"
+          echo "$settings" | grep -F "CODE_SIGN_IDENTITY = Apple Distribution"
+          echo "$settings" | grep -F "APS_ENVIRONMENT = production"
+          grep -F "com.apple.Push" iosApp/iosApp.xcodeproj/project.pbxproj
 
       - name: Verify iOS Staging settings
         run: |
@@ -167,6 +171,11 @@ jobs:
           echo "$settings" | grep -F "API_BASE_URL = https://rectime-api-staging.rectime-project.workers.dev"
           echo "$settings" | grep -F "APP_ENVIRONMENT = Staging"
           echo "$settings" | grep -F "KOTLIN_FRAMEWORK_BUILD_TYPE = release"
+          echo "$settings" | grep -F "CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements"
+          echo "$settings" | grep -F "APS_ENVIRONMENT = development"
+
+      - name: Verify iOS release entitlement checker
+        run: bash -n scripts/verify-ios-release-entitlements.sh
 
       - name: Build app for iOS Simulator (Release)
         run: |
