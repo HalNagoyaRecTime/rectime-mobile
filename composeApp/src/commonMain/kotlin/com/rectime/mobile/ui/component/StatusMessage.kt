@@ -38,6 +38,8 @@ fun StatusMessage(
         Text(
             text = message,
             color = AppTheme.colors.textSecondary,
+            fontSize = 18.sp,
+            lineHeight = 26.sp,
             textAlign = TextAlign.Center,
         )
         if (actionLabel != null && onAction != null) {
