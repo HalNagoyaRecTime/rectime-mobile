@@ -282,6 +282,8 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                 val tagColor = if (hasStarted) progress else AppTheme.colors.surfacePrimary
                 val textColor = if (hasStarted) Color.White else AppTheme.colors.textDetailsScreenBody
                 val pill = RoundedCornerShape(50)
+                val insideBand = eventStart != null && eventEnd != null && minute in eventStart..eventEnd
+                val tagBorder = if (insideBand) live.copy(alpha = 0.65f) else AppTheme.colors.borderStrong
                 Row(Modifier.offset(x = annotationLeft, y = top)
                     .width(annotationWidth).height(roundHeight), verticalAlignment = Alignment.CenterVertically) {
                     Row(
@@ -292,7 +294,7 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                                 role = Role.Button, onClickLabel = "$title の集合情報を見る",
                             ) { onOpenRound(group.first().number) } else Modifier)
                             .background(tagColor)
-                            .then(if (hasStarted) Modifier else Modifier.border(1.dp, live.copy(alpha = 0.65f), pill))
+                            .then(if (hasStarted) Modifier else Modifier.border(1.dp, tagBorder, pill))
                             .padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
