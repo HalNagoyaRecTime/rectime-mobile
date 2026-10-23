@@ -25,14 +25,17 @@ internal actual suspend fun openPlatformExternalUrl(url: String): Boolean {
     }
 }
 
-internal actual suspend fun openPlatformInAppBrowser(url: String): Boolean = withContext(Dispatchers.Main) {
-    val nsUrl = NSURL.URLWithString(url) ?: return@withContext false
-    val window = UIApplication.sharedApplication.connectedScenes
+/** Returns the key window of the foreground scene. Call on the main thread. */
+internal fun foregroundKeyWindow(): UIWindow? =
+    UIApplication.sharedApplication.connectedScenes
         .filterIsInstance<UIWindowScene>()
         .filter { it.activationState == UISceneActivationStateForegroundActive }
         .flatMap { it.windows.filterIsInstance<UIWindow>() }
         .firstOrNull { it.isKeyWindow() }
-        ?: return@withContext false
+
+internal actual suspend fun openPlatformInAppBrowser(url: String): Boolean = withContext(Dispatchers.Main) {
+    val nsUrl = NSURL.URLWithString(url) ?: return@withContext false
+    val window = foregroundKeyWindow() ?: return@withContext false
     var presenter = window.rootViewController ?: return@withContext false
     while (presenter.presentedViewController != null) {
         presenter = presenter.presentedViewController ?: break

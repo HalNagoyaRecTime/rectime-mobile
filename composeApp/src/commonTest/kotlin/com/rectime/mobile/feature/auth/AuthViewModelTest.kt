@@ -1172,6 +1172,80 @@ class AuthViewModelTest {
         assertEquals(previous, viewModel.uiState.value.pendingAuth)
     }
 
+    // ---- handleAuthBrowserDismissed ----
+
+    @Test
+    fun authBrowserCanceledByUserClearsPendingAuth() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"auth_url":"https://login.microsoftonline.com/authorize"}""",
+                        status = HttpStatusCode.OK,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.startLogin()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNotNull(store.pendingAuth)
+
+        viewModel.handleAuthBrowserDismissed(canceledByUser = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals(AUTH_CANCELED_MESSAGE, state.error)
+        assertNull(state.pendingAuth)
+        assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun authBrowserClosedWithoutCallbackReportsFailure() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"auth_url":"https://login.microsoftonline.com/authorize"}""",
+                        status = HttpStatusCode.OK,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.startLogin()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleAuthBrowserDismissed(canceledByUser = false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertTrue(state.error.orEmpty().startsWith(AUTH_FAILED_MESSAGE), state.error.orEmpty())
+        assertNull(state.pendingAuth)
+        assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun authBrowserDismissalWithoutPendingAuthKeepsState() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(failingApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleAuthBrowserDismissed(canceledByUser = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.error)
+        assertNull(store.pendingAuth)
+    }
+
     // ---- handleCallbackUrl 正常系 ----
 
     @Test

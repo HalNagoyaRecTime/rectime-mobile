@@ -56,7 +56,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.delay
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.rectime.mobile.core.platform.openExternalUrl
+import com.rectime.mobile.core.platform.openInAppBrowser
 import com.rectime.mobile.feature.legal.LegalDocument
 import com.rectime.mobile.feature.legal.LegalDocumentLinks
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -156,7 +156,7 @@ private fun AuthFooter() {
         modifier = Modifier.navigationBarsPadding().padding(top = 8.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        LegalDocumentLinks(openUrl = ::openExternalUrl) { enabled, open ->
+        LegalDocumentLinks(openUrl = ::openInAppBrowser) { enabled, open ->
             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 TextButton(enabled = enabled, onClick = { open(LegalDocument.Terms) }) {
                     Text("利用規約", fontSize = 13.sp, color = AppTheme.colors.textSecondary)
