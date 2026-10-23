@@ -148,7 +148,8 @@ struct RecreationSplashView: View {
                     let rise = reduceMotion ? 0 : (progress < 0.55 ? -10 + 8 * growing : -2 + 2 * settling)
                     var letterContext = context
                     letterContext.opacity = reduceMotion ? 1 : splashClamp(progress / 0.15)
-                    letterContext.translateBy(x: letterX, y: center.y + iconSize / 2 + 46 + rise)
+                    // Xcode 26.3ではCGFloatとDoubleが混ざると演算子が曖昧になるため、CGFloatに揃える。
+                    letterContext.translateBy(x: letterX, y: center.y + iconSize / 2 + 46 + CGFloat(rise))
                     letterContext.scaleBy(x: scale, y: scale)
                     if letter == ":" {
                         // 上の水色・下の黄色と、隣のオレンジのCで3色の顔にする。
@@ -279,7 +280,8 @@ private struct SplashPaperFold: View {
             let folded = removed.map { CGPoint(x: crease - $0.y, y: crease - $0.x) }
             let paper = splashPolygonPath(folded)
             let center = CGPoint(x: min(size.width, max(0, crease / 2)), y: crease - min(size.width, max(0, crease / 2)))
-            let depth = min(70, max(1, (size.width + size.height - crease) * 0.16))
+            // 後続のCGPoint計算で演算子が曖昧にならないよう、CGFloatに揃える。
+            let depth: CGFloat = min(70, max(1, (size.width + size.height - CGFloat(crease)) * 0.16))
             let start = CGPoint(x: center.x - depth, y: center.y - depth)
             let end = CGPoint(x: center.x + 3, y: center.y + 3)
             var shadow = context
