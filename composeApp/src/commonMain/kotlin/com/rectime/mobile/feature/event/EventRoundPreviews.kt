@@ -6,6 +6,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -280,16 +281,21 @@ private fun CalendarPreview(event: EventDetail, rounds: List<RoundPreview>, ids:
                 val start = group.firstNotNullOfOrNull { it.times.startMinute }
                 val tagColor = if (hasStarted) progress else AppTheme.colors.surfacePrimary
                 val textColor = if (hasStarted) Color.White else AppTheme.colors.textDetailsScreenBody
+                val pill = RoundedCornerShape(50)
+                val insideBand = eventStart != null && eventEnd != null && minute in eventStart..eventEnd
+                val tagBorder = if (insideBand) live.copy(alpha = 0.65f) else AppTheme.colors.borderStrong
                 Row(Modifier.offset(x = annotationLeft, y = top)
                     .width(annotationWidth).height(roundHeight), verticalAlignment = Alignment.CenterVertically) {
                     Row(
                         modifier = Modifier.weight(1f, fill = false).heightIn(min = 36.dp)
-                            .clip(RoundedCornerShape(50))
+                            .clip(pill)
                             .then(if (expanded) Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() }, indication = null,
                                 role = Role.Button, onClickLabel = "$title の集合情報を見る",
                             ) { onOpenRound(group.first().number) } else Modifier)
-                            .background(tagColor).padding(horizontal = 12.dp, vertical = 4.dp),
+                            .background(tagColor)
+                            .then(if (hasStarted) Modifier else Modifier.border(1.dp, tagBorder, pill))
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
