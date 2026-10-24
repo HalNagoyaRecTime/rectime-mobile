@@ -3,12 +3,13 @@ package com.rectime.mobile.feature.accountdeletion
 import com.rectime.mobile.core.config.accountDeletionPath
 import com.rectime.mobile.core.config.publicWebOrigin
 import com.rectime.mobile.core.config.resolvePublicWebUrl
-import com.rectime.mobile.core.platform.openExternalUrl
+import com.rectime.mobile.core.platform.openInAppBrowser
 import kotlinx.coroutines.CancellationException
 
 class AccountDeletionLauncher(
     private val origin: String = publicWebOrigin,
-    private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
+    // The deletion page asks people to sign in, so keep it inside the app (App Review Guideline 4).
+    private val openUrl: suspend (String) -> Boolean = { openInAppBrowser(it) },
 ) {
     suspend fun open(): Boolean {
         val url = resolvePublicWebUrl(

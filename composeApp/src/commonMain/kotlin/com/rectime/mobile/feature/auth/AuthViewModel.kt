@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.config.isDebugBuild
-import com.rectime.mobile.core.platform.openExternalUrl
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
 import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
 import kotlinx.coroutines.CancellationException
@@ -31,7 +30,7 @@ class AuthViewModel(
     private val sessionStore: AuthSessionStorage = PlatformAuthSessionStorage(),
     private val cache: LocalCache = LocalCache(),
     val photoRepository: ProfilePhotoRepository? = null,
-    private val openUrl: suspend (String) -> Boolean = { openExternalUrl(it) },
+    private val openUrl: suspend (String) -> Boolean = { openAuthBrowser(it) },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
     private val prepareCallback: (String) -> String? = ::preparePlatformAuthCallback,
@@ -61,6 +60,11 @@ class AuthViewModel(
         viewModelScope.launch {
             AuthDeepLinkHandler.callbacks.collect { callbackUrl ->
                 handleCallbackUrl(callbackUrl)
+            }
+        }
+        viewModelScope.launch {
+            AuthDeepLinkHandler.dismissals.collect { canceledByUser ->
+                handleAuthBrowserDismissed(canceledByUser)
             }
         }
 
@@ -395,6 +399,26 @@ class AuthViewModel(
                         message = "",
                     )
                 }
+            }
+        }
+    }
+
+    /** アプリ内のログイン画面が認証結果なしで閉じた場合、今回の認証待ち情報を破棄する。 */
+    fun handleAuthBrowserDismissed(canceledByUser: Boolean) {
+        viewModelScope.launch {
+            val pending = _uiState.value.pendingAuth ?: return@launch
+            clearPendingAuthForAttempt(pending)
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    pendingAuth = it.pendingAuth.takeUnless { saved -> saved == pending },
+                    message = "",
+                    error = if (canceledByUser) {
+                        AUTH_CANCELED_MESSAGE
+                    } else {
+                        debugAuthMessage("ログイン画面を表示できませんでした", isDebugBuild)
+                    },
+                )
             }
         }
     }
