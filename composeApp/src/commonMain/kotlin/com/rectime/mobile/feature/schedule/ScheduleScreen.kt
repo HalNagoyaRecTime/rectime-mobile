@@ -133,7 +133,7 @@ object ScheduleScreen : Screen {
 }
 
 @Composable
-private fun ScheduleScreenUI(
+internal fun ScheduleScreenUI(
     nowMinute: Int,
     onOpenEventDetail: (Int) -> Unit,
     events: List<TimelineEvent>,
@@ -185,6 +185,9 @@ private fun ScheduleScreenUI(
         }
     }
 
+    // 一度も表示できていない場合は、一時的なSnackbarだけで終わらせない。
+    val showsError = error != null && events.isEmpty() && !isLoading
+
     var hasAutoScrolled by remember { mutableStateOf(false) }
     val isDragged by lazyListState.interactionSource.collectIsDraggedAsState()
 
@@ -192,8 +195,8 @@ private fun ScheduleScreenUI(
         if (isDragged) hasAutoScrolled = true
     }
 
-    LaunchedEffect(isLoading, nowMinute) {
-        if (nowMinute in 0..1439 && !isLoading && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
+    LaunchedEffect(isLoading, showsError, nowMinute) {
+        if (nowMinute in 0..1439 && !isLoading && !showsError && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
             val totalHours = hourEnd - hourStart
             val clampedNowMinute = nowMinute.coerceIn(hourStart * 60, hourEnd * 60)
             val nowOffsetPx = with(density) { timelineGeometry.minuteY(clampedNowMinute).toPx() }
@@ -217,6 +220,7 @@ private fun ScheduleScreenUI(
             refreshEnabled = !isUpdating,
             onRefresh = onRefresh,
             contentBackground = {
+                if (showsError) return@RootScreenScaffold
                 // This surface and the list share the same bounce/refresh transform.
                 // Scroll changes timeline coordinates; pulling never changes them.
                 val pastColor = AppTheme.colors.pastAreaBackground
@@ -283,10 +287,21 @@ private fun ScheduleScreenUI(
                 }
             },
             horizontalPadding = false,
-            contentTopPadding = false,
+            contentTopPadding = showsError,
             contentBottomPadding = false,
             snackbarHostState = snackbarHostState,
         ) {
+            if (showsError) {
+                item {
+                    StatusMessage(
+                        message = error.orEmpty(),
+                        actionLabel = "再読み込み",
+                        onAction = onRefresh,
+                        actionEnabled = !isUpdating && !isRefreshing,
+                    )
+                }
+                return@RootScreenScaffold
+            }
             item {
                 Box(
                     modifier = Modifier
@@ -507,21 +522,6 @@ private fun ScheduleScreenUI(
                             .height(60.dp)
                     )
                 }
-            }
-        }
-
-        // 一度も表示できていない場合は、一時的なSnackbarだけで終わらせない。
-        if (error != null && events.isEmpty() && !isLoading) {
-            Box(
-                Modifier.fillMaxSize().padding(top = timelineTopPadding)
-                    .background(AppTheme.colors.commonBackground),
-            ) {
-                StatusMessage(
-                    message = error,
-                    actionLabel = "再読み込み",
-                    onAction = onRefresh,
-                    actionEnabled = !isUpdating && !isRefreshing,
-                )
             }
         }
 

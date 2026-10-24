@@ -1172,6 +1172,80 @@ class AuthViewModelTest {
         assertEquals(previous, viewModel.uiState.value.pendingAuth)
     }
 
+    // ---- handleAuthBrowserDismissed ----
+
+    @Test
+    fun authBrowserCanceledByUserClearsPendingAuth() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"auth_url":"https://login.microsoftonline.com/authorize"}""",
+                        status = HttpStatusCode.OK,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.startLogin()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNotNull(store.pendingAuth)
+
+        viewModel.handleAuthBrowserDismissed(canceledByUser = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertEquals(AUTH_CANCELED_MESSAGE, state.error)
+        assertNull(state.pendingAuth)
+        assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun authBrowserClosedWithoutCallbackReportsFailure() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        content = """{"auth_url":"https://login.microsoftonline.com/authorize"}""",
+                        status = HttpStatusCode.OK,
+                        headers = jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.startLogin()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleAuthBrowserDismissed(canceledByUser = false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(false, state.isLoading)
+        assertTrue(state.error.orEmpty().startsWith(AUTH_FAILED_MESSAGE), state.error.orEmpty())
+        assertNull(state.pendingAuth)
+        assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun authBrowserDismissalWithoutPendingAuthKeepsState() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage()
+        val viewModel = buildViewModel(failingApi(), store)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleAuthBrowserDismissed(canceledByUser = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.error)
+        assertNull(store.pendingAuth)
+    }
+
     // ---- handleCallbackUrl 正常系 ----
 
     @Test
@@ -1221,6 +1295,163 @@ class AuthViewModelTest {
         assertEquals("access-token", store.session?.accessToken)
         assertNull(store.pendingAuth)
     }
+
+    // ---- 学生情報が見つからない場合の案内(#389) ----
+
+    @Test
+    fun loginWithStudentProfileMissingShowsNotice() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(api = studentProfileMissingApi(), store = store)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    @Test
+    fun loginWithoutStudentProfileMissingDoesNotShowNotice() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(content = sessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
+                },
+            ),
+            store = store,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+        assertFalse(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    @Test
+    fun startupRestoreShowsStudentProfileMissingNotice() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(api = studentProfileMissingApi(), store = store)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    @Test
+    fun startupRestoreWithExpiredTokenShowsNoticeAfterRefresh() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        var meCalls = 0
+        val viewModel = buildViewModel(AuthApi(mockClient { request ->
+            if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                respond("""{"access_token":"new-token","refresh_token_id":"new-refresh","expires_in":7200}""", HttpStatusCode.OK, jsonHeaders)
+            } else if (++meCalls == 1) {
+                respond("expired", HttpStatusCode.Unauthorized)
+            } else {
+                respond(
+                    """{"user":{"id":"6","email":"nhs00123@example.com","display_name":"テスト太郎","student_profile_missing":true}}""",
+                    HttpStatusCode.OK,
+                    jsonHeaders,
+                )
+            }
+        }), store)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("new-token", viewModel.uiState.value.session?.accessToken)
+        assertTrue(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    @Test
+    fun startupRestoreWithoutStudentProfileMissingDoesNotShowNotice() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(
+            api = AuthApi(
+                mockClient {
+                    respond(
+                        """{"user":{"id":"6","email":"test@example.com","display_name":"テスト太郎","is_student":true}}""",
+                        HttpStatusCode.OK,
+                        jsonHeaders,
+                    )
+                },
+            ),
+            store = store,
+        )
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    @Test
+    fun foregroundAfterDismissingStartupNoticeDoesNotShowItAgain() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(session = storedSession)
+        val viewModel = buildViewModel(api = studentProfileMissingApi(), store = store)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.dismissStudentProfileMissingNotice()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+        assertFalse(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    @Test
+    fun dismissedNoticeIsNotShownAgainDuringSameLogin() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(api = studentProfileMissingApi(), store = store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.dismissStudentProfileMissingNotice()
+        viewModel.onForeground()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+        assertFalse(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    @Test
+    fun loginAgainAfterLogoutShowsNoticeAgain() = runTest(testDispatcher) {
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(api = studentProfileMissingApi(), store = store)
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.dismissStudentProfileMissingNotice()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertNull(viewModel.uiState.value.session)
+        assertFalse(viewModel.uiState.value.showStudentProfileMissingNotice)
+
+        store.pendingAuth = PendingAuth("state-def", "verifier-456")
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-def")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.showStudentProfileMissingNotice)
+    }
+
+    private fun studentProfileMissingApi() = AuthApi(
+        mockClient { request ->
+            val path = request.url.encodedPath
+            when {
+                path.endsWith("/auth/microsoft/token") ->
+                    respond(content = studentProfileMissingSessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
+                path.endsWith("/auth/logout") ->
+                    respond(content = "", status = HttpStatusCode.NoContent)
+                else -> respond(
+                    content = """{"user":{"id":"6","email":"nhs00123@example.com","display_name":"テスト太郎","student_profile_missing":true}}""",
+                    status = HttpStatusCode.OK,
+                    headers = jsonHeaders,
+                )
+            }
+        },
+    )
 
     @Test
     fun handleCallbackUrlLoadsPendingAuthFromStorageBeforeRestoreCompletes() = runTest(testDispatcher) {
@@ -1982,6 +2213,20 @@ class AuthViewModelTest {
                 "email": "test@example.com",
                 "display_name": "テスト太郎",
                 "is_student": true
+              }
+            }
+        """.trimIndent()
+
+        val studentProfileMissingSessionJson = """
+            {
+              "access_token": "access-token",
+              "refresh_token_id": "refresh-token-id",
+              "expires_in": 3600,
+              "user": {
+                "id": "6",
+                "email": "nhs00123@example.com",
+                "display_name": "テスト太郎",
+                "student_profile_missing": true
               }
             }
         """.trimIndent()

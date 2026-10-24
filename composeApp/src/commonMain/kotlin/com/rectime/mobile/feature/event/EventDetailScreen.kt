@@ -75,6 +75,7 @@ private val ContentBottomSpacing = 48.dp
 private val EventDetailBackground = Color(0xFFF7F7F7)
 
 private val TitleFontSize = 28.sp
+private val TitleLineHeight = TitleFontSize * 1.3f
 private val BodyFontSize = 16.sp
 
 data class EventDetailScreen(val eventId: Int) : Screen {
@@ -254,12 +255,19 @@ private fun EventTitleBand(
                 modifier = Modifier.weight(1f).onSizeChanged { onTitleHeightChanged(it.height) },
                 color = AppTheme.colors.textThemeColorSecond,
                 fontSize = TitleFontSize,
-                lineHeight = TitleFontSize * 1.3f,
+                lineHeight = TitleLineHeight,
                 fontWeight = FontWeight.Black,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            status?.let { OverviewStatus(it) }
+            status?.let {
+                Box(
+                    Modifier.height(with(LocalDensity.current) { TitleLineHeight.toDp() }),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
+                    OverviewStatus(it)
+                }
+            }
         }
         Spacer(Modifier.height(8.dp))
         overview()
