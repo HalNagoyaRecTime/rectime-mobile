@@ -4,7 +4,7 @@ import com.rectime.mobile.feature.auth.AuthUser
 
 internal data class AccountProfileDetail(val label: String, val value: String)
 
-/** 1要素が画面上の1行。学籍番号と所属クラスは横に並べ、担当クラスは別の行にする。 */
+/** 1要素が画面上の1行。学籍番号と所属クラスは横に並べ、担当クラスは1クラスずつ縦に並べる。 */
 internal fun accountProfileDetailRows(user: AuthUser): List<List<AccountProfileDetail>> = buildList {
     if (user.isStudent) {
         val student = buildList {
@@ -16,6 +16,6 @@ internal fun accountProfileDetailRows(user: AuthUser): List<List<AccountProfileD
     if (user.isTeacher) {
         val codes = user.teacher?.classRooms.orEmpty().map { it.classCode.trim() }
             .filter { it.isNotEmpty() }.distinct()
-        if (codes.isNotEmpty()) add(listOf(AccountProfileDetail("担当クラス", codes.joinToString("、"))))
+        if (codes.isNotEmpty()) add(listOf(AccountProfileDetail("担当クラス", codes.joinToString("\n"))))
     }
 }
