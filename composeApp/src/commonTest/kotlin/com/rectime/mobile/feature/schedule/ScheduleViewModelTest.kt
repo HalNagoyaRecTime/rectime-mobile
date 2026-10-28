@@ -1279,6 +1279,19 @@ class ScheduleViewModelTest {
     }
 
     @Test
+    fun nowMinuteDefaultsToEventTimeZone() = runTest(testDispatcher) {
+        val viewModel = ScheduleViewModel(
+            client = mockClient { respondJson(eventsJson) },
+            baseUrl = "https://api.example.com",
+            clock = FakeClock(Instant.parse("2026-04-28T00:30:00Z")),
+            cache = LocalCache(InMemoryKeyValueStore()),
+            myEventsGateway = participationGateway { emptySet() },
+        )
+
+        assertEquals(9 * 60 + 30, viewModel.nowMinute.value)
+    }
+
+    @Test
     fun nowMinuteAdvancesWhenMinuteChanges() = runTest(testDispatcher) {
         val clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z"))
         val viewModel = buildViewModel(mockClient { respondJson(eventsJson) }, clock = clock)
