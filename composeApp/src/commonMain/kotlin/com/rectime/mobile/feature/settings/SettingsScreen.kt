@@ -146,7 +146,7 @@ class SettingsScreen(
                     userId = session.user.id,
                     displayName = session.user.displayName,
                     email = session.user.email,
-                    details = accountProfileDetails(session.user),
+                    detailRows = accountProfileDetailRows(session.user),
                 )
             }
 
@@ -313,7 +313,7 @@ private fun UserInfoHeader(
     userId: String,
     displayName: String,
     email: String,
-    details: List<AccountProfileDetail>,
+    detailRows: List<List<AccountProfileDetail>>,
     modifier: Modifier = Modifier,
 ) {
     val preference = remember(userId) { AvatarPreference(userId) }
@@ -389,14 +389,21 @@ private fun UserInfoHeader(
                     fontSize = 13.sp,
                     color = AppTheme.colors.textSecondary,
                 )
-                if (details.isNotEmpty()) {
+                if (detailRows.isNotEmpty()) {
                     Spacer(Modifier.height(AppTheme.spacing.md))
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                     ) {
-                        details.forEach { detail ->
-                            ProfileDetailRow(detail.label, detail.value, Modifier.fillMaxWidth())
+                        detailRows.forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                            ) {
+                                row.forEach { detail ->
+                                    ProfileDetailRow(detail.label, detail.value, Modifier.weight(1f, fill = false))
+                                }
+                            }
                         }
                     }
                 }
