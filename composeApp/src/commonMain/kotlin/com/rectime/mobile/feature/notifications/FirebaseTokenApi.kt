@@ -15,10 +15,10 @@ import kotlinx.serialization.Serializable
 
 class FirebaseTokenApi(
     private val client: HttpClient = createAppHttpClient(),
-    private val baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
     private val headersProvider: (String, String) -> Map<String, String>? = ::mobileAuthHeaders,
 ) {
-    private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/firebase-tokens"
+    private val endpoint get() = "${baseUrl().trimEnd('/')}/api/v1/firebase-tokens"
 
     suspend fun register(
         fcmToken: String,

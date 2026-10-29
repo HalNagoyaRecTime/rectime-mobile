@@ -2,8 +2,11 @@ package com.rectime.mobile.core.config
 
 expect val apiBaseUrlResult: ApiBaseUrlResult
 
-val apiBaseUrl: String
+internal val nagoyaApiBaseUrl: String
     get() = (apiBaseUrlResult as? ApiBaseUrlResult.Valid)?.url.orEmpty()
+
+val apiBaseUrl: String
+    get() = campusApiBaseUrl(CurrentCampus.campus, appEnvironment, nagoyaApiBaseUrl).orEmpty()
 
 val apiBaseUrlConfigurationError: String?
     get() = (apiBaseUrlResult as? ApiBaseUrlResult.Invalid)?.reason
@@ -22,4 +25,4 @@ expect val appDisplayName: String
 
 // フォームの転送先はAPI側で管理する。ブラウザで開く公開エンドポイント。
 internal val contactFormUrl: String
-    get() = "${apiBaseUrl.trimEnd('/')}/app/contact"
+    get() = "${nagoyaApiBaseUrl.trimEnd('/')}/app/contact"

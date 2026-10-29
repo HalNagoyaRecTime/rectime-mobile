@@ -45,7 +45,7 @@ class RankingViewModel(
     initialMyTeamId: Int? = null,
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
-    private val baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         RankingUiState(
@@ -143,7 +143,7 @@ class RankingViewModel(
                         fetchWithCacheFirst(
                             fetchLive = {
                                 cache.requests.run(RANKING_CACHE_KEY) {
-                                    fetchAllRankings(httpClient, baseUrl).also { value ->
+                                    fetchAllRankings(httpClient, baseUrl()).also { value ->
                                         try { cache.saveFetched(RANKING_CACHE_KEY, value) }
                                         catch (e: CancellationException) { throw e }
                                         catch (_: Exception) { }

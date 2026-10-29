@@ -26,7 +26,7 @@ internal class EventScheduleStore(
     private val cache: LocalCache = LocalCache(),
     private val client: HttpClient = createAppHttpClient(),
     private val myEvents: MyEventsGateway = MyEventsApi(client = client),
-    private val baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
     private val clock: Clock = Clock.System,
 ) {
     companion object {
@@ -119,7 +119,7 @@ internal class EventScheduleStore(
             val eventCache = EventCache(cache)
             val cacheRequest = eventCache.beginRequest()
             try {
-                val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events/$eventId")
+                val response = client.get("${baseUrl().trimEnd('/')}/api/v1/events/$eventId")
                 if (!response.status.isSuccess()) throw apiErrorException(response.status, response.bodyAsText())
                 val detail = response.body<EventDetailResponse>()
                 checkNotNull(detail.rounds) { "イベント詳細のroundsがありません" }

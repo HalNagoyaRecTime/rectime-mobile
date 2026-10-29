@@ -216,7 +216,7 @@ class AuthApiTest {
                     headers = jsonHeaders,
                 )
             },
-            baseUrl = "https://api.example.test",
+            baseUrl = { "https://api.example.test" },
         )
 
         val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
@@ -602,9 +602,9 @@ class AuthApiTest {
                 }
                 respond(content, HttpStatusCode.OK, jsonHeaders)
             }) {
-                install(MobileAuthHeadersPlugin) { baseUrl = BASE }
+                install(MobileAuthHeadersPlugin) { baseUrl = { BASE } }
             },
-            baseUrl = BASE,
+            baseUrl = { BASE },
         )
         try {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")

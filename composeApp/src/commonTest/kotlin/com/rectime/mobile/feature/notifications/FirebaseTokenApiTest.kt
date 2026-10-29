@@ -96,7 +96,7 @@ class FirebaseTokenApiTest {
 
     private fun testApi(client: HttpClient) = FirebaseTokenApi(
         client = client,
-        baseUrl = testBaseUrl,
+        baseUrl = { testBaseUrl },
         headersProvider = { url, token -> mobileAuthHeaders(url, token, testBaseUrl) },
     )
 

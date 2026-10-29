@@ -85,6 +85,8 @@ rectime-mobile/
 | ステージング | `rectime-api-staging` | `staging.recwatch.pages.dev` | `staging` | `Staging` |
 | リリース | `rectime-api` | `recwatch.pages.dev` | `release` | `Release` |
 
+- 表の接続先 API は名古屋のもの。ログイン中の学校が大阪・東京なら、その学校の API
+  （`rectime-api.recreation-osaka.workers.dev` など）に切り替わる。デバッグには名古屋の API しか無い。
 - デバッグだけは接続先を差し替えられる。ローカルの `wrangler dev` に繋ぐときは、Android は
   `local.properties` の `API_BASE_URL`、iOS は `Local.xcconfig` の `DEBUG_API_BASE_URL` を指定する。
 - ステージングはリリースと同じ非デバッグのbuildで、Android はアップロード鍵ではなく debug 鍵で署名する。

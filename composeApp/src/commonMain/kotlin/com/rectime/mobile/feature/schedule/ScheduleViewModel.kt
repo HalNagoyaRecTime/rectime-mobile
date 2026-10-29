@@ -49,7 +49,7 @@ private const val EVENTS_PAGE_SIZE = 100
 @OptIn(ExperimentalTime::class)
 class ScheduleViewModel internal constructor(
     private val client: HttpClient = createAppHttpClient(),
-    private val baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
     private val clock: Clock = Clock.System,
     private val timeZone: TimeZone = EventTimeZone,
     private val cache: LocalCache = LocalCache(),
@@ -324,7 +324,7 @@ class ScheduleViewModel internal constructor(
         var offset = 0
         var eventDate: String? = null
         do {
-            val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events") {
+            val response = client.get("${baseUrl().trimEnd('/')}/api/v1/events") {
                 parameter("limit", EVENTS_PAGE_SIZE)
                 parameter("offset", offset)
             }

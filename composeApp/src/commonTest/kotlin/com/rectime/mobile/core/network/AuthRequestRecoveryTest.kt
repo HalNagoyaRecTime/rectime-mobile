@@ -34,7 +34,7 @@ class AuthRequestRecoveryTest {
         val body = """{"error":{"code":"USER_DEACTIVATED","message":"無効化されています"}}"""
         val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Unauthorized) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { refreshes++; "new-token" }
                 accountDeactivated = { rejectedTokens += it }
             }
@@ -59,7 +59,7 @@ class AuthRequestRecoveryTest {
             respond(if (calls == 1) "expired" else body, HttpStatusCode.Unauthorized)
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { "new-token" }
                 accountDeactivated = { rejectedTokens += it }
             }
@@ -78,7 +78,7 @@ class AuthRequestRecoveryTest {
         val body = """{"error":{"code":"USER_DEACTIVATED","message":"無効化されています"}}"""
         val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Unauthorized) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 accountDeactivated = { deactivations++ }
             }
         }
@@ -95,7 +95,7 @@ class AuthRequestRecoveryTest {
         val body = """{"error":{"code":"USER_DEACTIVATED","message":"無効化されています"}}"""
         val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Unauthorized) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 accountDeactivated = { deactivations++ }
             }
         }
@@ -113,7 +113,7 @@ class AuthRequestRecoveryTest {
         val body = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"無効化されています"}}"""
         val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Gone) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { refreshes++; "new-token" }
                 accountDeleted = { rejectedTokens += it }
             }
@@ -138,7 +138,7 @@ class AuthRequestRecoveryTest {
             respond(if (calls == 1) "expired" else body, if (calls == 1) HttpStatusCode.Unauthorized else HttpStatusCode.Gone)
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { "new-token" }
                 accountDeleted = { rejectedTokens += it }
             }
@@ -157,7 +157,7 @@ class AuthRequestRecoveryTest {
         val body = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"無効化されています"}}"""
         val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Gone) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 accountDeleted = { deletions++ }
             }
         }
@@ -174,7 +174,7 @@ class AuthRequestRecoveryTest {
         val body = """{"error":{"code":"ACCOUNT_DELETION_PENDING","message":"無効化されています"}}"""
         val client = HttpClient(MockEngine { respond(body, HttpStatusCode.Gone) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 accountDeleted = { deletions++ }
             }
         }
@@ -193,7 +193,7 @@ class AuthRequestRecoveryTest {
             respond("""{"error":{"code":"EVENT_GONE"}}""", HttpStatusCode.Gone)
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { refreshes++; "new-token" }
                 accountDeleted = { deletions++ }
             }
@@ -216,7 +216,7 @@ class AuthRequestRecoveryTest {
             else respond("notifications", HttpStatusCode.OK)
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { token ->
                     assertEquals("old-token", token)
                     refreshes++
@@ -242,7 +242,7 @@ class AuthRequestRecoveryTest {
             respond("expired", HttpStatusCode.Unauthorized)
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { refreshes++; "new-token" }
             }
         }
@@ -261,7 +261,7 @@ class AuthRequestRecoveryTest {
         var refreshes = 0
         val client = HttpClient(MockEngine { respond("expired", HttpStatusCode.Unauthorized) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { refreshes++; "new-token" }
             }
         }
@@ -282,7 +282,7 @@ class AuthRequestRecoveryTest {
             var requests = 0
             val client = HttpClient(MockEngine { requests++; respond("expired", HttpStatusCode.Unauthorized) }) {
                 install(MobileAuthHeadersPlugin) {
-                    baseUrl = BASE
+                    baseUrl = { BASE }
                     refreshToken = { token }
                 }
             }
@@ -300,7 +300,7 @@ class AuthRequestRecoveryTest {
         var requests = 0
         val client = HttpClient(MockEngine { requests++; respond("expired", HttpStatusCode.Unauthorized) }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { throw CancellationException("画面を閉じた") }
             }
         }
@@ -325,7 +325,7 @@ class AuthRequestRecoveryTest {
             respond("result", if (requests == 1) HttpStatusCode.Unauthorized else HttpStatusCode.OK)
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { "new-token" }
             }
         }
@@ -352,7 +352,7 @@ class AuthRequestRecoveryTest {
             }
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = BASE
+                baseUrl = { BASE }
                 refreshToken = { refreshes++; "new-token" }
             }
         }
@@ -375,7 +375,7 @@ class AuthRequestRecoveryTest {
                 request.headers.getAll(HttpHeaders.Authorization).orEmpty()
             respond("", HttpStatusCode.OK)
         }) {
-            install(MobileAuthHeadersPlugin) { baseUrl = BASE }
+            install(MobileAuthHeadersPlugin) { baseUrl = { BASE } }
         }
         try {
             client.post("$BASE/api/v1/auth/refresh") { header("X-Client-Type", "mobile") }
@@ -397,7 +397,35 @@ class AuthRequestRecoveryTest {
         }
     }
 
+    @Test
+    fun attachesTokenOnlyToTheCurrentCampusApi() = runTest {
+        val sent = mutableListOf<Pair<String, String?>>()
+        SessionTokenHolder.accessToken = "session-token"
+        var currentBase = BASE
+        val client = HttpClient(MockEngine { request ->
+            sent += request.url.host to request.headers[HttpHeaders.Authorization]
+            respond("", HttpStatusCode.OK)
+        }) {
+            install(MobileAuthHeadersPlugin) { baseUrl = { currentBase } }
+        }
+        try {
+            currentBase = OTHER_CAMPUS_BASE
+            client.get("$OTHER_CAMPUS_BASE/api/v1/events")
+            client.get("$BASE/api/v1/events")
+            assertEquals(
+                listOf(
+                    "other-campus.example.test" to "Bearer session-token",
+                    "api.example.test" to null,
+                ),
+                sent,
+            )
+        } finally {
+            client.close()
+        }
+    }
+
     private companion object {
         const val BASE = "https://api.example.test"
+        const val OTHER_CAMPUS_BASE = "https://other-campus.example.test"
     }
 }
