@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.rectime.mobile.core.cache.CacheFreshness
 import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
 import com.rectime.mobile.core.cache.CacheRequestGeneration
+import com.rectime.mobile.core.cache.FetchTrigger
+import com.rectime.mobile.core.cache.canReuse
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.LocalCache
@@ -37,6 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 
 private const val RANKING_CACHE_KEY = "rankings_v1"
 private const val RANKING_PAGE_SIZE = 100
@@ -46,6 +50,7 @@ class RankingViewModel(
     private val httpClient: HttpClient = createAppHttpClient(),
     private val cache: LocalCache = LocalCache(),
     private val baseUrl: () -> String = { apiBaseUrl },
+    private val clock: Clock = Clock.System,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         RankingUiState(
@@ -64,9 +69,10 @@ class RankingViewModel(
         }
     }.loadingVisibility().stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    fun onEnter() = fetchRankings(afterCurrent = false)
+    /** ランキング画面が表示されたとき(タブ切り替え・前面復帰)だけ呼ぶ。他の画面では取得しない。 */
+    fun onVisible() = fetchRankings(afterCurrent = false, trigger = FetchTrigger.Automatic)
 
-    fun refresh() = fetchRankings(isHeaderRefresh = true)
+    fun refresh() = fetchRankings(isHeaderRefresh = true, trigger = FetchTrigger.Manual)
 
     // ログイン中のユーザーが後から解決される(セッションのユーザー情報が
     // 再取得で更新される)場合があるため、コンストラクタでの固定値ではなく
@@ -88,7 +94,6 @@ class RankingViewModel(
                 }
             }
         }
-        fetchRankings(afterCurrent = false)
     }
 
     // 所属チームIDが取得済みのランキングより後から解決した場合に、既に表示中の
@@ -106,14 +111,15 @@ class RankingViewModel(
         }
     }
 
-    fun onForeground() = fetchRankings()
+    // 取得はランキング画面の表示時に任せ、ログイン直後には通信しない。
+    fun onSession(myTeamId: Int?) = updateMyTeamId(myTeamId)
 
-    fun onSession(myTeamId: Int?) {
-        updateMyTeamId(myTeamId)
-        if (!contentSession.isCurrent) fetchRankings()
-    }
-
-    fun fetchRankings(isPullRefresh: Boolean = false, afterCurrent: Boolean = true, isHeaderRefresh: Boolean = false) {
+    internal fun fetchRankings(
+        isPullRefresh: Boolean = false,
+        afterCurrent: Boolean = true,
+        isHeaderRefresh: Boolean = false,
+        trigger: FetchTrigger = FetchTrigger.Required,
+    ) {
         val generationAtStart = CacheGeneration.value
         if (displayedGeneration != generationAtStart) {
             _uiState.value = RankingUiState(isLoading = true)
@@ -142,7 +148,7 @@ class RankingViewModel(
                     val result = request.validate(withMinimumRefreshDuration(isPullRefresh || isHeaderRefresh) {
                         fetchWithCacheFirst(
                             fetchLive = {
-                                cache.requests.run(RANKING_CACHE_KEY) {
+                                reusableRankings(trigger) ?: cache.requests.run(RANKING_CACHE_KEY) {
                                     fetchAllRankings(httpClient, baseUrl()).also { value ->
                                         try { cache.saveFetched(RANKING_CACHE_KEY, value) }
                                         catch (e: CancellationException) { throw e }
@@ -222,6 +228,16 @@ class RankingViewModel(
                 }
             }
         }
+    }
+
+    /** 有効期間内の保存値は通信せずに使い、得点の修正も最大で有効期間内に反映する。 */
+    private suspend fun reusableRankings(trigger: FetchTrigger): RankingsResponse? {
+        if (trigger == FetchTrigger.Required) return null
+        cache.requests.awaitCurrent(RANKING_CACHE_KEY)
+        val saved = try { cache.loadEntry<RankingsResponse>(RANKING_CACHE_KEY) }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { null }
+        return saved?.takeIf { it.data.isComplete() && it.canReuse(trigger, CacheFreshness.Ranking, clock) }?.data
     }
 
     override fun onCleared() {

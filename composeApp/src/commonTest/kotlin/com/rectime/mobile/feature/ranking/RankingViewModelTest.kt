@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.ranking
 
 import com.rectime.mobile.core.cache.CacheGeneration
+import com.rectime.mobile.core.cache.FetchTrigger
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import io.ktor.client.HttpClient
@@ -29,6 +30,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RankingViewModelTest {
@@ -283,7 +288,7 @@ class RankingViewModelTest {
             respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", 10)))
         })
         testDispatcher.scheduler.runCurrent()
-        viewModel.onForeground()
+        viewModel.onVisible()
         viewModel.fetchRankings()
         viewModel.fetchRankings(isPullRefresh = true)
         testDispatcher.scheduler.runCurrent()
@@ -532,7 +537,7 @@ class RankingViewModelTest {
     }
 
     @Test
-    fun newSessionReloadsWithoutWaitingForManualRefresh() = runTest(testDispatcher) {
+    fun newSessionReloadsWhenRankingScreenIsShownWithoutManualRefresh() = runTest(testDispatcher) {
         var calls = 0
         val cache = LocalCache(InMemoryKeyValueStore())
         val viewModel = buildViewModel(cache = cache, client = mockClient {
@@ -543,21 +548,27 @@ class RankingViewModelTest {
         cache.clearAll()
         viewModel.onSession(2)
         testDispatcher.scheduler.advanceUntilIdle()
+        // ログイン直後はランキング画面を開くまで通信しない。
+        assertEquals(1, calls)
+        viewModel.onVisible()
+        testDispatcher.scheduler.advanceUntilIdle()
         assertEquals(2, calls)
         assertTrue(viewModel.uiState.value.rankingItems.single().isMyTeam)
     }
 
     @Test
-    fun foregroundRefreshKeepsDisplayedItemsWithoutPullIndicator() = runTest(testDispatcher) {
+    fun visibleRefreshAfterReusePeriodKeepsDisplayedItemsWithoutPullIndicator() = runTest(testDispatcher) {
         var calls = 0
         val gate = CompletableDeferred<Unit>()
-        val viewModel = buildViewModel(client = mockClient {
+        val clock = MutableClock(Instant.parse("2026-11-01T02:00:00Z"))
+        val viewModel = buildViewModel(clock = clock, client = mockClient {
             calls++
             if (calls > 1) gate.await()
             respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", calls * 100)))
         })
         testDispatcher.scheduler.advanceUntilIdle()
-        viewModel.onForeground()
+        clock.instant += 5.minutes
+        viewModel.onVisible()
         testDispatcher.scheduler.runCurrent()
         assertEquals(100, viewModel.uiState.value.rankingItems.single().score)
         assertFalse(viewModel.uiState.value.isRefreshing)
@@ -632,15 +643,74 @@ class RankingViewModelTest {
         assertEquals("最新", viewModel.uiState.value.rankingItems.single().teamName)
     }
 
+    @Test
+    fun visibleRankingReusesSavedValueForFiveMinutes() = runTest(testDispatcher) {
+        var calls = 0
+        val clock = MutableClock(Instant.parse("2026-11-01T02:00:00Z"))
+        val viewModel = buildViewModel(clock = clock, client = mockClient {
+            calls++
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", calls * 100)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        clock.instant += 4.minutes + 59.seconds
+        viewModel.onVisible()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        assertEquals(100, viewModel.uiState.value.rankingItems.single().score)
+        clock.instant += 1.seconds
+        viewModel.onVisible()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals(200, viewModel.uiState.value.rankingItems.single().score)
+    }
+
+    @Test
+    fun manualRefreshFetchesAfterOneMinuteCooldownEvenWithinReusePeriod() = runTest(testDispatcher) {
+        var calls = 0
+        val clock = MutableClock(Instant.parse("2026-11-01T02:00:00Z"))
+        val viewModel = buildViewModel(clock = clock, client = mockClient {
+            calls++
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", calls * 100)))
+        })
+        testDispatcher.scheduler.advanceUntilIdle()
+        clock.instant += 59.seconds
+        viewModel.fetchRankings(isPullRefresh = true, trigger = FetchTrigger.Manual)
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, calls)
+        assertFalse(viewModel.uiState.value.isRefreshing)
+        clock.instant += 1.seconds
+        viewModel.fetchRankings(isPullRefresh = true, trigger = FetchTrigger.Manual)
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, calls)
+        assertEquals(200, viewModel.uiState.value.rankingItems.single().score)
+    }
+
+    @Test
+    fun creatingViewModelDoesNotFetchUntilRankingScreenIsShown() = runTest(testDispatcher) {
+        var calls = 0
+        RankingViewModel(httpClient = mockClient {
+            calls++
+            respondJson(rankingsJsonOf(RankingFixture(1, 10, "チーム", 100)))
+        }, cache = LocalCache(InMemoryKeyValueStore()))
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(0, calls)
+    }
+
+    private class MutableClock(var instant: Instant) : Clock { override fun now() = instant }
+
+    // ランキング画面を開いた状態から始めるため、作成直後に一度取得する。
     private fun buildViewModel(
         client: HttpClient,
         initialMyTeamId: Int? = null,
-        cache: LocalCache = LocalCache(InMemoryKeyValueStore()),
+        clock: Clock = Clock.System,
+        cache: LocalCache = LocalCache(InMemoryKeyValueStore(), clock),
     ) = RankingViewModel(
         initialMyTeamId = initialMyTeamId,
         httpClient = client,
         cache = cache,
-    )
+        clock = clock,
+    ).also { it.fetchRankings(afterCurrent = false) }
 
     private fun mockClient(
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
