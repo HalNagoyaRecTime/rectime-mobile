@@ -2,9 +2,9 @@ package com.rectime.mobile.core.config
 
 enum class Campus { NAGOYA, OSAKA, TOKYO }
 
-internal fun campusApiBaseUrl(campus: Campus, environment: AppEnvironment, nagoyaApiBaseUrl: String): String? =
+internal fun campusApiBaseUrl(campus: Campus, environment: AppEnvironment, nagoyaUrl: String): String? =
     when (campus) {
-        Campus.NAGOYA -> nagoyaApiBaseUrl
+        Campus.NAGOYA -> nagoyaUrl
         Campus.OSAKA -> when (environment) {
             AppEnvironment.Production -> "https://rectime-api.recreation-osaka.workers.dev"
             AppEnvironment.Staging -> "https://rectime-api-staging.recreation-osaka.workers.dev"
@@ -17,10 +17,10 @@ internal fun campusApiBaseUrl(campus: Campus, environment: AppEnvironment, nagoy
         }
     }
 
-internal fun campusFromCode(code: String, environment: AppEnvironment, nagoyaApiBaseUrl: String): Campus? =
+internal fun campusFromCode(code: String, environment: AppEnvironment, nagoyaUrl: String): Campus? =
     Campus.entries
         .firstOrNull { it.name == code }
-        ?.takeIf { campusApiBaseUrl(it, environment, nagoyaApiBaseUrl) != null }
+        ?.takeIf { campusApiBaseUrl(it, environment, nagoyaUrl) != null }
 
 object CurrentCampus {
     var campus: Campus = Campus.NAGOYA

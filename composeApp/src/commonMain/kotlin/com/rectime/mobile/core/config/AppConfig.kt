@@ -24,5 +24,6 @@ internal const val DefaultAppDisplayName = "RE:CREATION"
 expect val appDisplayName: String
 
 // フォームの転送先はAPI側で管理する。ブラウザで開く公開エンドポイント。
+// apiBaseUrl にすると他校の問い合わせ先を開くため、学校によらず名古屋の API を使う。
 internal val contactFormUrl: String
     get() = "${nagoyaApiBaseUrl.trimEnd('/')}/app/contact"

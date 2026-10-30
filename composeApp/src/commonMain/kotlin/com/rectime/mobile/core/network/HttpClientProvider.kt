@@ -50,7 +50,8 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
         }
     }
     on(Send) { request ->
-        val targetsApi = isApiUrl(request.url.toString(), baseUrl())
+        val base = baseUrl()
+        val targetsApi = isApiUrl(request.url.toString(), base)
         val originalCall = proceed(request)
         val url = originalCall.request.url.toString()
         val requestToken = originalCall.request.headers[HttpHeaders.Authorization]
@@ -59,10 +60,10 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
             ?.takeIf(String::isNotBlank)
         // 別ホストや認証APIには更新・再試行を適用しない。
         if (originalCall.response.status.value !in setOf(401, 410) || requestToken == null ||
-            !targetsApi || !isApiUrl(url, baseUrl())
+            !targetsApi || !isApiUrl(url, base)
         ) return@on originalCall
 
-        val authPath = isAuthApiPath(url, baseUrl())
+        val authPath = isAuthApiPath(url, base)
         val path = Url(url).encodedPath
         // ログイン前の認証APIの拒否を、現在のログインへの拒否と取り違えない。
         if (authPath && path !in setOf("/api/v1/auth/me", "/api/v1/auth/me/photo")) return@on originalCall
@@ -82,7 +83,7 @@ internal val MobileAuthHeadersPlugin = createClientPlugin(
         request.headers.append(HttpHeaders.Authorization, "Bearer $refreshed")
         // 再試行した結果が401でも、元のリクエストにつき一度だけ。
         val retriedCall = proceed(request)
-        if (retriedCall.response.status.value in setOf(401, 410) && isApiUrl(retriedCall.request.url.toString(), baseUrl())) {
+        if (retriedCall.response.status.value in setOf(401, 410) && isApiUrl(retriedCall.request.url.toString(), base)) {
             val retriedErrorCode = apiErrorException(retriedCall.response.status, retriedCall.response.bodyAsText()).code
             val retriedRejection = accountRejectionMessage(retriedCall.response.status.value, retriedErrorCode)
             if (retriedRejection != null) {

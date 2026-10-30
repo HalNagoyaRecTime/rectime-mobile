@@ -2,7 +2,6 @@ package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
-import com.rectime.mobile.core.network.mobileAuthHeaders
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -97,7 +96,6 @@ class FirebaseTokenApiTest {
     private fun testApi(client: HttpClient) = FirebaseTokenApi(
         client = client,
         baseUrl = { testBaseUrl },
-        headersProvider = { url, token -> mobileAuthHeaders(url, token, testBaseUrl) },
     )
 
     private fun mockAppHttpClient(

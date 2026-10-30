@@ -409,16 +409,43 @@ class AuthRequestRecoveryTest {
             install(MobileAuthHeadersPlugin) { baseUrl = { currentBase } }
         }
         try {
-            currentBase = OTHER_CAMPUS_BASE
-            client.get("$OTHER_CAMPUS_BASE/api/v1/events")
             client.get("$BASE/api/v1/events")
+            currentBase = OTHER_CAMPUS_BASE
+            client.get("$BASE/api/v1/events")
+            client.get("$OTHER_CAMPUS_BASE/api/v1/events")
             assertEquals(
                 listOf(
-                    "other-campus.example.test" to "Bearer session-token",
+                    "api.example.test" to "Bearer session-token",
                     "api.example.test" to null,
+                    "other-campus.example.test" to "Bearer session-token",
                 ),
                 sent,
             )
+        } finally {
+            client.close()
+        }
+    }
+
+    @Test
+    fun refreshesOnlyForTheCurrentCampusApi() = runTest {
+        var refreshes = 0
+        SessionTokenHolder.accessToken = "old-token"
+        var currentBase = BASE
+        val client = HttpClient(MockEngine { request ->
+            val authorization = request.headers[HttpHeaders.Authorization]
+            respond("", if (authorization == "Bearer old-token") HttpStatusCode.Unauthorized else HttpStatusCode.OK)
+        }) {
+            install(MobileAuthHeadersPlugin) {
+                baseUrl = { currentBase }
+                refreshToken = { refreshes++; "new-token" }
+            }
+        }
+        try {
+            currentBase = OTHER_CAMPUS_BASE
+            assertEquals(HttpStatusCode.OK, client.get("$OTHER_CAMPUS_BASE/api/v1/events").status)
+            assertEquals(1, refreshes)
+            client.get("$BASE/api/v1/events") { header(HttpHeaders.Authorization, "Bearer old-token") }
+            assertEquals(1, refreshes)
         } finally {
             client.close()
         }
