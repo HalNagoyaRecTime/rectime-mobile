@@ -1118,7 +1118,7 @@ class ScheduleViewModelTest {
             else respondJson("""{"error":{"code":"UNAUTHORIZED"}}""", HttpStatusCode.Unauthorized)
         }.config {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = "https://api.example.com"
+                baseUrl = { "https://api.example.com" }
                 refreshToken = {
                     refreshes++
                     refreshGate.await()
@@ -1282,7 +1282,7 @@ class ScheduleViewModelTest {
     fun nowMinuteDefaultsToEventTimeZone() = runTest(testDispatcher) {
         val viewModel = ScheduleViewModel(
             client = mockClient { respondJson(eventsJson) },
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             clock = FakeClock(Instant.parse("2026-04-28T00:30:00Z")),
             cache = LocalCache(InMemoryKeyValueStore()),
             myEventsGateway = participationGateway { emptySet() },
@@ -1342,7 +1342,7 @@ class ScheduleViewModelTest {
         val viewModel = buildViewModel(
             client,
             myEventsGateway = com.rectime.mobile.core.network.MyEventsApi(
-                client, "https://api.example.com", { "access-token" },
+                client, { "https://api.example.com" }, { "access-token" },
             ),
         )
         viewModel.fetchEvents()
@@ -1466,7 +1466,7 @@ class ScheduleViewModelTest {
         myEventsGateway: MyEventsGateway = participationGateway { emptySet() },
     ) = ScheduleViewModel(
         client = client,
-        baseUrl = "https://api.example.com",
+        baseUrl = { "https://api.example.com" },
         clock = clock,
         timeZone = timeZone,
         cache = cache,

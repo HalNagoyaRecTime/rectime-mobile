@@ -22,10 +22,10 @@ internal interface MyEventsGateway {
 
 internal class MyEventsApi(
     private val client: HttpClient = createAppHttpClient(),
-    baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
     private val accessTokenProvider: () -> String? = { SessionTokenHolder.accessToken },
 ) : MyEventsGateway {
-    private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/me/events"
+    private val endpoint get() = "${baseUrl().trimEnd('/')}/api/v1/me/events"
 
     override suspend fun getMyEvents(): List<MyEventParticipation> {
         val response = client.get(endpoint) {
