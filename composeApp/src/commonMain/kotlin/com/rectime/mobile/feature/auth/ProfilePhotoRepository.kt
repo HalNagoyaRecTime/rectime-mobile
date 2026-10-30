@@ -43,7 +43,7 @@ private data class CachedProfilePhoto(
 class ProfilePhotoRepository(
     cacheDirectory: String,
     private val client: HttpClient = createAppHttpClient(),
-    private val baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
     private val fileSystem = FileSystem.SYSTEM
@@ -119,7 +119,7 @@ class ProfilePhotoRepository(
         }
 
         try {
-            val response = client.get("${baseUrl.trimEnd('/')}/api/v1/auth/me/photo") {
+            val response = client.get("${baseUrl().trimEnd('/')}/api/v1/auth/me/photo") {
                 header("X-Client-Type", "mobile")
                 header(HttpHeaders.Authorization, "Bearer $accessToken")
             }

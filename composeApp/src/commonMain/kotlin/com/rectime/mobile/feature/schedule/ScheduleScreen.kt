@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -110,7 +111,7 @@ object ScheduleScreen : Screen {
     override fun Content(navigationController: NavigationController) {
         val viewModel: ScheduleViewModel = viewModel(factory = scheduleViewModelFactory())
         val eventTime by viewModel.eventTime.collectAsStateWithLifecycle()
-        val nowMinute = eventTime.minute
+        val nowMinute by viewModel.nowMinute.collectAsStateWithLifecycle()
         val events by viewModel.events
 
         val isRootVisible = navigationController.state.pushStack.isEmpty()
@@ -121,6 +122,7 @@ object ScheduleScreen : Screen {
 
         ScheduleScreenUI(
             nowMinute = nowMinute,
+            eventMinute = eventTime.minute,
             onOpenEventDetail = { eventId -> navigationController.push(EventDetailScreen(eventId)) },
             events = events,
             isLoading = viewModel.isLoading,
@@ -135,6 +137,7 @@ object ScheduleScreen : Screen {
 @Composable
 internal fun ScheduleScreenUI(
     nowMinute: Int,
+    eventMinute: Int,
     onOpenEventDetail: (Int) -> Unit,
     events: List<TimelineEvent>,
     isLoading: Boolean,
@@ -195,10 +198,10 @@ internal fun ScheduleScreenUI(
         if (isDragged) hasAutoScrolled = true
     }
 
-    LaunchedEffect(isLoading, showsError, nowMinute) {
-        if (nowMinute in 0..1439 && !isLoading && !showsError && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
+    LaunchedEffect(isLoading, showsError, eventMinute) {
+        if (eventMinute in 0..1439 && !isLoading && !showsError && !hasAutoScrolled && !lazyListState.isScrollInProgress) {
             val totalHours = hourEnd - hourStart
-            val clampedNowMinute = nowMinute.coerceIn(hourStart * 60, hourEnd * 60)
+            val clampedNowMinute = eventMinute.coerceIn(hourStart * 60, hourEnd * 60)
             val nowOffsetPx = with(density) { timelineGeometry.minuteY(clampedNowMinute).toPx() }
 
             val viewportHeightPx = lazyListState.layoutInfo.viewportSize.height.toFloat()
@@ -227,12 +230,14 @@ internal fun ScheduleScreenUI(
                 val backgroundColor = AppTheme.colors.commonBackground
                 val nowY = with(density) { timelineGeometry.minuteY(nowMinute).toPx() } -
                     lazyListState.firstVisibleItemScrollOffset
+                val pastY = with(density) { timelineGeometry.minuteY(eventMinute).toPx() } -
+                    lazyListState.firstVisibleItemScrollOffset
                 Canvas(Modifier.fillMaxSize()) {
                     val top = -bouncePaintTop.toPx()
                     val bottom = size.height + bouncePaintBottom.toPx()
                     drawRect(backgroundColor, Offset(0f, top), Size(size.width, bottom - top))
-                    val pastEnd = nowY.coerceIn(top, bottom)
-                    if (nowMinute >= 0) drawRect(pastColor, Offset(0f, top), Size(size.width, pastEnd - top))
+                    val pastEnd = pastY.coerceIn(top, bottom)
+                    if (eventMinute >= 0) drawRect(pastColor, Offset(0f, top), Size(size.width, pastEnd - top))
                 }
                 val separatorLineColor = AppTheme.colors.textScheduleTimeLine
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -261,29 +266,28 @@ internal fun ScheduleScreenUI(
                         )
                         .background(AppTheme.colors.scheduleTimeBarBackground),
                 )
-                if (nowMinute in 0..(24 * 60)) {
-                    val accentColor = AppTheme.colors.themeColorFirst
+                val accentColor = AppTheme.colors.themeColorFirst
+                Box(
+                    Modifier.fillMaxWidth().height(16.dp)
+                        .offset(y = with(density) { nowY.toDp() } - 8.dp)
+                        .testTag("current-time-bar"),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
                     Box(
-                        Modifier.fillMaxWidth().height(16.dp)
-                            .offset(y = with(density) { nowY.toDp() } - 8.dp),
-                        contentAlignment = Alignment.CenterStart,
-                    ) {
-                        Box(
-                            Modifier.fillMaxWidth().height(2.dp).padding(start = timeBarWidth)
-                                .outerShadow(
-                                    shape = RectangleShape,
-                                    color = accentColor.copy(alpha = 0.6f),
-                                    blurRadius = dim.glowRadius,
-                                    spread = dim.glowRadius * 0.1f,
-                                    offsetY = 0.dp,
-                                )
-                                .background(accentColor),
-                        )
-                        Box(
-                            Modifier.offset(x = timeBarWidth - 5.dp).size(10.dp)
-                                .background(accentColor, CircleShape),
-                        )
-                    }
+                        Modifier.fillMaxWidth().height(2.dp).padding(start = timeBarWidth)
+                            .outerShadow(
+                                shape = RectangleShape,
+                                color = accentColor.copy(alpha = 0.6f),
+                                blurRadius = dim.glowRadius,
+                                spread = dim.glowRadius * 0.1f,
+                                offsetY = 0.dp,
+                            )
+                            .background(accentColor),
+                    )
+                    Box(
+                        Modifier.offset(x = timeBarWidth - 5.dp).size(10.dp)
+                            .background(accentColor, CircleShape),
+                    )
                 }
             },
             horizontalPadding = false,
@@ -355,7 +359,7 @@ internal fun ScheduleScreenUI(
 
                                     val endMinuteOfDay =
                                         event.startMinuteOfDay + event.durationMinutes
-                                    val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMinuteOfDay
+                                    val isLive = eventMinute >= event.startMinuteOfDay && eventMinute < endMinuteOfDay
 
                                     val shadowSpec = resolveEventCardShadowSpec(
                                         assignedWidth = laneWidth,
@@ -473,7 +477,7 @@ internal fun ScheduleScreenUI(
                                 }
                             } else {
                                 val endMinuteOfDay = event.startMinuteOfDay + event.durationMinutes
-                                val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMinuteOfDay
+                                val isLive = eventMinute >= event.startMinuteOfDay && eventMinute < endMinuteOfDay
 
                                 EventCard(
                                     time = "${event.startTimeLabel}-${event.endTimeLabel}",
@@ -505,7 +509,7 @@ internal fun ScheduleScreenUI(
 
                 hiddenEvents.forEach { event ->
                     val endMin = event.startMinuteOfDay + event.durationMinutes
-                    val isLive = nowMinute >= event.startMinuteOfDay && nowMinute < endMin
+                    val isLive = eventMinute >= event.startMinuteOfDay && eventMinute < endMin
 
                     EventCard(
                         time = "${event.startTimeLabel}-${event.endTimeLabel}",

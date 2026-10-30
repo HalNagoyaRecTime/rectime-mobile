@@ -15,11 +15,8 @@ import kotlinx.serialization.Serializable
 
 class FirebaseTokenApi(
     private val client: HttpClient = createAppHttpClient(),
-    private val baseUrl: String = apiBaseUrl,
-    private val headersProvider: (String, String) -> Map<String, String>? = ::mobileAuthHeaders,
+    private val baseUrl: () -> String = { apiBaseUrl },
 ) {
-    private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/firebase-tokens"
-
     suspend fun register(
         fcmToken: String,
         platform: FirebasePlatform,
@@ -28,8 +25,10 @@ class FirebaseTokenApi(
         require(fcmToken.isNotBlank()) { "FCMトークンを指定してください" }
         require(accessToken.isNotBlank()) { "アクセストークンを指定してください" }
 
-        val response = client.post(endpoint) {
-            headersProvider(endpoint, accessToken)?.forEach { (name, value) ->
+        val base = baseUrl()
+        val url = "${base.trimEnd('/')}/api/v1/firebase-tokens"
+        val response = client.post(url) {
+            mobileAuthHeaders(url, accessToken, base)?.forEach { (name, value) ->
                 header(name, value)
             }
             contentType(ContentType.Application.Json)

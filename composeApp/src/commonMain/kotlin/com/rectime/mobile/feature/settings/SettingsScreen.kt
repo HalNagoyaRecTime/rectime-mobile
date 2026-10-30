@@ -35,6 +35,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,15 +82,22 @@ import kotlinx.coroutines.launch
 private val ExtraHorizontalMargin = 10.dp
 private val ProfileAvatarSize = 88.dp
 
-class SettingsScreen(
-    private val session: AuthSession,
-    private val onLogout: () -> Unit,
-    private val notificationPermissionStartup: NotificationPermissionStartup? = null,
-) : Screen {
+data class SettingsDependencies(
+    val session: AuthSession,
+    val onLogout: () -> Unit,
+    val notificationPermissionStartup: NotificationPermissionStartup?,
+)
+
+val LocalSettingsDependencies = compositionLocalOf<SettingsDependencies> {
+    error("SettingsDependencies is not provided")
+}
+
+object SettingsScreen : Screen {
     override val key: String = "settings"
 
     @Composable
     override fun Content(navigationController: NavigationController) {
+        val (session, onLogout, notificationPermissionStartup) = LocalSettingsDependencies.current
         var showAppInformation by remember { mutableStateOf(false) }
         var showLogoutConfirmation by remember { mutableStateOf(false) }
         var notificationPermissionStatus by remember {
@@ -146,7 +154,7 @@ class SettingsScreen(
                     userId = session.user.id,
                     displayName = session.user.displayName,
                     email = session.user.email,
-                    details = accountProfileDetails(session.user),
+                    detailRows = accountProfileDetailRows(session.user),
                 )
             }
 
@@ -313,7 +321,7 @@ private fun UserInfoHeader(
     userId: String,
     displayName: String,
     email: String,
-    details: List<AccountProfileDetail>,
+    detailRows: List<List<AccountProfileDetail>>,
     modifier: Modifier = Modifier,
 ) {
     val preference = remember(userId) { AvatarPreference(userId) }
@@ -389,14 +397,21 @@ private fun UserInfoHeader(
                     fontSize = 13.sp,
                     color = AppTheme.colors.textSecondary,
                 )
-                if (details.isNotEmpty()) {
+                if (detailRows.isNotEmpty()) {
                     Spacer(Modifier.height(AppTheme.spacing.md))
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(AppTheme.spacing.sm),
                     ) {
-                        details.forEach { detail ->
-                            ProfileDetailRow(detail.label, detail.value, Modifier.fillMaxWidth())
+                        detailRows.forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                            ) {
+                                row.forEach { detail ->
+                                    ProfileDetailRow(detail.label, detail.value, Modifier.weight(1f, fill = false))
+                                }
+                            }
                         }
                     }
                 }

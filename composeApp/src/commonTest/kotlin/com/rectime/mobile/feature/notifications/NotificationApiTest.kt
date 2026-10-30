@@ -35,7 +35,7 @@ class NotificationApiTest {
         }
         val api = NotificationApi(
             client = client,
-            baseUrl = "https://api.example.com/",
+            baseUrl = { "https://api.example.com/" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -69,7 +69,7 @@ class NotificationApiTest {
         }
         val api = NotificationApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -91,7 +91,7 @@ class NotificationApiTest {
         }
         val api = NotificationApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -111,7 +111,7 @@ class NotificationApiTest {
         }
         val api = NotificationApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { null },
         )
 
@@ -136,7 +136,7 @@ class NotificationApiTest {
         }
         val api = NotificationApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -160,7 +160,7 @@ class NotificationApiTest {
         }
         val api = NotificationApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -179,7 +179,7 @@ class NotificationApiTest {
         }
         val api = NotificationApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "   " },
         )
 
@@ -195,7 +195,7 @@ class NotificationApiTest {
     fun outOfRangePagingParametersAreRejectedBeforeNetwork() = runTest {
         val api = NotificationApi(
             client = mockClient { error("Network request must not be sent") },
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
         )
 
         assertFailsWith<IllegalArgumentException> { api.getNotifications(limit = 0) }
@@ -207,7 +207,7 @@ class NotificationApiTest {
     fun nonPositiveNotificationIdIsRejectedBeforeNetwork() = runTest {
         val api = NotificationApi(
             client = mockClient { error("Network request must not be sent") },
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
         )
 
         assertFailsWith<IllegalArgumentException> { api.getNotification(0) }
@@ -282,7 +282,7 @@ class MyEventsApiTest {
         }
         val api = MyEventsApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -306,7 +306,7 @@ class MyEventsApiTest {
         }
         val api = MyEventsApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -326,7 +326,7 @@ class MyEventsApiTest {
         }
         val api = MyEventsApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -348,7 +348,7 @@ class MyEventsApiTest {
         }
         val api = MyEventsApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "access-token" },
         )
 
@@ -366,7 +366,7 @@ class MyEventsApiTest {
         }
         val api = MyEventsApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { null },
         )
 
@@ -384,7 +384,7 @@ class MyEventsApiTest {
         }
         val api = MyEventsApi(
             client = client,
-            baseUrl = "https://api.example.com",
+            baseUrl = { "https://api.example.com" },
             accessTokenProvider = { "   " },
         )
 
@@ -400,7 +400,7 @@ class MyEventsApiTest {
         val client = mockClient {
             respond("""{"events":[{"event_id":5}]}""", HttpStatusCode.OK, jsonHeaders)
         }
-        val api = MyEventsApi(client, "https://api.example.com", { "access-token" })
+        val api = MyEventsApi(client, { "https://api.example.com" }, { "access-token" })
         try {
             val participation = api.getMyEvents().single()
             assertEquals(5, participation.eventId)

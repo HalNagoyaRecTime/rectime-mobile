@@ -1,0 +1,60 @@
+name: Create release PR to main
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# 連続でpushされても、PRを二重に作らないよう1つずつ実行する
+concurrency:
+  group: release-pr-to-main
+  cancel-in-progress: false
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create PR into main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_BODY: |
+            > [!NOTE]
+            > このPRは develop への push をきっかけに GitHub Actions が自動で作成しました。
+            > develop に新しいコミットが入ると、このPRにも自動で追加されます。
+
+            ## マージ前に確認すること
+
+            - [ ] 「背景」を書き、レビュアーを指定した
+            - [ ] Conversation タブで、Approve より下に「Merge pull request #○○」が無いか確認した（あれば、そのPRの中身も確認する）
+            - [ ] マージ方法は **Create a merge commit** を選ぶ（Squash / Rebase は使わない）
+            - [ ] コンフリクトしている場合は、中間ブランチ（例：`chore/develop-to-main`）を作って解消する
+
+            ## 背景
+
+            <!-- なぜ今 main に反映するのかを書く。例：実機テストのため staging を更新したい -->
+
+            ## 変更した内容を簡潔に
+
+            develop に統合済みの変更一式を main に反映します。
+        run: |
+          ahead=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...develop" --jq '.ahead_by')
+          if [ "$ahead" = "0" ]; then
+            echo "main に未反映の差分が無いためスキップします。"
+            exit 0
+          fi
+
+          existing=$(gh pr list --base main --head develop --state open --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh pr create \
+              --base main \
+              --head develop \
+              --title "release: developをmainへ反映" \
+              --body "$PR_BODY"
+          else
+            echo "develop -> main の open な PR は既に存在するためスキップします。"
+          fi

@@ -25,6 +25,7 @@ import com.rectime.mobile.core.network.HttpStatusException
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import com.rectime.mobile.core.util.nowMinuteStateFlow
+import com.rectime.mobile.feature.event.EventTimeZone
 import com.rectime.mobile.feature.event.eventTimeStateFlow
 import com.rectime.mobile.core.util.withMinimumRefreshDuration
 import io.ktor.client.HttpClient
@@ -48,9 +49,9 @@ private const val EVENTS_PAGE_SIZE = 100
 @OptIn(ExperimentalTime::class)
 class ScheduleViewModel internal constructor(
     private val client: HttpClient = createAppHttpClient(),
-    private val baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
     private val clock: Clock = Clock.System,
-    private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    private val timeZone: TimeZone = EventTimeZone,
     private val cache: LocalCache = LocalCache(),
     myEventsGateway: MyEventsGateway? = null,
     scheduleStore: EventScheduleStore? = null,
@@ -323,7 +324,7 @@ class ScheduleViewModel internal constructor(
         var offset = 0
         var eventDate: String? = null
         do {
-            val response = client.get("${baseUrl.trimEnd('/')}/api/v1/events") {
+            val response = client.get("${baseUrl().trimEnd('/')}/api/v1/events") {
                 parameter("limit", EVENTS_PAGE_SIZE)
                 parameter("offset", offset)
             }
