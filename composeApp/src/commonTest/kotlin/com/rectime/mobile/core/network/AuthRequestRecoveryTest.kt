@@ -1,5 +1,8 @@
 package com.rectime.mobile.core.network
 
+import com.rectime.mobile.core.config.AppEnvironment
+import com.rectime.mobile.core.config.CurrentCampus
+import com.rectime.mobile.core.config.campusApiBaseUrl
 import com.rectime.mobile.feature.auth.SessionTokenHolder
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -23,6 +26,7 @@ import kotlin.test.assertFailsWith
 class AuthRequestRecoveryTest {
     @AfterTest
     fun clearToken() {
+        CurrentCampus.select("NAGOYA", AppEnvironment.Production, BASE)
         SessionTokenHolder.accessToken = null
     }
 
@@ -398,26 +402,28 @@ class AuthRequestRecoveryTest {
     }
 
     @Test
-    fun attachesTokenOnlyToTheCurrentCampusApi() = runTest {
+    fun attachesOnlyTheTokenIssuedByTheCurrentCampus() = runTest {
         val sent = mutableListOf<Pair<String, String?>>()
-        SessionTokenHolder.accessToken = "session-token"
-        var currentBase = BASE
+        SessionTokenHolder.accessToken = "nagoya-token"
         val client = HttpClient(MockEngine { request ->
             sent += request.url.host to request.headers[HttpHeaders.Authorization]
             respond("", HttpStatusCode.OK)
         }) {
-            install(MobileAuthHeadersPlugin) { baseUrl = { currentBase } }
+            install(MobileAuthHeadersPlugin) { baseUrl = ::currentCampusBase }
         }
         try {
             client.get("$BASE/api/v1/events")
-            currentBase = OTHER_CAMPUS_BASE
+            CurrentCampus.select("OSAKA", AppEnvironment.Production, BASE)
+            client.get("$OSAKA_BASE/api/v1/events")
+            SessionTokenHolder.accessToken = "osaka-token"
             client.get("$BASE/api/v1/events")
-            client.get("$OTHER_CAMPUS_BASE/api/v1/events")
+            client.get("$OSAKA_BASE/api/v1/events")
             assertEquals(
                 listOf(
-                    "api.example.test" to "Bearer session-token",
+                    "api.example.test" to "Bearer nagoya-token",
+                    OSAKA_HOST to null,
                     "api.example.test" to null,
-                    "other-campus.example.test" to "Bearer session-token",
+                    OSAKA_HOST to "Bearer osaka-token",
                 ),
                 sent,
             )
@@ -429,20 +435,19 @@ class AuthRequestRecoveryTest {
     @Test
     fun refreshesOnlyForTheCurrentCampusApi() = runTest {
         var refreshes = 0
-        SessionTokenHolder.accessToken = "old-token"
-        var currentBase = BASE
         val client = HttpClient(MockEngine { request ->
             val authorization = request.headers[HttpHeaders.Authorization]
             respond("", if (authorization == "Bearer old-token") HttpStatusCode.Unauthorized else HttpStatusCode.OK)
         }) {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = { currentBase }
+                baseUrl = ::currentCampusBase
                 refreshToken = { refreshes++; "new-token" }
             }
         }
         try {
-            currentBase = OTHER_CAMPUS_BASE
-            assertEquals(HttpStatusCode.OK, client.get("$OTHER_CAMPUS_BASE/api/v1/events").status)
+            CurrentCampus.select("OSAKA", AppEnvironment.Production, BASE)
+            SessionTokenHolder.accessToken = "old-token"
+            assertEquals(HttpStatusCode.OK, client.get("$OSAKA_BASE/api/v1/events").status)
             assertEquals(1, refreshes)
             client.get("$BASE/api/v1/events") { header(HttpHeaders.Authorization, "Bearer old-token") }
             assertEquals(1, refreshes)
@@ -451,8 +456,12 @@ class AuthRequestRecoveryTest {
         }
     }
 
+    private fun currentCampusBase(): String =
+        checkNotNull(campusApiBaseUrl(CurrentCampus.campus, AppEnvironment.Production, BASE))
+
     private companion object {
         const val BASE = "https://api.example.test"
-        const val OTHER_CAMPUS_BASE = "https://other-campus.example.test"
+        const val OSAKA_HOST = "rectime-api.recreation-osaka.workers.dev"
+        const val OSAKA_BASE = "https://$OSAKA_HOST"
     }
 }

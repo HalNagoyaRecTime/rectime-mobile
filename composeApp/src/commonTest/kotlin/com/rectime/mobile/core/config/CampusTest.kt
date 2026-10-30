@@ -1,10 +1,17 @@
 package com.rectime.mobile.core.config
 
+import com.rectime.mobile.feature.auth.SessionTokenHolder
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class CampusTest {
+    @AfterTest
+    fun clearToken() {
+        SessionTokenHolder.accessToken = null
+    }
+
     @Test
     fun nagoyaUsesTheBuildConfiguredApiInEveryEnvironment() {
         for (environment in AppEnvironment.entries) {
@@ -47,10 +54,19 @@ class CampusTest {
     }
 
     @Test
-    fun keepsTheCurrentCampusWhenTheCodeIsRejected() {
+    fun keepsTheCurrentCampusAndTokenWhenTheCodeIsRejected() {
         val before = CurrentCampus.campus
+        SessionTokenHolder.accessToken = "session-token"
         assertEquals(false, CurrentCampus.select("KYOTO"))
         assertEquals(before, CurrentCampus.campus)
+        assertEquals("session-token", SessionTokenHolder.accessToken)
+    }
+
+    @Test
+    fun keepsTheTokenWhenTheSameCampusIsSelected() {
+        SessionTokenHolder.accessToken = "session-token"
+        assertEquals(true, CurrentCampus.select(CurrentCampus.campus.name, AppEnvironment.Production, NAGOYA_URL))
+        assertEquals("session-token", SessionTokenHolder.accessToken)
     }
 
     private companion object {

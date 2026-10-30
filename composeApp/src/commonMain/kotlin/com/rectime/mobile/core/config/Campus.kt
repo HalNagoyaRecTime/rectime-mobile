@@ -1,5 +1,7 @@
 package com.rectime.mobile.core.config
 
+import com.rectime.mobile.feature.auth.SessionTokenHolder
+
 enum class Campus { NAGOYA, OSAKA, TOKYO }
 
 internal fun campusApiBaseUrl(campus: Campus, environment: AppEnvironment, nagoyaUrl: String): String? =
@@ -26,8 +28,14 @@ object CurrentCampus {
     var campus: Campus = Campus.NAGOYA
         private set
 
-    fun select(code: String): Boolean {
-        campus = campusFromCode(code, appEnvironment, nagoyaApiBaseUrl) ?: return false
+    internal fun select(
+        code: String,
+        environment: AppEnvironment = appEnvironment,
+        nagoyaUrl: String = nagoyaApiBaseUrl,
+    ): Boolean {
+        val selected = campusFromCode(code, environment, nagoyaUrl) ?: return false
+        if (selected != campus) SessionTokenHolder.accessToken = null
+        campus = selected
         return true
     }
 }
