@@ -155,7 +155,6 @@ fun App(
                     // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
                     if (hasResumed) {
                         badgeViewModel.onForeground(session.user.id)
-                        rankingViewModel.onForeground()
                     } else badgeViewModel.onSession(session.user.id)
                     hasResumed = true
                     foregroundScope.launch { scheduleViewModel.onForeground() }
