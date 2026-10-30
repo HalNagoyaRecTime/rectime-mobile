@@ -244,7 +244,8 @@ class EventDetailViewModelTest {
         assertEquals(1, participationCalls)
         assertEquals(setOf(10), vm.uiState.value.attendingGatheringIds)
 
-        now += kotlin.time.Duration.parse("30s")
+        // 一覧・詳細(3分)と本人情報(30分)の再利用期間を過ぎてから復帰する。
+        now += kotlin.time.Duration.parse("30m")
         body = validEventBody.replace("100m走", "変更された競技").replace("08:45", "08:55")
         participating = """{"events":[]}"""
         vm.onForeground()
@@ -275,7 +276,8 @@ class EventDetailViewModelTest {
         val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
         vm.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
-        now += kotlin.time.Duration.parse("30s")
+        // 一覧・詳細(3分)と本人情報(30分)の再利用期間を過ぎてから復帰する。
+        now += kotlin.time.Duration.parse("30m")
         failDetail = true
         participating = """{"events":[]}"""
         vm.onForeground()
@@ -306,7 +308,8 @@ class EventDetailViewModelTest {
         val vm = EventDetailViewModel(1, client, LocalCache(InMemoryKeyValueStore(), clock), clock = clock)
         vm.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()
-        now += kotlin.time.Duration.parse("30s")
+        // 一覧・詳細(3分)と本人情報(30分)の再利用期間を過ぎてから復帰する。
+        now += kotlin.time.Duration.parse("30m")
         deleted = true
         vm.onForeground()
         testDispatcher.scheduler.advanceUntilIdle()

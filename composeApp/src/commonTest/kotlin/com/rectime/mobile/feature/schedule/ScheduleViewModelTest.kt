@@ -120,24 +120,38 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun shortForegroundReusesEachSuccessfulResourceButManualRefreshAlwaysFetches() = runTest(testDispatcher) {
-        val clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z"))
+    fun foregroundReusesWithinPeriodAndManualRefreshOnlyWaitsForCooldown() = runTest(testDispatcher) {
+        val start = Instant.parse("2026-04-28T09:30:45Z")
+        val clock = FakeClock(start)
         val cache = LocalCache(InMemoryKeyValueStore(), clock)
         var calls = 0
         var ownCalls = 0
         val vm = buildViewModel(mockClient { calls++; respondJson(eventsJson) }, clock = clock, cache = cache,
             myEventsGateway = participationGateway { ownCalls++; emptySet() })
-        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
-        clock.instant += kotlin.time.Duration.parse("29s")
-        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
+        suspend fun at(offset: String, action: suspend () -> Unit) {
+            clock.instant = start + kotlin.time.Duration.parse(offset)
+            action(); testDispatcher.scheduler.advanceUntilIdle()
+        }
+        at("0s") { vm.onForeground() }
+        at("29s") { vm.onForeground() }
+        // 手動更新は一覧30秒・本人情報1分のクールダウン中だけ通信しない。
+        at("29s") { vm.refresh() }
         assertEquals(1, calls)
         assertEquals(1, ownCalls)
-        vm.refresh(); testDispatcher.scheduler.advanceUntilIdle()
+        at("30s") { vm.refresh() }
         assertEquals(2, calls)
-        assertEquals(2, ownCalls)
-        clock.instant += kotlin.time.Duration.parse("30s")
-        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, ownCalls)
+        at("1m") { vm.refresh() }
         assertEquals(3, calls)
+        assertEquals(2, ownCalls)
+        // 自動の取得は一覧3分・本人情報30分まで保存値を使う。
+        at("3m59s") { vm.onForeground() }
+        assertEquals(3, calls)
+        at("4m") { vm.onForeground() }
+        assertEquals(4, calls)
+        assertEquals(2, ownCalls)
+        at("31m") { vm.onForeground() }
+        assertEquals(5, calls)
         assertEquals(3, ownCalls)
     }
 
