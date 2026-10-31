@@ -106,6 +106,7 @@ fun ImageViewerDialog(
             onDismiss = onDismiss,
             title = title,
             closeRequested = closeRequested,
+            imageLoaded = image != null,
             actionsEnabled = image != null && !preparing,
             onMore = {
                 if (image != null && !preparing) {
@@ -139,7 +140,11 @@ fun ImageViewerDialog(
     }
 }
 
-/** 拡大中は画像移動、等倍時の一指下スワイプは閉じる操作にする。 */
+/**
+ * 拡大中は画像移動、等倍時の一指下スワイプは閉じる操作にする。
+ * 画像上のタップは操作ヘッダーの表示切り替え、画像の外側（背景）のタップは閉じる操作にする。
+ * [imageLoaded] が false（読み込み中・読み込み失敗）のときは、画面のどこをタップしても閉じる。
+ */
 @Composable
 internal fun ImageViewerContent(
     painter: Painter,
@@ -147,6 +152,7 @@ internal fun ImageViewerContent(
     onDismiss: () -> Unit,
     title: String? = null,
     closeRequested: Boolean = false,
+    imageLoaded: Boolean = true,
     actionsEnabled: Boolean = true,
     onMore: () -> Unit = {},
     status: @Composable () -> Unit = {},
@@ -170,6 +176,7 @@ internal fun ImageViewerContent(
     var swipeClosing by remember { mutableStateOf(false) }
     var buttonClosing by remember { mutableStateOf(false) }
     val latestCloseRequested by rememberUpdatedState(closeRequested)
+    val latestImageLoaded by rememberUpdatedState(imageLoaded)
     val closing by remember {
         derivedStateOf { latestCloseRequested || buttonClosing || swipeClosing }
     }
@@ -215,7 +222,16 @@ internal fun ImageViewerContent(
                     .onSizeChanged { viewport = Size(it.width.toFloat(), it.height.toFloat()) }
                     .pointerInput(transform) {
                         detectTapGestures(
-                            onTap = { if (!closing) showControls = !showControls },
+                            onTap = { position ->
+                                if (!closing) {
+                                    if (latestImageLoaded && transform.isOnImage(position)) {
+                                        showControls = !showControls
+                                    } else {
+                                        // 背景のタップは閉じるボタンと同じ閉じ方にする。
+                                        buttonClosing = true
+                                    }
+                                }
+                            },
                             onDoubleTap = { position ->
                                 if (!closing) {
                                     zoomAnimation?.cancel()
