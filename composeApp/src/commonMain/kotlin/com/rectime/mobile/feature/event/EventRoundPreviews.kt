@@ -19,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +49,8 @@ import com.rectime.mobile.ui.component.AppTimeText
 import com.rectime.mobile.ui.component.AppBottomSheet
 import com.rectime.mobile.ui.component.AppIconButton
 import com.rectime.mobile.ui.component.PlaceImageModal
+import com.rectime.mobile.ui.component.placeImageUrlOrNull
+import com.rectime.mobile.ui.component.rememberPlaceImageUnavailableNotifier
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.SolidGroup
 import com.woowla.compose.icon.collections.fontawesome.fontawesome.solid.Xmark
 import com.rectime.mobile.ui.theme.AppTheme
@@ -69,9 +73,18 @@ private data class RoundPreview(val number: Int, val rows: List<Gathering>) {
             .copy(startMinute = times.startMinute)
 }
 
-/** 本人の集合情報と、ラウンドの時間軸を表示する。 */
+/**
+ * 本人の集合情報と、ラウンドの時間軸を表示する。
+ * 集合場所の画像が未登録のときは、画像を開く代わりに [onPlaceImageUnavailable] を呼ぶ。
+ */
 @Composable
-internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>, attendingIds: Set<Int>, now: Int = -1) {
+internal fun EventRoundPreviews(
+    event: EventDetail,
+    gatherings: List<Gathering>,
+    attendingIds: Set<Int>,
+    now: Int = -1,
+    onPlaceImageUnavailable: () -> Unit = {},
+) {
     if (gatherings.isEmpty()) return
     val rounds = remember(gatherings) {
         gatherings.byRound().map { RoundPreview(it.key, it.value) }
@@ -84,7 +97,7 @@ internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>,
             Text("出場予定", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppTheme.colors.textDetailsScreenBody)
             mine.forEach { round ->
                 round.rows.filter { it.gatheringId in attendingIds }.forEach { gathering ->
-                    OwnGatheringCard(round, gathering)
+                    OwnGatheringCard(round, gathering, onPlaceImageUnavailable)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -107,7 +120,7 @@ internal fun EventRoundPreviews(event: EventDetail, gatherings: List<Gathering>,
 }
 
 @Composable
-private fun OwnGatheringCard(round: RoundPreview, gathering: Gathering) {
+private fun OwnGatheringCard(round: RoundPreview, gathering: Gathering, onPlaceImageUnavailable: () -> Unit) {
     val times = round.timesFor(gathering)
     val colors = AppTheme.colors
     GatheringCard {
@@ -115,7 +128,7 @@ private fun OwnGatheringCard(round: RoundPreview, gathering: Gathering) {
             GatheringAccentTag("第${round.number}ラウンド・集合${gathering.gatheringId}番")
             times.startMinute?.let { RoundStartTime(it, color = colors.textMuted, modifier = Modifier.align(Alignment.CenterVertically)) }
         }
-        GatheringDetails(gathering, times)
+        GatheringDetails(gathering, times, onPlaceImageUnavailable)
     }
 }
 
@@ -130,7 +143,7 @@ private fun RoundStartTime(minute: Int, color: Color, modifier: Modifier = Modif
 }
 
 @Composable
-private fun GatheringDetails(gathering: Gathering, times: RoundDisplayTimes) {
+private fun GatheringDetails(gathering: Gathering, times: RoundDisplayTimes, onPlaceImageUnavailable: () -> Unit) {
     val colors = AppTheme.colors
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.Top) {
         run {
@@ -141,10 +154,11 @@ private fun GatheringDetails(gathering: Gathering, times: RoundDisplayTimes) {
             }
         }
         var isImageVisible by remember { mutableStateOf(false) }
+        val imageUrl = placeImageUrlOrNull(gathering.gatheringSpotImageUrl)
         Column(Modifier.weight(1f).clickable(
             interactionSource = remember { MutableInteractionSource() }, indication = null,
             role = Role.Button, onClickLabel = "画像を開く",
-        ) { isImageVisible = true }) {
+        ) { if (imageUrl == null) onPlaceImageUnavailable() else isImageVisible = true }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Icon(painterResource(Res.drawable.ic_location_outline), contentDescription = null,
                     tint = colors.textMuted, modifier = Modifier.size(14.dp))
@@ -158,8 +172,8 @@ private fun GatheringDetails(gathering: Gathering, times: RoundDisplayTimes) {
                     modifier = Modifier.size(10.dp))
             }
         }
-        if (isImageVisible) {
-            PlaceImageModal(gathering.gatheringSpotName, gathering.gatheringSpotImageUrl,
+        if (isImageVisible && imageUrl != null) {
+            PlaceImageModal(gathering.gatheringSpotName, imageUrl,
                 onDismiss = { isImageVisible = false })
         }
     }
@@ -330,59 +344,68 @@ private fun RoundGatheringsSheet(rounds: List<RoundPreview>, ids: Set<Int>, sele
     val density = LocalDensity.current
     val windowInfo = LocalWindowInfo.current
     val maxHeight = (with(density) { windowInfo.containerSize.height.toDp() } * 0.9f - 40.dp).coerceAtLeast(1.dp)
+    // シートは画面の上に別ウィンドウとして重なり、画面側のスナックバーが隠れるため、シート内に専用の表示先を持つ。
+    val snackbarHostState = remember { SnackbarHostState() }
+    val notifyPlaceImageUnavailable = rememberPlaceImageUnavailableNotifier(snackbarHostState)
     AppBottomSheet(onDismiss = onDismiss) { closeSheet ->
-        Column(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("ラウンド別の集合情報", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                    color = AppTheme.colors.textDetailsScreenBody, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                AppIconButton(onClick = closeSheet, color = Color.Transparent) {
-                    Icon(SolidGroup.Xmark, contentDescription = "閉じる",
-                        tint = AppTheme.colors.textDetailsScreenHeader, modifier = Modifier.size(22.dp))
+        Box(Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth().heightIn(max = maxHeight)) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("ラウンド別の集合情報", modifier = Modifier.weight(1f), fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                        color = AppTheme.colors.textDetailsScreenBody, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    AppIconButton(onClick = closeSheet, color = Color.Transparent) {
+                        Icon(SolidGroup.Xmark, contentDescription = "閉じる",
+                            tint = AppTheme.colors.textDetailsScreenHeader, modifier = Modifier.size(22.dp))
+                    }
                 }
-            }
-            LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                items(rounds, key = { it.number }) { round ->
-                    val accent = AppTheme.colors.themeColorFirst
-                    val line = AppTheme.colors.commonSeparatorLine
-                    val body = AppTheme.colors.textDetailsScreenBody
-                    val muted = AppTheme.colors.textMuted
-                    val sheetBackground = AppTheme.colors.screenBackground
-                    Row(Modifier.fillMaxWidth()) {
-                        Spacer(Modifier.width(24.dp))
-                        Column(Modifier.weight(1f).padding(bottom = 24.dp)
-                            .drawBehind {
-                                val x = -14.dp.toPx()
-                                val lastRound = round == rounds.last()
-                                val endY = size.height + (if (lastRound) 12.dp else 36.dp).toPx()
-                                drawLine(line, Offset(x, 12.dp.toPx()), Offset(x, endY), 2.dp.toPx())
-                                if (lastRound) {
-                                    drawCircle(sheetBackground, 5.dp.toPx(), Offset(x, endY))
-                                    drawCircle(line, 5.dp.toPx(), Offset(x, endY), style = Stroke(2.dp.toPx()))
-                                }
-                                drawCircle(if (round.isMine(ids)) accent else line, 5.dp.toPx(), Offset(x, 12.dp.toPx()))
-                            }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("第${round.number}ラウンド", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                round.times.startMinute?.let { RoundStartTime(it, color = muted, modifier = Modifier.align(Alignment.CenterVertically)) }
-                            }
-                            round.rows.forEach { gathering ->
-                                val mine = gathering.gatheringId in ids
-                                val times = round.timesFor(gathering)
-                                GatheringCard {
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text("集合${gathering.gatheringId}番", fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-                                            color = body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                        if (mine) GatheringAccentTag("出場", fontSize = 12.sp)
+                LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    items(rounds, key = { it.number }) { round ->
+                        val accent = AppTheme.colors.themeColorFirst
+                        val line = AppTheme.colors.commonSeparatorLine
+                        val body = AppTheme.colors.textDetailsScreenBody
+                        val muted = AppTheme.colors.textMuted
+                        val sheetBackground = AppTheme.colors.screenBackground
+                        Row(Modifier.fillMaxWidth()) {
+                            Spacer(Modifier.width(24.dp))
+                            Column(Modifier.weight(1f).padding(bottom = 24.dp)
+                                .drawBehind {
+                                    val x = -14.dp.toPx()
+                                    val lastRound = round == rounds.last()
+                                    val endY = size.height + (if (lastRound) 12.dp else 36.dp).toPx()
+                                    drawLine(line, Offset(x, 12.dp.toPx()), Offset(x, endY), 2.dp.toPx())
+                                    if (lastRound) {
+                                        drawCircle(sheetBackground, 5.dp.toPx(), Offset(x, endY))
+                                        drawCircle(line, 5.dp.toPx(), Offset(x, endY), style = Stroke(2.dp.toPx()))
                                     }
-                                    GatheringDetails(gathering, times)
+                                    drawCircle(if (round.isMine(ids)) accent else line, 5.dp.toPx(), Offset(x, 12.dp.toPx()))
+                                }, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("第${round.number}ラウンド", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    round.times.startMinute?.let { RoundStartTime(it, color = muted, modifier = Modifier.align(Alignment.CenterVertically)) }
+                                }
+                                round.rows.forEach { gathering ->
+                                    val mine = gathering.gatheringId in ids
+                                    val times = round.timesFor(gathering)
+                                    GatheringCard {
+                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("集合${gathering.gatheringId}番", fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                                color = body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                            if (mine) GatheringAccentTag("出場", fontSize = 12.sp)
+                                        }
+                                        GatheringDetails(gathering, times, notifyPlaceImageUnavailable)
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+            )
         }
     }
 }
