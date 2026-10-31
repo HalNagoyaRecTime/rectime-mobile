@@ -17,6 +17,9 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.painter.Painter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -79,5 +82,39 @@ class ImageViewerUiTest {
         onNodeWithTag("image-viewer").performTouchInput { doubleClick() }
         onNodeWithTag("image-viewer").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "拡大率 1.0"))
         assertEquals(0, closed)
+    }
+
+    @Test
+    fun tappingBackgroundOutsideImageDismissesViewer() = runComposeUiTest {
+        var closed = 0
+        setContent { ImageViewerContent(SquarePainter, "画像", { closed++ }) }
+        // 正方形の画像は縦長・横長どちらの表示領域でも中央に収まるため、左下の隅は背景になる。
+        onNodeWithTag("image-viewer").performTouchInput { click(Offset(10f, height - 10f)) }
+        waitUntil { closed == 1 }
+        assertEquals(1, closed)
+    }
+
+    @Test
+    fun tappingInsideSizedImageTogglesControlsInsteadOfClosing() = runComposeUiTest {
+        var closed = 0
+        setContent { ImageViewerContent(SquarePainter, "画像", { closed++ }) }
+        onNodeWithTag("image-viewer").performTouchInput { click(center) }
+        waitUntil { onAllNodesWithContentDescription("閉じる").fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty() }
+        assertEquals(0, closed)
+    }
+
+    @Test
+    fun tappingAnywhereDismissesWhenImageIsNotLoaded() = runComposeUiTest {
+        var closed = 0
+        setContent { ImageViewerContent(ColorPainter(Color.Transparent), "画像", { closed++ }, imageLoaded = false) }
+        onNodeWithTag("image-viewer").performTouchInput { click(center) }
+        waitUntil { closed == 1 }
+        assertEquals(1, closed)
+    }
+
+    /** 固有サイズを持つ正方形のペインター。ColorPainter はサイズ不明で全面扱いになるため、背景タップの検証に使う。 */
+    private object SquarePainter : Painter() {
+        override val intrinsicSize = Size(100f, 100f)
+        override fun DrawScope.onDraw() = drawRect(Color.Blue)
     }
 }
