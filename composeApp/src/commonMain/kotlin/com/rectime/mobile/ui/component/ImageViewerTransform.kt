@@ -63,6 +63,25 @@ internal class ImageViewerTransform {
 
     fun reset() { scale = 1f; offset = Offset.Zero }
 
+    /**
+     * タップ位置が表示中の画像の範囲内か。
+     * 画像サイズが分からないとき（固有サイズを持たないペインターなど）は表示領域全体に描かれるため、範囲内とみなす。
+     */
+    fun isOnImage(position: Offset): Boolean {
+        if (!position.x.isFinite() || !position.y.isFinite()) return true
+        if (image == Size.Unspecified || viewport == Size.Unspecified) return true
+        if (!image.width.isFinite() || !image.height.isFinite() ||
+            !viewport.width.isFinite() || !viewport.height.isFinite() ||
+            image.width <= 0 || image.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return true
+        val fit = min(viewport.width / image.width, viewport.height / image.height)
+        val halfWidth = image.width * fit * scale / 2
+        val halfHeight = image.height * fit * scale / 2
+        val centerX = viewport.width / 2 + offset.x
+        val centerY = viewport.height / 2 + offset.y
+        return position.x in (centerX - halfWidth)..(centerX + halfWidth) &&
+            position.y in (centerY - halfHeight)..(centerY + halfHeight)
+    }
+
     private fun clamp(value: Offset, nextScale: Float): Offset {
         if (!image.width.isFinite() || !image.height.isFinite() ||
             !viewport.width.isFinite() || !viewport.height.isFinite() ||
