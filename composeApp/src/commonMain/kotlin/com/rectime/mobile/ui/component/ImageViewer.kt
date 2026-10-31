@@ -74,18 +74,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-/** 画像URLと任意のタイトルを渡す、共通の画像ビューア。URLが無いときは「画像がありません」のモーダルを表示する。 */
+/** 画像URLと任意のタイトルを渡す、共通の画像ビューア。 */
 @Composable
 fun ImageViewerDialog(
-    imageUrl: String?,
+    imageUrl: String,
     contentDescription: String,
     onDismiss: () -> Unit,
     title: String? = null,
 ) {
-    if (imageUrl == null) {
-        ImageMissingModal(onDismiss = onDismiss)
-        return
-    }
     var closeRequested by remember(imageUrl) { mutableStateOf(false) }
     Dialog(onDismissRequest = { closeRequested = true }, properties = imageViewerDialogProperties()) {
         ModalScrimController(dimAmount = 0f)

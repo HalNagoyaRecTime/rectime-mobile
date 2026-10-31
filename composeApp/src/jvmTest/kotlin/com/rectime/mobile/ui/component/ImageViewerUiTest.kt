@@ -12,7 +12,6 @@ import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.runComposeUiTest
@@ -21,8 +20,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.painter.Painter
-import com.rectime.mobile.ui.theme.AppTheme
-import com.rectime.mobile.ui.theme.ThemeStateHolder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -85,18 +82,6 @@ class ImageViewerUiTest {
         onNodeWithTag("image-viewer").performTouchInput { doubleClick() }
         onNodeWithTag("image-viewer").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "拡大率 1.0"))
         assertEquals(0, closed)
-    }
-
-    @Test
-    fun missingImageUrlShowsModalInsteadOfViewer() = runComposeUiTest {
-        setContent {
-            AppTheme(ThemeStateHolder()) {
-                ImageViewerDialog(imageUrl = null, contentDescription = "画像", onDismiss = {}, title = "集合場所")
-            }
-        }
-        onNodeWithText("画像がありません").assertIsDisplayed()
-        onNodeWithTag("image-viewer").assertDoesNotExist()
-        onNodeWithContentDescription("閉じる").assertDoesNotExist()
     }
 
     @Test
