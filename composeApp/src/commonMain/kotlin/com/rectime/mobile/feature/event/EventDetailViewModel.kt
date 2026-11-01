@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.FetchTrigger
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
@@ -70,11 +71,11 @@ class EventDetailViewModel internal constructor(
 
     fun onForeground() {
         // 初回表示と最初のON_RESUMEでは取得を重ねない。
-        if (hasEnteredForeground) fetchEventDetail(reason = EventRefreshReason.Foreground)
+        if (hasEnteredForeground) fetchEventDetail()
         hasEnteredForeground = true
     }
 
-    private fun fetchEventDetail(afterCurrent: Boolean = true, reason: EventRefreshReason = EventRefreshReason.Required) {
+    private fun fetchEventDetail(afterCurrent: Boolean = true) {
         refreshQueue.launch(viewModelScope, afterCurrent = afterCurrent) {
             val request = CacheRequestGeneration()
             if (!contentSession.isCurrent || _uiState.value.eventDetail == null) {
@@ -83,14 +84,14 @@ class EventDetailViewModel internal constructor(
                 _uiState.value = _uiState.value.copy(error = null)
             }
             val cacheRequest = eventCache.beginRequest()
-            // 詳細本文の取得成否にかかわらず、参加情報も再取得する。
-            val participation = async { refreshParticipation(reason) }
+            // 詳細本文の取得成否にかかわらず、参加情報も鮮度を確認する。
+            val participation = async { refreshParticipation() }
             var displayedDetail: EventDetailResponse? = null
             try {
                 when (
                     val result = fetchWithCacheFirst(
                         fetchLive = {
-                            scheduleStore.refreshDetail(eventId, reason)
+                            scheduleStore.refreshDetail(eventId, FetchTrigger.Automatic)
                         },
                         loadCache = { eventCache.loadDetail(eventId) },
                         // 統合済みの値を本文表示にも使う。
@@ -210,8 +211,8 @@ class EventDetailViewModel internal constructor(
         }
     }
 
-    private suspend fun refreshParticipation(reason: EventRefreshReason): Boolean = try {
-        scheduleStore.refreshParticipation(reason)
+    private suspend fun refreshParticipation(): Boolean = try {
+        scheduleStore.refreshParticipation(FetchTrigger.Automatic)
         false
     } catch (e: CancellationException) {
         throw e

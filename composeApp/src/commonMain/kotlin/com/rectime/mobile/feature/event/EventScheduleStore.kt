@@ -4,6 +4,9 @@ import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
 import com.rectime.mobile.core.cache.FetchedCache
+import com.rectime.mobile.core.cache.CacheFreshness
+import com.rectime.mobile.core.cache.FetchTrigger
+import com.rectime.mobile.core.cache.canReuse
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
@@ -59,23 +62,23 @@ internal class EventScheduleStore(
         return event.gatheringIds.toSet()
     }
 
-    /** 一覧の取得と保存は呼び出し側の取得順を維持し、復帰時の鮮度判断だけ共有する。
-     * 保存値の再利用は通信共有の外で行い、明示更新が通信なしの結果へ合流するのを防ぐ。
+    /** 一覧の取得と保存は呼び出し側の取得順を維持し、保存値の鮮度判断だけ共有する。
+     * 保存値の再利用は通信共有の外で行い、必須の取得が通信なしの結果へ合流するのを防ぐ。
      */
-    suspend fun refreshEvents(reason: EventRefreshReason, fetch: suspend () -> EventsResponse): EventsResponse {
-        if (reason == EventRefreshReason.Foreground) {
+    suspend fun refreshEvents(trigger: FetchTrigger, fetch: suspend () -> EventsResponse): EventsResponse {
+        if (trigger != FetchTrigger.Required) {
             cache.requests.awaitCurrent("schedule_events_v1")
             val saved = EventCache(cache).loadEventsEntry()
-            if (saved.canReuse(reason, clock)) return requireNotNull(saved).data
+            if (saved.canReuse(trigger, CacheFreshness.Events, clock)) return requireNotNull(saved).data
         }
         return cache.requests.run("schedule_events_v1", fetch)
     }
 
-    suspend fun refreshParticipation(reason: EventRefreshReason = EventRefreshReason.Required): List<MyEventParticipation> {
-        if (reason == EventRefreshReason.Foreground) {
+    suspend fun refreshParticipation(trigger: FetchTrigger = FetchTrigger.Required): List<MyEventParticipation> {
+        if (trigger != FetchTrigger.Required) {
             cache.requests.awaitCurrent(ParticipationKey)
             val saved = cachedParticipationEntry()
-            if (saved.canReuse(reason, clock)) return requireNotNull(saved).data
+            if (saved.canReuse(trigger, CacheFreshness.Participation, clock)) return requireNotNull(saved).data
         }
         return fetchParticipation()
     }
@@ -104,11 +107,11 @@ internal class EventScheduleStore(
         EventCache(cache).loadDetailEntry(eventId)
 
     /** 同時に開かれた詳細でも、イベントごとに通信を共有する。 */
-    suspend fun refreshDetail(eventId: Int, reason: EventRefreshReason = EventRefreshReason.Required): EventDetailResponse {
-        if (reason == EventRefreshReason.Foreground) {
+    suspend fun refreshDetail(eventId: Int, trigger: FetchTrigger = FetchTrigger.Required): EventDetailResponse {
+        if (trigger != FetchTrigger.Required) {
             cache.requests.awaitCurrent("event_detail_v1_$eventId")
             val saved = cachedDetailEntry(eventId)
-            if (saved?.data?.rounds != null && saved.canReuse(reason, clock)) return saved.data
+            if (saved?.data?.rounds != null && saved.canReuse(trigger, CacheFreshness.Events, clock)) return saved.data
         }
         return fetchDetail(eventId)
     }

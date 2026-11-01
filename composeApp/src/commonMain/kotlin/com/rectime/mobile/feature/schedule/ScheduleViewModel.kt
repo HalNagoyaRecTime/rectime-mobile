@@ -13,7 +13,7 @@ import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.canRetainDisplayedContent
 import com.rectime.mobile.core.cache.invalidatesDisplayedContent
-import com.rectime.mobile.feature.event.EventRefreshReason
+import com.rectime.mobile.core.cache.FetchTrigger
 import com.rectime.mobile.feature.event.EventScheduleStore
 import com.rectime.mobile.feature.event.EventCache
 import com.rectime.mobile.feature.event.EventCacheRequest
@@ -115,7 +115,7 @@ class ScheduleViewModel internal constructor(
         }
     }
 
-    /** 保存済み表示を維持し、画面を開いたタイミングで共有データを再取得する。 */
+    /** 保存済み表示を維持し、画面を開いたタイミングで有効期間を過ぎた共有データだけ再取得する。 */
     suspend fun onEnter() {
         if (enteredSession?.isCurrent == true) {
             eventCache.loadEvents()?.let { response ->
@@ -144,7 +144,7 @@ class ScheduleViewModel internal constructor(
             onEnter()
         } else if (hasEnteredForeground) {
             // 進行中の取得に合流する。復帰で手動更新の待機要求を置き換えない。
-            if (!isUpdating) loadEvents(isRefresh = false, isBackground = true, reason = EventRefreshReason.Foreground)
+            if (!isUpdating) loadEvents(isRefresh = false, isBackground = true)
         }
         // 起動時のonEnterと最初のON_RESUMEが重なっても、取得は一度だけにする。
         hasEnteredForeground = true
@@ -152,9 +152,9 @@ class ScheduleViewModel internal constructor(
 
     fun fetchEvents() = loadEvents(isRefresh = false)
 
-    fun refresh() = loadEvents(isRefresh = true)
+    fun refresh() = loadEvents(isRefresh = true, trigger = FetchTrigger.Manual)
 
-    private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false, reason: EventRefreshReason = EventRefreshReason.Required) {
+    private fun loadEvents(isRefresh: Boolean, isBackground: Boolean = false, trigger: FetchTrigger = FetchTrigger.Automatic) {
         loadJob = refreshQueue.launch(viewModelScope, afterCurrent = isRefresh || isBackground) {
             if (!contentSession.isCurrent) {
                 clearDisplayedEvents()
@@ -182,12 +182,12 @@ class ScheduleViewModel internal constructor(
                     saved?.let(::applyParticipation)
                 }
                 // 参加情報の取得が遅くても予定一覧は先に表示する。
-                participationJob = launch { updateParticipation(request, reason) }
+                participationJob = launch { updateParticipation(request, trigger) }
                 val cacheRequest = eventCache.beginRequest()
                 val result = request.validate(withMinimumRefreshDuration(isRefresh) {
                     fetchWithCacheFirst(
                         fetchLive = {
-                            scheduleStore.refreshEvents(reason) {
+                            scheduleStore.refreshEvents(trigger) {
                                 eventCache.saveEvents(fetchAllEvents(), cacheRequest)
                             }
                         },
@@ -294,9 +294,9 @@ class ScheduleViewModel internal constructor(
         return toTimelineEvents(response).also { _events.value = it.events }
     }
 
-    private suspend fun updateParticipation(request: CacheRequestGeneration, reason: EventRefreshReason) {
+    private suspend fun updateParticipation(request: CacheRequestGeneration, trigger: FetchTrigger) {
         try {
-            val latest = scheduleStore.refreshParticipation(reason)
+            val latest = scheduleStore.refreshParticipation(trigger)
             if (request.isCurrent) applyParticipation(latest.map { it.eventId }.toSet())
         } catch (e: CancellationException) {
             throw e
