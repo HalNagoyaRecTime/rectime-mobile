@@ -4,6 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ImageViewerTransformTest {
     private fun transform(image: Size = Size(400f, 800f)) = ImageViewerTransform().apply {
@@ -67,4 +69,29 @@ class ImageViewerTransformTest {
         assertEquals(Offset(400f, 800f), transform.offset)
     }
 
+    @Test
+    fun tapsInLetterboxAreOutsideTheImage() {
+        // 400x800 の表示領域に 800x400 の画像を収めると、縦 300..500 の帯に描かれる。
+        val transform = transform(Size(800f, 400f))
+        assertTrue(transform.isOnImage(Offset(200f, 400f)))
+        assertTrue(transform.isOnImage(Offset(0f, 300f)))
+        assertFalse(transform.isOnImage(Offset(200f, 100f)))
+        assertFalse(transform.isOnImage(Offset(200f, 700f)))
+    }
+
+    @Test
+    fun zoomedImageCoversPreviouslyLetterboxedArea() {
+        val transform = transform(Size(800f, 400f))
+        transform.transform(4f, Offset.Zero, Offset(200f, 400f))
+        assertTrue(transform.isOnImage(Offset(200f, 100f)))
+        assertTrue(transform.isOnImage(Offset(200f, 700f)))
+    }
+
+    @Test
+    fun unknownImageSizeIsTreatedAsFillingTheViewport() {
+        val transform = transform(Size.Unspecified)
+        assertTrue(transform.isOnImage(Offset(5f, 5f)))
+        val empty = transform(Size.Zero)
+        assertTrue(empty.isOnImage(Offset(5f, 5f)))
+    }
 }

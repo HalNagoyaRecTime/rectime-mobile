@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.size
@@ -62,6 +63,8 @@ import com.rectime.mobile.core.model.Gathering
 import com.rectime.mobile.core.util.toFormattedTime
 import com.rectime.mobile.ui.component.AppLoadingIndicator
 import com.rectime.mobile.ui.component.PlaceImageModal
+import com.rectime.mobile.ui.component.placeImageUrlOrNull
+import com.rectime.mobile.ui.component.rememberPlaceImageUnavailableNotifier
 import com.rectime.mobile.ui.component.PushScreenScaffold
 import com.rectime.mobile.ui.component.BounceBackground
 import com.rectime.mobile.ui.component.headerTitleBarHeight
@@ -90,6 +93,8 @@ data class EventDetailScreen(val eventId: Int) : Screen {
         val uiState by viewModel.uiState.collectAsState()
         val eventTime by viewModel.eventTime.collectAsState()
         var selectedVenue by remember { mutableStateOf<EventVenue?>(null) }
+        val snackbarHostState = remember { SnackbarHostState() }
+        val notifyPlaceImageUnavailable = rememberPlaceImageUnavailableNotifier(snackbarHostState)
         var titleHeightPx by remember { mutableIntStateOf(0) }
         var titleBandHeightPx by remember { mutableIntStateOf(0) }
         val listState = rememberLazyListState()
@@ -115,6 +120,7 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                 horizontalPadding = false,
                 contentTopPadding = false,
                 headerEdgeFade = false,
+                snackbarHostState = snackbarHostState,
                 contentBackground = {
                     if (!uiState.isLoading && uiState.eventDetail != null && uiState.error == null) {
                         val visibleBandHeight = if (listState.firstVisibleItemIndex == 0)
@@ -158,7 +164,12 @@ data class EventDetailScreen(val eventId: Int) : Screen {
                                 eventTime = eventTime,
                                 gatherings = uiState.gatherings,
                                 attendingGatheringIds = uiState.attendingGatheringIds,
-                                onOpenVenue = { selectedVenue = it },
+                                onOpenVenue = { venue ->
+                                    // 画像が未登録なら画像ビューアを開かず、スナックバーで知らせる。
+                                    if (placeImageUrlOrNull(venue.imageUrl) == null) notifyPlaceImageUnavailable()
+                                    else selectedVenue = venue
+                                },
+                                onPlaceImageUnavailable = notifyPlaceImageUnavailable,
                                 onTitleHeightChanged = { titleHeightPx = it },
                                 onTitleBandHeightChanged = { titleBandHeightPx = it },
                             )
@@ -168,7 +179,9 @@ data class EventDetailScreen(val eventId: Int) : Screen {
             }
 
             selectedVenue?.let { venue ->
-                PlaceImageModal(venue.venueName, venue.imageUrl, onDismiss = { selectedVenue = null })
+                placeImageUrlOrNull(venue.imageUrl)?.let { imageUrl ->
+                    PlaceImageModal(venue.venueName, imageUrl, onDismiss = { selectedVenue = null })
+                }
             }
         }
     }
@@ -181,6 +194,7 @@ private fun EventDetailContent(
     gatherings: List<Gathering>,
     attendingGatheringIds: Set<Int>,
     onOpenVenue: (EventVenue) -> Unit,
+    onPlaceImageUnavailable: () -> Unit,
     onTitleHeightChanged: (Int) -> Unit,
     onTitleBandHeightChanged: (Int) -> Unit,
 ) {
@@ -206,7 +220,13 @@ private fun EventDetailContent(
             verticalArrangement = Arrangement.spacedBy(SectionSpacing),
         ) {
             if (gatherings.isNotEmpty()) {
-                EventRoundPreviews(event, gatherings, attendingGatheringIds, now = eventTime.minute)
+                EventRoundPreviews(
+                    event,
+                    gatherings,
+                    attendingGatheringIds,
+                    now = eventTime.minute,
+                    onPlaceImageUnavailable = onPlaceImageUnavailable,
+                )
             }
 
             event.ruleText?.takeIf { it.isNotBlank() }?.let { ruleText ->
