@@ -228,8 +228,6 @@ internal fun ScheduleScreenUI(
                 // Scroll changes timeline coordinates; pulling never changes them.
                 val pastColor = AppTheme.colors.pastAreaBackground
                 val backgroundColor = AppTheme.colors.commonBackground
-                val nowY = with(density) { timelineGeometry.minuteY(nowMinute).toPx() } -
-                    lazyListState.firstVisibleItemScrollOffset
                 val pastY = with(density) { timelineGeometry.minuteY(eventMinute).toPx() } -
                     lazyListState.firstVisibleItemScrollOffset
                 Canvas(Modifier.fillMaxSize()) {
@@ -266,29 +264,6 @@ internal fun ScheduleScreenUI(
                         )
                         .background(AppTheme.colors.scheduleTimeBarBackground),
                 )
-                val accentColor = AppTheme.colors.themeColorFirst
-                Box(
-                    Modifier.fillMaxWidth().height(16.dp)
-                        .offset(y = with(density) { nowY.toDp() } - 8.dp)
-                        .testTag("current-time-bar"),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    Box(
-                        Modifier.fillMaxWidth().height(2.dp).padding(start = timeBarWidth)
-                            .outerShadow(
-                                shape = RectangleShape,
-                                color = accentColor.copy(alpha = 0.6f),
-                                blurRadius = dim.glowRadius,
-                                spread = dim.glowRadius * 0.1f,
-                                offsetY = 0.dp,
-                            )
-                            .background(accentColor),
-                    )
-                    Box(
-                        Modifier.offset(x = timeBarWidth - 5.dp).size(10.dp)
-                            .background(accentColor, CircleShape),
-                    )
-                }
             },
             horizontalPadding = false,
             contentTopPadding = showsError,
@@ -492,6 +467,30 @@ internal fun ScheduleScreenUI(
                                 )
                             }
                         }
+                    }
+
+                    val accentColor = AppTheme.colors.themeColorFirst
+                    Box(
+                        Modifier.fillMaxWidth().height(16.dp)
+                            .offset(y = timelineGeometry.minuteY(nowMinute) - 8.dp)
+                            .testTag("current-time-bar"),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Box(
+                            Modifier.fillMaxWidth().height(2.dp).padding(start = timeBarWidth)
+                                .outerShadow(
+                                    shape = RectangleShape,
+                                    color = accentColor.copy(alpha = 0.6f),
+                                    blurRadius = dim.glowRadius,
+                                    spread = dim.glowRadius * 0.1f,
+                                    offsetY = 0.dp,
+                                )
+                                .background(accentColor),
+                        )
+                        Box(
+                            Modifier.offset(x = timeBarWidth - 5.dp).size(10.dp)
+                                .background(accentColor, CircleShape),
+                        )
                     }
                 }
             }
