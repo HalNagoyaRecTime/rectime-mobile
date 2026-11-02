@@ -28,7 +28,7 @@ firebaseBom = "34.14.0"
 googleServices = "4.4.4"
 ktor = "3.5.2"
 
-markdown = "0.46.0"
+markdown = "0.41.0"
 
 [libraries]
 markdown-core = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "markdown" }
