@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.core.config.Campus
+import com.rectime.mobile.core.config.CurrentCampus
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.AuthUser
 import kotlinx.coroutines.CompletableDeferred
@@ -19,7 +20,7 @@ class PushTokenLifecycleManagerTest {
     fun sameUserAndTokenRegisterOnceAcrossSessionRotation() = runTest {
         val registrations = mutableListOf<String>()
         val manager = manager(
-            register = { token, _, accessToken -> registrations += "$token:$accessToken" },
+            register = { _, token, _, accessToken -> registrations += "$token:$accessToken" },
         )
         val initial = session("user-a", "refresh-a", "access-a")
 
@@ -35,7 +36,7 @@ class PushTokenLifecycleManagerTest {
     fun newUserRegistrationTransfersTheCurrentDeviceToken() = runTest {
         val registrations = mutableListOf<String>()
         val manager = manager(
-            register = { token, _, accessToken -> registrations += "$token:$accessToken" },
+            register = { _, token, _, accessToken -> registrations += "$token:$accessToken" },
         )
 
         manager.updateSession(session("user-a", "refresh-a", "access-a"))
@@ -52,7 +53,7 @@ class PushTokenLifecycleManagerTest {
         val finishPost = CompletableDeferred<Unit>()
         val events = mutableListOf<String>()
         val manager = manager(
-            register = { _, _, _ ->
+            register = { _, _, _, _ ->
                 events += "register"
                 postStarted.complete(Unit)
                 finishPost.await()
@@ -90,7 +91,7 @@ class PushTokenLifecycleManagerTest {
         val registrations = mutableListOf<String>()
         val remoteTokens = mutableListOf<String?>()
         val manager = manager(
-            register = { token, _, _ -> registrations += token },
+            register = { _, token, _, _ -> registrations += token },
             currentFcmToken = { currentToken },
             deleteMessagingToken = { true },
         )
@@ -115,7 +116,7 @@ class PushTokenLifecycleManagerTest {
         val finishDelete = CompletableDeferred<Unit>()
         val registrations = mutableListOf<String>()
         val manager = manager(
-            register = { token, _, _ -> registrations += token },
+            register = { _, token, _, _ -> registrations += token },
             currentFcmToken = { "AAA" },
             deleteMessagingToken = {
                 deleteStarted.complete(Unit)
@@ -150,7 +151,7 @@ class PushTokenLifecycleManagerTest {
         val registrations = mutableListOf<String>()
         val logoutTokens = mutableListOf<String?>()
         val manager = manager(
-            register = { token, _, _ -> registrations += token },
+            register = { _, token, _, _ -> registrations += token },
             currentFcmToken = { "AAA" },
             deleteMessagingToken = {
                 deleteStarted.complete(Unit)
@@ -185,7 +186,7 @@ class PushTokenLifecycleManagerTest {
         val finishDelete = CompletableDeferred<Unit>()
         val events = mutableListOf<String>()
         val manager = manager(
-            register = { token, _, accessToken -> events += "register:$token:$accessToken" },
+            register = { _, token, _, accessToken -> events += "register:$token:$accessToken" },
             deleteMessagingToken = {
                 deleteStarted.complete(Unit)
                 finishDelete.await()
@@ -217,7 +218,7 @@ class PushTokenLifecycleManagerTest {
         val logoutTokens = mutableListOf<String?>()
         var currentToken = "AAA"
         val manager = manager(
-            register = { token, _, _ -> registrations += token },
+            register = { _, token, _, _ -> registrations += token },
             currentFcmToken = { currentToken },
             deleteMessagingToken = { false },
         )
@@ -241,7 +242,7 @@ class PushTokenLifecycleManagerTest {
         val registrations = mutableListOf<String>()
         var currentToken = "AAA"
         val manager = manager(
-            register = { token, _, _ -> registrations += token },
+            register = { _, token, _, _ -> registrations += token },
             currentFcmToken = { currentToken },
             deleteMessagingToken = { error("Firebase unavailable") },
         )
@@ -266,7 +267,7 @@ class PushTokenLifecycleManagerTest {
         var registrations = 0
         val active = session("user-a", "refresh-a", "access-a")
         val manager = manager(
-            register = { _, _, _ -> registrations++ },
+            register = { _, _, _, _ -> registrations++ },
             restoreSession = {
                 restoreStarted.complete(Unit)
                 finishRestore.await()
@@ -289,7 +290,7 @@ class PushTokenLifecycleManagerTest {
         var restoreCalls = 0
         val active = session("user-a", "refresh-a", "access-a")
         val manager = manager(
-            register = { _, _, _ -> registrations++ },
+            register = { _, _, _, _ -> registrations++ },
             restoreSession = { restoreCalls++; active },
         )
         manager.updateSession(active)
@@ -313,11 +314,11 @@ class PushTokenLifecycleManagerTest {
     @Test
     fun newManagerCanRegisterAfterProcessRestart() = runTest {
         var registrations = 0
-        val first = manager(register = { _, _, _ -> registrations++ })
+        val first = manager(register = { _, _, _, _ -> registrations++ })
         first.updateSession(session("user-a", "refresh-a", "access-a"))
         runCurrent()
 
-        val restarted = manager(register = { _, _, _ -> registrations++ })
+        val restarted = manager(register = { _, _, _, _ -> registrations++ })
         restarted.updateSession(session("user-a", "refresh-a", "access-a"))
         runCurrent()
 
@@ -330,7 +331,7 @@ class PushTokenLifecycleManagerTest {
         val finishRegistration = CompletableDeferred<Unit>()
         var registrations = 0
         val manager = manager(
-            register = { _, _, _ ->
+            register = { _, _, _, _ ->
                 registrations++
                 if (registrations == 1) {
                     registrationStarted.complete(Unit)
@@ -421,7 +422,7 @@ class PushTokenLifecycleManagerTest {
         val finishRemoteLogout = CompletableDeferred<Unit>()
         val events = mutableListOf<String>()
         val manager = manager(
-            register = { token, _, accessToken -> events += "register:$token:$accessToken" },
+            register = { _, token, _, accessToken -> events += "register:$token:$accessToken" },
             deleteMessagingToken = { events += "messaging-delete"; true },
         )
         val userA = session("user-a", "refresh-a", "access-a")
@@ -470,28 +471,28 @@ class PushTokenLifecycleManagerTest {
     }
 
     @Test
-    fun restoredSessionSelectsItsCampusBeforeRegistering() = runTest {
-        val events = mutableListOf<String>()
-        val stored = session("user-a", "refresh-a", "access-a").copy(campus = Campus.TOKYO)
+    fun restoredSessionRegistersToItsCampusWithoutChangingCurrentCampus() = runTest {
+        val registrations = mutableListOf<String>()
+        val before = CurrentCampus.campus
         val manager = manager(
-            register = { token, _, accessToken -> events += "register:$token:$accessToken" },
-            restoreSession = { stored },
-            selectSessionCampus = { events += "select:${it.campus}"; true },
+            register = { baseUrl, token, _, accessToken -> registrations += "$baseUrl:$token:$accessToken" },
+            restoreSession = { session("user-a", "refresh-a", "access-a").copy(campus = Campus.TOKYO) },
         )
 
         manager.onTokenRefreshed("new-token")
         runCurrent()
 
-        assertEquals(listOf("select:TOKYO", "register:new-token:access-a"), events)
+        assertEquals(listOf("https://tokyo.example:new-token:access-a"), registrations)
+        assertEquals(before, CurrentCampus.campus)
     }
 
     @Test
-    fun restoredSessionIsNotRegisteredWhenCampusCannotBeSelected() = runTest {
+    fun sessionIsNotRegisteredWhenItsCampusHasNoApi() = runTest {
         val registrations = mutableListOf<String>()
         val manager = manager(
-            register = { token, _, _ -> registrations += token },
+            register = { _, token, _, _ -> registrations += token },
             restoreSession = { session("user-a", "refresh-a", "access-a").copy(campus = Campus.OSAKA) },
-            selectSessionCampus = { false },
+            campusBaseUrl = { if (it == Campus.OSAKA) null else testBaseUrl(it) },
         )
 
         manager.onTokenRefreshed("new-token")
@@ -501,11 +502,11 @@ class PushTokenLifecycleManagerTest {
     }
 
     private fun TestScope.manager(
-        register: suspend (String, FirebasePlatform, String) -> Unit = { _, _, _ -> },
+        register: suspend (String, String, FirebasePlatform, String) -> Unit = { _, _, _, _ -> },
         currentFcmToken: suspend () -> String? = { "fcm-token" },
         deleteMessagingToken: suspend () -> Boolean = { true },
         restoreSession: suspend () -> AuthSession? = { null },
-        selectSessionCampus: (AuthSession) -> Boolean = { true },
+        campusBaseUrl: (Campus) -> String? = ::testBaseUrl,
         onFailure: (Throwable) -> Unit = {},
     ) = PushTokenLifecycleManager(
         platform = FirebasePlatform.Android,
@@ -514,9 +515,11 @@ class PushTokenLifecycleManagerTest {
         currentFcmToken = currentFcmToken,
         deleteMessagingToken = deleteMessagingToken,
         restoreSession = restoreSession,
-        selectSessionCampus = selectSessionCampus,
+        campusBaseUrl = campusBaseUrl,
         onFailure = onFailure,
     )
+
+    private fun testBaseUrl(campus: Campus) = "https://${campus.name.lowercase()}.example"
 
     private fun session(userId: String, refreshTokenId: String, accessToken: String) =
         AuthSession(

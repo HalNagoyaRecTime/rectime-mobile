@@ -1,7 +1,8 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.config.Campus
+import com.rectime.mobile.core.config.apiBaseUrlOrNull
 import com.rectime.mobile.feature.auth.AuthSession
-import com.rectime.mobile.feature.auth.restoreCampus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -14,11 +15,12 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 internal class PushTokenLifecycleManager(
     private val platform: FirebasePlatform,
     private val scope: CoroutineScope,
-    private val register: suspend (String, FirebasePlatform, String) -> Unit,
+    // (baseUrl, fcmToken, platform, accessToken)
+    private val register: suspend (String, String, FirebasePlatform, String) -> Unit,
     private val currentFcmToken: suspend () -> String?,
     private val deleteMessagingToken: suspend () -> Boolean,
     private val restoreSession: suspend () -> AuthSession? = { null },
-    private val selectSessionCampus: (AuthSession) -> Boolean = ::restoreCampus,
+    private val campusBaseUrl: (Campus) -> String? = { it.apiBaseUrlOrNull() },
     private val onFailure: (Throwable) -> Unit = {},
 ) : PushTokenLifecycle {
     private val operationMutex = Mutex()
@@ -210,8 +212,6 @@ internal class PushTokenLifecycleManager(
         scope.launch {
             try {
                 val restored = restoreSession() ?: return@launch
-                // アプリ未起動でも保存した学校のAPIへ登録する。選べない学校なら別校へ送らない
-                if (!selectSessionCampus(restored)) return@launch
                 val updated = updateState { current ->
                     if (
                         current.generation != expectedGeneration ||
@@ -276,7 +276,9 @@ internal class PushTokenLifecycleManager(
 
             val key = RegistrationKey(session.user.id, fcmToken)
             if (prepared.lastRegistration == key) return
-            register(fcmToken, platform, session.accessToken)
+            // 全体の選択校ではなく、このSessionの学校のAPIへ送る。使えない学校なら別校へ送らない
+            val baseUrl = campusBaseUrl(session.campus)?.takeIf(String::isNotBlank) ?: return
+            register(baseUrl, fcmToken, platform, session.accessToken)
 
             updateState { current ->
                 if (
