@@ -70,8 +70,19 @@ internal const val AUTH_DEACTIVATED_MESSAGE = "このアカウントは無効化
 internal const val AUTH_EXPIRED_MESSAGE =
     "ログイン情報の有効期限が切れました。もう一度ログインしてください。"
 internal const val AUTH_CANCELED_MESSAGE = "ログインをキャンセルしました。"
+internal const val WRONG_CAMPUS_CODE = "WRONG_CAMPUS"
+internal const val UNSUPPORTED_CAMPUS_CODE = "UNSUPPORTED_CAMPUS"
+internal const val INTERNAL_SERVER_ERROR_CODE = "INTERNAL_SERVER_ERROR"
+internal const val AUTH_CONTACT_REQUIRED_MESSAGE =
+    "ログインできませんでした。設定に問題がある可能性があるため、管理者にお問い合わせください。"
+
+/** 学校の判定や接続先の設定の不備など、やり直しても直らない拒否かを判定する。 */
+private fun AuthApiException.requiresContact(): Boolean =
+    errorCode == WRONG_CAMPUS_CODE || errorCode == UNSUPPORTED_CAMPUS_CODE ||
+        (statusCode == 500 && errorCode == INTERNAL_SERVER_ERROR_CODE)
 
 internal fun authErrorMessage(error: Throwable, debugDetailsEnabled: Boolean): String = when {
+    error is AuthApiException && error.requiresContact() -> AUTH_CONTACT_REQUIRED_MESSAGE
     error is AuthApiException -> accountRejectionMessage(error.statusCode, error.errorCode) ?: debugAuthMessage(
         detail = "HTTP ${error.statusCode}${error.errorCode?.let { " / $it" }.orEmpty()}",
         debugDetailsEnabled = debugDetailsEnabled,
