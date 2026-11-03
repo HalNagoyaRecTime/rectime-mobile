@@ -1,6 +1,7 @@
 package com.rectime.mobile.feature.notifications
 
 import com.rectime.mobile.feature.auth.AuthSession
+import com.rectime.mobile.feature.auth.restoreCampus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -17,6 +18,7 @@ internal class PushTokenLifecycleManager(
     private val currentFcmToken: suspend () -> String?,
     private val deleteMessagingToken: suspend () -> Boolean,
     private val restoreSession: suspend () -> AuthSession? = { null },
+    private val selectSessionCampus: (AuthSession) -> Boolean = ::restoreCampus,
     private val onFailure: (Throwable) -> Unit = {},
 ) : PushTokenLifecycle {
     private val operationMutex = Mutex()
@@ -208,6 +210,8 @@ internal class PushTokenLifecycleManager(
         scope.launch {
             try {
                 val restored = restoreSession() ?: return@launch
+                // アプリ未起動でも保存した学校のAPIへ登録する。選べない学校なら別校へ送らない
+                if (!selectSessionCampus(restored)) return@launch
                 val updated = updateState { current ->
                     if (
                         current.generation != expectedGeneration ||

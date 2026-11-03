@@ -469,11 +469,43 @@ class PushTokenLifecycleManagerTest {
         assertEquals(1, failures.size)
     }
 
+    @Test
+    fun restoredSessionSelectsItsCampusBeforeRegistering() = runTest {
+        val events = mutableListOf<String>()
+        val stored = session("user-a", "refresh-a", "access-a").copy(campus = Campus.TOKYO)
+        val manager = manager(
+            register = { token, _, accessToken -> events += "register:$token:$accessToken" },
+            restoreSession = { stored },
+            selectSessionCampus = { events += "select:${it.campus}"; true },
+        )
+
+        manager.onTokenRefreshed("new-token")
+        runCurrent()
+
+        assertEquals(listOf("select:TOKYO", "register:new-token:access-a"), events)
+    }
+
+    @Test
+    fun restoredSessionIsNotRegisteredWhenCampusCannotBeSelected() = runTest {
+        val registrations = mutableListOf<String>()
+        val manager = manager(
+            register = { token, _, _ -> registrations += token },
+            restoreSession = { session("user-a", "refresh-a", "access-a").copy(campus = Campus.OSAKA) },
+            selectSessionCampus = { false },
+        )
+
+        manager.onTokenRefreshed("new-token")
+        runCurrent()
+
+        assertTrue(registrations.isEmpty())
+    }
+
     private fun TestScope.manager(
         register: suspend (String, FirebasePlatform, String) -> Unit = { _, _, _ -> },
         currentFcmToken: suspend () -> String? = { "fcm-token" },
         deleteMessagingToken: suspend () -> Boolean = { true },
         restoreSession: suspend () -> AuthSession? = { null },
+        selectSessionCampus: (AuthSession) -> Boolean = { true },
         onFailure: (Throwable) -> Unit = {},
     ) = PushTokenLifecycleManager(
         platform = FirebasePlatform.Android,
@@ -482,6 +514,7 @@ class PushTokenLifecycleManagerTest {
         currentFcmToken = currentFcmToken,
         deleteMessagingToken = deleteMessagingToken,
         restoreSession = restoreSession,
+        selectSessionCampus = selectSessionCampus,
         onFailure = onFailure,
     )
 
