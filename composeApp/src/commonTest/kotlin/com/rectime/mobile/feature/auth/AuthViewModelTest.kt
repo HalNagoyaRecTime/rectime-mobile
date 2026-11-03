@@ -2046,6 +2046,74 @@ class AuthViewModelTest {
             assertNull(store.session)
             assertNull(cache.load<String>("some_cached_key"))
         }
+    // ---- 保存済みログインの学校 ----
+
+    @Test
+    fun restoringAnOsakaSessionSelectsOsakaBeforeTheStartupRequest() = runTest(testDispatcher) {
+        var campus = Campus.NAGOYA
+        val requestedUrls = mutableListOf<String>()
+        val store = FakeAuthSessionStorage(session = storedSession.copy(campus = Campus.OSAKA))
+        val api = AuthApi(
+            mockClient { request ->
+                requestedUrls += request.url.toString()
+                respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            },
+            baseUrl = { campusUrl(campus) },
+        )
+        buildViewModel(api, store, selectSessionCampus = { campus = it.campus; true })
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(requestedUrls.isNotEmpty())
+        assertTrue(requestedUrls.all { it.startsWith(campusUrl(Campus.OSAKA)) }, requestedUrls.toString())
+    }
+
+    @Test
+    fun logoutAfterRestoringAnOsakaSessionGoesToTheOsakaApi() = runTest(testDispatcher) {
+        var campus = Campus.NAGOYA
+        val logoutUrls = mutableListOf<String>()
+        val store = FakeAuthSessionStorage(session = storedSession.copy(campus = Campus.OSAKA))
+        val api = AuthApi(
+            mockClient { request ->
+                if (request.url.encodedPath.endsWith("/auth/logout")) {
+                    logoutUrls += request.url.toString()
+                    respond("", HttpStatusCode.NoContent)
+                } else respond(meBody, HttpStatusCode.OK, jsonHeaders)
+            },
+            baseUrl = { campusUrl(campus) },
+        )
+        val viewModel = buildViewModel(api, store, selectSessionCampus = { campus = it.campus; true })
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(1, logoutUrls.size)
+        assertTrue(logoutUrls.single().startsWith(campusUrl(Campus.OSAKA)))
+        assertNull(store.session)
+    }
+
+    @Test
+    fun unavailableSessionCampusClearsTheSessionWithoutNetwork() = runTest(testDispatcher) {
+        val pending = PendingAuth("state", "verifier")
+        val store = FakeAuthSessionStorage(session = storedSession.copy(campus = Campus.TOKYO), pendingAuth = pending)
+        val viewModel = buildViewModel(failingApi(), store, selectSessionCampus = { false })
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertNull(store.session)
+        assertNull(state.session)
+        assertNull(SessionTokenHolder.accessToken)
+        assertFalse(state.isLoading)
+        assertFalse(state.isRestoringSession)
+        assertNull(state.error)
+        assertEquals(pending, state.pendingAuth)
+        assertEquals(pending, store.pendingAuth)
+    }
+
+    private fun campusUrl(campus: Campus) = "https://${campus.name.lowercase()}.example.test"
+
     private fun buildViewModel(
         api: AuthApi,
         store: FakeAuthSessionStorage,
@@ -2056,6 +2124,7 @@ class AuthViewModelTest {
         pushTokenLifecycle: PushTokenLifecycle = RecordingPushTokenLifecycle(mutableListOf()),
         prepareCallback: (String) -> String? = { null },
         cancelCallback: (String) -> Unit = {},
+        selectSessionCampus: (AuthSession) -> Boolean = { true },
     ) = AuthViewModel(
         api = api,
         sessionStore = store,
@@ -2065,6 +2134,7 @@ class AuthViewModelTest {
         pushTokenLifecycle = pushTokenLifecycle,
         prepareCallback = prepareCallback,
         cancelCallback = cancelCallback,
+        selectSessionCampus = selectSessionCampus,
     )
 
     private fun failingApi() = AuthApi(mockClient { error("HTTPリクエストが発生してはいけない") })
