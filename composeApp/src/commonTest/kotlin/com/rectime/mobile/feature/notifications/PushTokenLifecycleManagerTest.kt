@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.config.Campus
 import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.AuthUser
 import kotlinx.coroutines.CompletableDeferred
@@ -489,6 +490,7 @@ class PushTokenLifecycleManagerTest {
             accessToken = accessToken,
             refreshTokenId = refreshTokenId,
             expiresIn = 3600L,
+            campus = Campus.NAGOYA,
             user = AuthUser(
                 id = userId,
                 email = "$userId@example.invalid",

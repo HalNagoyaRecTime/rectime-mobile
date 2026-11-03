@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -23,6 +24,7 @@ class AuthSessionCodecTest {
             accessToken = "token123",
             refreshTokenId = "refresh456",
             expiresIn = 3600L,
+            campus = Campus.NAGOYA,
             user = AuthUser(
                 id = "6",
                 email = "test@example.com",
@@ -156,6 +158,7 @@ private fun createTestSession(
     accessToken = accessToken,
     refreshTokenId = refreshTokenId,
     expiresIn = 3600L,
+    campus = Campus.NAGOYA,
     user = AuthUser(
         id = "6",
         email = "test@example.com",

@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -71,6 +72,8 @@ fun decodeAuthSession(value: String): AuthSession? = runCatching {
         accessToken = stored.accessToken,
         refreshTokenId = stored.refreshTokenId,
         expiresIn = stored.expiresIn,
+        // TODO(#422): 校舎の永続化はPhase 2で対応する。それまでは名古屋として復元する。
+        campus = Campus.NAGOYA,
         user = AuthUser(
             id = stored.user.id,
             email = stored.user.email,

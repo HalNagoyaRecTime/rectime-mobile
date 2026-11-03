@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
 import com.rectime.mobile.core.platform.initializePlatformContext
@@ -37,6 +38,7 @@ class AuthSessionStoreInstrumentedTest {
         accessToken = ACCESS_TOKEN,
         refreshTokenId = REFRESH_TOKEN_ID,
         expiresIn = 3600L,
+        campus = Campus.NAGOYA,
         user = AuthUser(
             id = "user-1",
             email = EMAIL,

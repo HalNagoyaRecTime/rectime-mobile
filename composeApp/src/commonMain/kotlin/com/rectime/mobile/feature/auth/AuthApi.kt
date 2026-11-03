@@ -1,5 +1,7 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
+import com.rectime.mobile.core.config.CurrentCampus
 import com.rectime.mobile.core.config.apiBaseUrl
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
@@ -23,6 +25,7 @@ import kotlinx.serialization.json.JsonNamingStrategy
 class AuthApi(
     private val client: HttpClient = createAppHttpClient(),
     private val baseUrl: () -> String = { apiBaseUrl },
+    private val currentCampus: () -> Campus = { CurrentCampus.campus },
 ) {
     suspend fun requestAuthUrl(state: String, codeChallenge: String, desktopRedirectUri: String? = null): String {
         val response = client.get("${baseUrl()}/api/v1/auth/microsoft/login") {
@@ -67,6 +70,7 @@ class AuthApi(
                 ?: throw IllegalStateException("refresh_token_id がありません"),
             expiresIn = parsed.expiresIn ?: 0L,
             user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(base),
+            campus = currentCampus(),
         )
     }
 

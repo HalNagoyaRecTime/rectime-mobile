@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
@@ -2195,6 +2196,7 @@ class AuthViewModelTest {
             accessToken = "access-token",
             refreshTokenId = "refresh-token-id",
             expiresIn = 3600L,
+            campus = Campus.NAGOYA,
             user = AuthUser(
                 id = "6",
                 email = "test@example.com",
