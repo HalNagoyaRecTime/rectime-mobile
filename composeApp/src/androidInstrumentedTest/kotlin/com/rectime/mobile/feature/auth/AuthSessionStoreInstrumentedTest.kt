@@ -38,7 +38,7 @@ class AuthSessionStoreInstrumentedTest {
         accessToken = ACCESS_TOKEN,
         refreshTokenId = REFRESH_TOKEN_ID,
         expiresIn = 3600L,
-        campus = Campus.NAGOYA,
+        campus = Campus.OSAKA,
         user = AuthUser(
             id = "user-1",
             email = EMAIL,

@@ -135,6 +135,54 @@ class AuthSessionCodecTest {
     }
 
     @Test
+    fun campusSurvivesEncodeDecodeRoundTrip() {
+        listOf(Campus.OSAKA, Campus.TOKYO).forEach { campus ->
+            val original = createTestSession(campus = campus)
+            assertEquals(campus, decodeAuthSession(encodeAuthSession(original))?.campus)
+        }
+    }
+
+    @Test
+    fun sessionWithoutCampusIsRestoredAsNagoya() {
+        val encoded = """
+            {
+              "version": 1,
+              "accessToken": "token123",
+              "refreshTokenId": "refresh456",
+              "expiresIn": 3600,
+              "user": {
+                "id": "6",
+                "email": "test@example.com",
+                "displayName": "テスト太郎",
+                "isStudent": false,
+                "isStaff": false,
+                "isTeacher": false
+              }
+            }
+        """.trimIndent()
+
+        assertEquals(Campus.NAGOYA, decodeAuthSession(encoded)?.campus)
+    }
+
+    @Test
+    fun unknownCampusCodeIsRejected() {
+        listOf("KYOTO", "osaka", "").forEach { code ->
+            val encoded = """
+                {
+                  "version": 1,
+                  "accessToken": "token123",
+                  "refreshTokenId": "refresh456",
+                  "expiresIn": 3600,
+                  "campus": "$code",
+                  "user": {"id":"6","email":"e","displayName":"f"}
+                }
+            """.trimIndent()
+
+            assertNull(decodeAuthSession(encoded), "campus=$code")
+        }
+    }
+
+    @Test
     fun pendingAuthSurvivesEncodeDecodeRoundTrip() {
         val original = PendingAuth(state = "state-abc_123", codeVerifier = "verifier-xyz_456")
         assertEquals(original, decodePendingAuth(encodePendingAuth(original)))
@@ -154,11 +202,12 @@ class AuthSessionCodecTest {
 private fun createTestSession(
     accessToken: String = "token123",
     refreshTokenId: String = "refresh456",
+    campus: Campus = Campus.NAGOYA,
 ) = AuthSession(
     accessToken = accessToken,
     refreshTokenId = refreshTokenId,
     expiresIn = 3600L,
-    campus = Campus.NAGOYA,
+    campus = campus,
     user = AuthUser(
         id = "6",
         email = "test@example.com",
