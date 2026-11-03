@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import com.rectime.mobile.core.network.MobileAuthHeadersPlugin
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -151,10 +152,104 @@ class AuthApiTest {
         assertEquals("認証 URL のレスポンスが不正です", error.message)
     }
 
-    // ---- exchangeCode 正常系 ----
+    // ---- resolveCampus ----
 
     @Test
-    fun exchangeCodePostsSnakeCaseBodyAndMapsSession() = runTest {
+    fun loginStartAndCampusResolutionAlwaysGoToNagoya() = runTest {
+        val urls = mutableListOf<String>()
+        var resolveBody = ""
+        val api = AuthApi(
+            mockClient { request ->
+                urls += request.url.toString()
+                if (request.url.encodedPath.endsWith("/resolve-campus")) {
+                    resolveBody = request.body.toByteArray().decodeToString()
+                    respond(RESOLVED_OSAKA_JSON, HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    respond("""{"auth_url":"https://login.microsoftonline.com/authorize"}""", HttpStatusCode.OK, jsonHeaders)
+                }
+            },
+            // ログイン中の学校が大阪でも、判定前の通信は名古屋へ送る。
+            baseUrl = { OSAKA_BASE },
+            loginBaseUrl = { NAGOYA_BASE },
+            campusBaseUrl = { if (it == Campus.OSAKA) OSAKA_BASE else null },
+        )
+
+        api.requestAuthUrl("state-abc", "challenge-xyz")
+        val resolved = api.resolveCampus("auth-code", "state-abc", "verifier-123")
+
+        assertEquals(
+            listOf(
+                "$NAGOYA_BASE/api/v1/auth/microsoft/login",
+                "$NAGOYA_BASE/api/v1/auth/microsoft/resolve-campus",
+            ),
+            urls,
+        )
+        assertTrue(resolveBody.contains(""""code":"auth-code""""), resolveBody)
+        assertTrue(resolveBody.contains(""""state":"state-abc""""), resolveBody)
+        assertTrue(resolveBody.contains(""""code_verifier":"verifier-123""""), resolveBody)
+        assertEquals(Campus.OSAKA, resolved.campus)
+        assertEquals(OSAKA_BASE, resolved.baseUrl)
+        assertEquals("ms-refresh-token", resolved.msRefreshToken)
+    }
+
+    @Test
+    fun resolvedCampusDoesNotExposeRefreshTokenInToString() {
+        val resolved = ResolvedCampus(Campus.OSAKA, OSAKA_BASE, "ms-refresh-token")
+
+        assertFalse(resolved.toString().contains("ms-refresh-token"))
+    }
+
+    @Test
+    fun resolveCampusRejectsCampusWithoutApi() = runTest {
+        for (body in listOf(RESOLVED_OSAKA_JSON, RESOLVED_OSAKA_JSON.replace("OSAKA", "KYOTO"))) {
+            val api = AuthApi(
+                mockClient { respond(body, HttpStatusCode.OK, jsonHeaders) },
+                campusBaseUrl = { null },
+            )
+
+            val error = assertFailsWith<AuthApiException> {
+                api.resolveCampus("auth-code", "state-abc", "verifier-123")
+            }
+
+            assertEquals(UNSUPPORTED_CAMPUS_CODE, error.errorCode)
+        }
+    }
+
+    @Test
+    fun resolveCampusFailsWhenRefreshTokenIsMissing() = runTest {
+        val api = AuthApi(mockClient { respond("""{"campus":"NAGOYA"}""", HttpStatusCode.OK, jsonHeaders) })
+
+        val error = assertFailsWith<IllegalStateException> {
+            api.resolveCampus("auth-code", "state-abc", "verifier-123")
+        }
+
+        assertEquals("ms_refresh_token がありません", error.message)
+    }
+
+    @Test
+    fun resolveCampusKeepsApiErrorCode() = runTest {
+        val api = AuthApi(
+            mockClient {
+                respond(
+                    """{"error":{"code":"STATE_MISMATCH","message":"state mismatch"}}""",
+                    HttpStatusCode.Unauthorized,
+                    jsonHeaders,
+                )
+            },
+        )
+
+        val error = assertFailsWith<AuthApiException> {
+            api.resolveCampus("auth-code", "state-abc", "verifier-123")
+        }
+
+        assertEquals(401, error.statusCode)
+        assertEquals("STATE_MISMATCH", error.errorCode)
+    }
+
+    // ---- loginToCampus 正常系 ----
+
+    @Test
+    fun loginToCampusPostsRefreshTokenToTheResolvedCampusAndMapsSession() = runTest {
         var captured: HttpRequestData? = null
         val api = AuthApi(
             mockClient { request ->
@@ -165,21 +260,16 @@ class AuthApiTest {
                     headers = jsonHeaders,
                 )
             },
+            baseUrl = { NAGOYA_BASE },
         )
 
-        val session = api.exchangeCode(
-            code = "auth-code",
-            state = "state-abc",
-            codeVerifier = "verifier-123",
-        )
+        val session = api.loginToCampus(ResolvedCampus(Campus.OSAKA, OSAKA_BASE, "ms-refresh-token"))
 
         val request = requireNotNull(captured)
-        assertEquals("/api/v1/auth/microsoft/token", request.url.encodedPath)
+        assertEquals("$OSAKA_BASE/api/v1/auth/microsoft/campus-token", request.url.toString())
         assertEquals("mobile", request.headers["X-Client-Type"])
         val body = request.body.toByteArray().decodeToString()
-        assertTrue(body.contains(""""code":"auth-code""""), body)
-        assertTrue(body.contains(""""state":"state-abc""""), body)
-        assertTrue(body.contains(""""code_verifier":"verifier-123""""), body)
+        assertEquals("""{"ms_refresh_token":"ms-refresh-token"}""", body)
 
         assertEquals("access-token", session.accessToken)
         assertEquals("refresh-token-id", session.refreshTokenId)
@@ -193,7 +283,7 @@ class AuthApiTest {
     }
 
     @Test
-    fun exchangeCodeAppendsAvatarCacheBusterToRelativeAvatarUrl() = runTest {
+    fun loginToCampusAppendsAvatarCacheBusterToRelativeAvatarUrl() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -219,7 +309,7 @@ class AuthApiTest {
             baseUrl = { "https://api.example.test" },
         )
 
-        val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
+        val session = api.loginToCampus(resolvedNagoya)
 
         val avatarUrl = requireNotNull(session.user.avatarUrl)
         assertTrue(avatarUrl.endsWith("/api/v1/users/6/avatar?v=2026-07-31T09:00:00Z"), avatarUrl)
@@ -227,7 +317,7 @@ class AuthApiTest {
     }
 
     @Test
-    fun exchangeCodeKeepsAbsoluteAvatarUrlAsIsWhenNotUpdated() = runTest {
+    fun loginToCampusKeepsAbsoluteAvatarUrlAsIsWhenNotUpdated() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -251,14 +341,14 @@ class AuthApiTest {
             },
         )
 
-        val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
+        val session = api.loginToCampus(resolvedNagoya)
 
         assertEquals("https://cdn.example.com/avatar.png", session.user.avatarUrl)
         assertNull(session.user.avatarUpdatedAt)
     }
 
     @Test
-    fun exchangeCodeReadsStudentProfileMissing() = runTest {
+    fun loginToCampusReadsStudentProfileMissing() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -275,7 +365,7 @@ class AuthApiTest {
             },
         )
 
-        val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
+        val session = api.loginToCampus(resolvedNagoya)
 
         assertTrue(session.user.studentProfileMissing)
     }
@@ -294,7 +384,7 @@ class AuthApiTest {
     }
 
     @Test
-    fun exchangeCodeDefaultsExpiresInToZeroWhenMissing() = runTest {
+    fun loginToCampusDefaultsExpiresInToZeroWhenMissing() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -311,16 +401,16 @@ class AuthApiTest {
             },
         )
 
-        val session = api.exchangeCode("auth-code", "state-abc", "verifier-123")
+        val session = api.loginToCampus(resolvedNagoya)
 
         assertEquals(0L, session.expiresIn)
         assertNull(session.user.role)
     }
 
-    // ---- exchangeCode 異常系 ----
+    // ---- loginToCampus 異常系 ----
 
     @Test
-    fun exchangeCodeUsesApiErrorMessageWhenStateIsRejected() = runTest {
+    fun loginToCampusUsesApiErrorMessageWhenStateIsRejected() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -332,7 +422,7 @@ class AuthApiTest {
         )
 
         val error = assertFailsWith<AuthApiException> {
-            api.exchangeCode("auth-code", "state-abc", "verifier-123")
+            api.loginToCampus(resolvedNagoya)
         }
 
         assertEquals(401, error.statusCode)
@@ -341,7 +431,7 @@ class AuthApiTest {
     }
 
     @Test
-    fun exchangeCodeFailsWhenAccessTokenIsMissing() = runTest {
+    fun loginToCampusFailsWhenAccessTokenIsMissing() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -353,14 +443,14 @@ class AuthApiTest {
         )
 
         val error = assertFailsWith<IllegalStateException> {
-            api.exchangeCode("auth-code", "state-abc", "verifier-123")
+            api.loginToCampus(resolvedNagoya)
         }
 
         assertEquals("access_token がありません", error.message)
     }
 
     @Test
-    fun exchangeCodeFailsWhenRefreshTokenIdIsMissing() = runTest {
+    fun loginToCampusFailsWhenRefreshTokenIdIsMissing() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -372,14 +462,14 @@ class AuthApiTest {
         )
 
         val error = assertFailsWith<IllegalStateException> {
-            api.exchangeCode("auth-code", "state-abc", "verifier-123")
+            api.loginToCampus(resolvedNagoya)
         }
 
         assertEquals("refresh_token_id がありません", error.message)
     }
 
     @Test
-    fun exchangeCodeFailsWhenUserIsMissing() = runTest {
+    fun loginToCampusFailsWhenUserIsMissing() = runTest {
         val api = AuthApi(
             mockClient {
                 respond(
@@ -391,7 +481,7 @@ class AuthApiTest {
         )
 
         val error = assertFailsWith<IllegalStateException> {
-            api.exchangeCode("auth-code", "state-abc", "verifier-123")
+            api.loginToCampus(resolvedNagoya)
         }
 
         assertEquals("ユーザー情報がありません", error.message)
@@ -595,20 +685,24 @@ class AuthApiTest {
         val api = AuthApi(
             HttpClient(MockEngine { request ->
                 clientTypes[request.url.encodedPath] = request.headers.getAll("X-Client-Type")
-                val content = if (request.url.encodedPath.endsWith("/login")) {
-                    """{"auth_url":"https://login.microsoftonline.com/authorize"}"""
-                } else {
-                    sessionJson
+                val content = when {
+                    request.url.encodedPath.endsWith("/login") ->
+                        """{"auth_url":"https://login.microsoftonline.com/authorize"}"""
+                    request.url.encodedPath.endsWith("/resolve-campus") -> RESOLVED_OSAKA_JSON
+                    else -> sessionJson
                 }
                 respond(content, HttpStatusCode.OK, jsonHeaders)
             }) {
                 install(MobileAuthHeadersPlugin) { baseUrl = { BASE } }
             },
             baseUrl = { BASE },
+            loginBaseUrl = { BASE },
+            campusBaseUrl = { BASE },
         )
         try {
             api.requestAuthUrl(state = "state-abc", codeChallenge = "challenge-xyz")
-            api.exchangeCode(code = "auth-code", state = "state-abc", codeVerifier = "verifier-123")
+            api.resolveCampus(code = "auth-code", state = "state-abc", codeVerifier = "verifier-123")
+            api.loginToCampus(resolvedNagoya)
             api.currentUser("access-token")
             api.refresh(storedSession)
             api.logout(storedSession)
@@ -616,7 +710,8 @@ class AuthApiTest {
             assertEquals(
                 listOf(
                     "/api/v1/auth/microsoft/login",
-                    "/api/v1/auth/microsoft/token",
+                    "/api/v1/auth/microsoft/resolve-campus",
+                    "/api/v1/auth/microsoft/campus-token",
                     "/api/v1/auth/me",
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
@@ -771,6 +866,11 @@ class AuthApiTest {
 
     private companion object {
         const val BASE = "https://api.example.test"
+        const val NAGOYA_BASE = "https://nagoya.example.test"
+        const val OSAKA_BASE = "https://osaka.example.test"
+        const val RESOLVED_OSAKA_JSON = """{"campus":"OSAKA","ms_refresh_token":"ms-refresh-token"}"""
+
+        val resolvedNagoya = ResolvedCampus(Campus.NAGOYA, BASE, "ms-refresh-token")
 
         val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
 
