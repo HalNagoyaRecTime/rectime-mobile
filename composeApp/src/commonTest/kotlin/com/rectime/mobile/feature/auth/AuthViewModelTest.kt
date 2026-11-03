@@ -427,7 +427,8 @@ class AuthViewModelTest {
             .replace("refresh-token-id", "new-refresh-token-id")
         val viewModel = buildViewModel(AuthApi(mockClient { request ->
             when {
-                request.url.encodedPath.endsWith("/microsoft/token") -> respond(newSessionBody, HttpStatusCode.OK, jsonHeaders)
+                request.url.encodedPath.endsWith("/microsoft/resolve-campus") ||
+                    request.url.encodedPath.endsWith("/microsoft/campus-token") -> respond(newSessionBody, HttpStatusCode.OK, jsonHeaders)
                 request.url.encodedPath.endsWith("/microsoft/login") -> respond("""{"auth_url":"https://login.example.com"}""", HttpStatusCode.OK, jsonHeaders)
                 else -> respond(deletedBody, HttpStatusCode.Gone, jsonHeaders)
             }
@@ -1297,6 +1298,97 @@ class AuthViewModelTest {
         assertNull(store.pendingAuth)
     }
 
+    // ---- 所属校の判定 ----
+
+    private fun campusApi(
+        calls: MutableList<String> = mutableListOf(),
+        campusToken: suspend MockRequestHandleScope.() -> HttpResponseData = {
+            respond(sessionJson, HttpStatusCode.OK, jsonHeaders)
+        },
+    ) = AuthApi(
+        mockClient { request ->
+            calls += request.url.toString()
+            if (request.url.encodedPath.endsWith("/resolve-campus")) {
+                respond("""{"campus":"OSAKA","ms_refresh_token":"ms-refresh-token"}""", HttpStatusCode.OK, jsonHeaders)
+            } else {
+                campusToken()
+            }
+        },
+        loginBaseUrl = { "https://nagoya.example.test" },
+        campusBaseUrl = { "https://osaka.example.test" },
+    )
+
+    @Test
+    fun loginResolvesCampusOnNagoyaThenLogsInToThatCampus() = runTest(testDispatcher) {
+        val calls = mutableListOf<String>()
+        val selected = mutableListOf<Campus>()
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(campusApi(calls), store, selectCampus = { selected += it })
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals(
+            listOf(
+                "https://nagoya.example.test/api/v1/auth/microsoft/resolve-campus",
+                "https://osaka.example.test/api/v1/auth/microsoft/campus-token",
+            ),
+            calls,
+        )
+        assertEquals(listOf(Campus.OSAKA), selected)
+        assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
+        assertEquals("access-token", SessionTokenHolder.accessToken)
+        assertNull(store.pendingAuth)
+    }
+
+    @Test
+    fun campusLoginNetworkFailureRestartsLoginWithoutSwitchingCampus() = runTest(testDispatcher) {
+        val selected = mutableListOf<Campus>()
+        val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+        val viewModel = buildViewModel(
+            campusApi(campusToken = { throw RuntimeException("network down") }),
+            store,
+            selectCampus = { selected += it },
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(selected.isEmpty())
+        assertNull(state.session)
+        assertNull(state.pendingAuth)
+        assertNull(store.pendingAuth)
+        assertTrue(state.error.orEmpty().startsWith(AUTH_NETWORK_ERROR_MESSAGE), state.error.orEmpty())
+    }
+
+    @Test
+    fun campusSettingErrorsTellUserToContactAdmin() = runTest(testDispatcher) {
+        val errors = listOf(
+            HttpStatusCode.Conflict to """{"error":{"code":"WRONG_CAMPUS","message":"別の学校","details":{"campus":"NAGOYA"}}}""",
+            HttpStatusCode.InternalServerError to """{"error":{"code":"INTERNAL_SERVER_ERROR","message":"設定が不正"}}""",
+        )
+        for ((status, body) in errors) {
+            val selected = mutableListOf<Campus>()
+            val store = FakeAuthSessionStorage(pendingAuth = PendingAuth("state-abc", "verifier-123"))
+            val viewModel = buildViewModel(
+                campusApi(campusToken = { respond(body, status, jsonHeaders) }),
+                store,
+                selectCampus = { selected += it },
+            )
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            viewModel.handleCallbackUrl("rectime://auth/callback?code=auth-code&state=state-abc")
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals(AUTH_CONTACT_REQUIRED_MESSAGE, viewModel.uiState.value.error)
+            assertTrue(selected.isEmpty())
+            assertNull(store.session)
+        }
+    }
+
     // ---- 学生情報が見つからない場合の案内(#389) ----
 
     @Test
@@ -1441,7 +1533,7 @@ class AuthViewModelTest {
         mockClient { request ->
             val path = request.url.encodedPath
             when {
-                path.endsWith("/auth/microsoft/token") ->
+                path.endsWith("/auth/microsoft/resolve-campus") || path.endsWith("/auth/microsoft/campus-token") ->
                     respond(content = studentProfileMissingSessionJson, status = HttpStatusCode.OK, headers = jsonHeaders)
                 path.endsWith("/auth/logout") ->
                     respond(content = "", status = HttpStatusCode.NoContent)
@@ -1521,7 +1613,7 @@ class AuthViewModelTest {
         viewModel.handleCallbackUrl("rectime://auth/callback?code=auth%2Fcode&state=state+abc#fragment")
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals("/api/v1/auth/microsoft/token", receivedPath)
+        assertEquals("/api/v1/auth/microsoft/campus-token", receivedPath)
         assertNull(viewModel.uiState.value.error)
         assertEquals("access-token", viewModel.uiState.value.session?.accessToken)
     }
@@ -2124,6 +2216,7 @@ class AuthViewModelTest {
         pushTokenLifecycle: PushTokenLifecycle = RecordingPushTokenLifecycle(mutableListOf()),
         prepareCallback: (String) -> String? = { null },
         cancelCallback: (String) -> Unit = {},
+        selectCampus: (Campus) -> Unit = {},
         selectSessionCampus: (AuthSession) -> Boolean = { true },
     ) = AuthViewModel(
         api = api,
@@ -2134,6 +2227,7 @@ class AuthViewModelTest {
         pushTokenLifecycle = pushTokenLifecycle,
         prepareCallback = prepareCallback,
         cancelCallback = cancelCallback,
+        selectCampus = selectCampus,
         selectSessionCampus = selectSessionCampus,
     )
 
@@ -2277,6 +2371,8 @@ class AuthViewModelTest {
 
         val sessionJson = """
             {
+              "campus": "NAGOYA",
+              "ms_refresh_token": "ms-refresh-token",
               "access_token": "access-token",
               "refresh_token_id": "refresh-token-id",
               "expires_in": 3600,
@@ -2291,6 +2387,8 @@ class AuthViewModelTest {
 
         val studentProfileMissingSessionJson = """
             {
+              "campus": "NAGOYA",
+              "ms_refresh_token": "ms-refresh-token",
               "access_token": "access-token",
               "refresh_token_id": "refresh-token-id",
               "expires_in": 3600,

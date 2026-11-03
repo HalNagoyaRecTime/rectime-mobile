@@ -3,6 +3,8 @@ package com.rectime.mobile.feature.auth
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.config.Campus
+import com.rectime.mobile.core.config.CurrentCampus
 import com.rectime.mobile.core.config.isDebugBuild
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
 import com.rectime.mobile.feature.notifications.platformPushTokenLifecycle
@@ -35,6 +37,7 @@ class AuthViewModel(
     private val pushTokenLifecycle: PushTokenLifecycle = platformPushTokenLifecycle(),
     private val prepareCallback: (String) -> String? = ::preparePlatformAuthCallback,
     private val cancelCallback: (String) -> Unit = ::cancelPlatformAuthCallback,
+    private val selectCampus: (Campus) -> Unit = { CurrentCampus.select(it.name) },
     private val selectSessionCampus: (AuthSession) -> Boolean = ::restoreCampus,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState(isRestoringSession = true))
@@ -360,8 +363,11 @@ class AuthViewModel(
             }
 
             _uiState.update { it.copy(isLoading = true, error = null, message = "Completing login...") }
+            var campusResolved = false
             try {
-                val session = api.exchangeCode(code, state, pending.codeVerifier)
+                val resolved = api.resolveCampus(code, state, pending.codeVerifier)
+                campusResolved = true
+                val session = api.loginToCampus(resolved)
                 val committed = sessionTransitionMutex.withLock {
                     if (sessionStore.loadPendingAuth() != pending) {
                         false
@@ -372,6 +378,9 @@ class AuthViewModel(
                         // 保存を先に行うと、削除失敗後の再起動で別ユーザーのキャッシュが見えてしまう。
                         cache.clearAll()
                         sessionStore.save(session)
+                        // ログインが確定してから切り替える。失敗時は今の学校のままにする。
+                        // 学校が変わるとトークンが消えるため、トークンの設定より先に行う。
+                        selectCampus(resolved.campus)
                         loggingOut = false
                         previousAccessToken = null
                         // ログイン直後はこの場で判定するため、起動時の判定は不要になる。
@@ -397,13 +406,15 @@ class AuthViewModel(
                 fetchPhotoIfDue(session, force = true)
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
-                if (error is AuthApiException) {
+                // 判定後はcodeとstateを使い切っており、通信失敗でも同じ認証は再開できない。
+                val attemptEnded = error is AuthApiException || campusResolved
+                if (attemptEnded) {
                     clearPendingAuthForAttempt(pending)
                 }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        pendingAuth = if (error is AuthApiException) {
+                        pendingAuth = if (attemptEnded) {
                             it.pendingAuth.takeUnless { saved -> saved == pending }
                         } else {
                             it.pendingAuth
