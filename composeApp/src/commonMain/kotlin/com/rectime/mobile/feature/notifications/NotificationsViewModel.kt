@@ -4,6 +4,7 @@ import com.rectime.mobile.feature.event.EventScheduleStore
 import com.rectime.mobile.core.network.MyEventsGateway
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rectime.mobile.core.cache.FetchTrigger
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.CacheRefreshQueue
 import com.rectime.mobile.core.cache.CachedFetchResult
@@ -115,8 +116,10 @@ class NotificationsViewModel(
             refreshSource.value = source
             try {
                 val result = withMinimumRefreshDuration(source != null) {
-                    if (source != null) feedStore.refreshAfterCurrentRequest()
-                    feedStore.load(force = source == null)
+                    if (source != null) {
+                        feedStore.refreshAfterCurrentRequest()
+                        feedStore.load()
+                    } else feedStore.loadOnEnter()
                 }
                 when (result) {
                     is CachedFetchResult.Cached -> result.error.printStackTrace()
@@ -394,7 +397,7 @@ class NotificationDetailViewModel internal constructor(
     private suspend fun fetchIsParticipating(notification: UserNotification): Boolean {
         val eventId = notification.relatedEvent?.id ?: return false
         return try {
-            scheduleStore.refreshParticipation().any { it.eventId == eventId }
+            scheduleStore.refreshParticipation(FetchTrigger.Automatic).any { it.eventId == eventId }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

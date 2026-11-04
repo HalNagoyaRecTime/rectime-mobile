@@ -84,7 +84,11 @@ fun App(
         }
     }
 
-    val navigationController = remember { NavigationController() }
+    val navigationController: NavigationController = viewModel(
+        factory = viewModelFactory {
+            initializer { NavigationController() }
+        }
+    )
     val hapticPreference = remember { HapticPreference() }
     var notificationNavigationTarget by remember {
         mutableStateOf<NotificationNavigationTarget?>(null)
@@ -151,7 +155,6 @@ fun App(
                     // 初回はonSessionの取得を共有し、実際の前面復帰だけを再取得する。
                     if (hasResumed) {
                         badgeViewModel.onForeground(session.user.id)
-                        rankingViewModel.onForeground()
                     } else badgeViewModel.onSession(session.user.id)
                     hasResumed = true
                     foregroundScope.launch { scheduleViewModel.onForeground() }

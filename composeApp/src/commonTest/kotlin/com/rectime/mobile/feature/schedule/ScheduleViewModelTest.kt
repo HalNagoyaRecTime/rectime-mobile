@@ -120,24 +120,38 @@ class ScheduleViewModelTest {
     }
 
     @Test
-    fun shortForegroundReusesEachSuccessfulResourceButManualRefreshAlwaysFetches() = runTest(testDispatcher) {
-        val clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z"))
+    fun foregroundReusesWithinPeriodAndManualRefreshOnlyWaitsForCooldown() = runTest(testDispatcher) {
+        val start = Instant.parse("2026-04-28T09:30:45Z")
+        val clock = FakeClock(start)
         val cache = LocalCache(InMemoryKeyValueStore(), clock)
         var calls = 0
         var ownCalls = 0
         val vm = buildViewModel(mockClient { calls++; respondJson(eventsJson) }, clock = clock, cache = cache,
             myEventsGateway = participationGateway { ownCalls++; emptySet() })
-        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
-        clock.instant += kotlin.time.Duration.parse("29s")
-        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
+        suspend fun at(offset: String, action: suspend () -> Unit) {
+            clock.instant = start + kotlin.time.Duration.parse(offset)
+            action(); testDispatcher.scheduler.advanceUntilIdle()
+        }
+        at("0s") { vm.onForeground() }
+        at("29s") { vm.onForeground() }
+        // 手動更新は一覧30秒・本人情報1分のクールダウン中だけ通信しない。
+        at("29s") { vm.refresh() }
         assertEquals(1, calls)
         assertEquals(1, ownCalls)
-        vm.refresh(); testDispatcher.scheduler.advanceUntilIdle()
+        at("30s") { vm.refresh() }
         assertEquals(2, calls)
-        assertEquals(2, ownCalls)
-        clock.instant += kotlin.time.Duration.parse("30s")
-        vm.onForeground(); testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, ownCalls)
+        at("1m") { vm.refresh() }
         assertEquals(3, calls)
+        assertEquals(2, ownCalls)
+        // 自動の取得は一覧3分・本人情報30分まで保存値を使う。
+        at("3m59s") { vm.onForeground() }
+        assertEquals(3, calls)
+        at("4m") { vm.onForeground() }
+        assertEquals(4, calls)
+        assertEquals(2, ownCalls)
+        at("31m") { vm.onForeground() }
+        assertEquals(5, calls)
         assertEquals(3, ownCalls)
     }
 
@@ -1118,7 +1132,7 @@ class ScheduleViewModelTest {
             else respondJson("""{"error":{"code":"UNAUTHORIZED"}}""", HttpStatusCode.Unauthorized)
         }.config {
             install(MobileAuthHeadersPlugin) {
-                baseUrl = "https://api.example.com"
+                baseUrl = { "https://api.example.com" }
                 refreshToken = {
                     refreshes++
                     refreshGate.await()
@@ -1279,6 +1293,19 @@ class ScheduleViewModelTest {
     }
 
     @Test
+    fun nowMinuteDefaultsToEventTimeZone() = runTest(testDispatcher) {
+        val viewModel = ScheduleViewModel(
+            client = mockClient { respondJson(eventsJson) },
+            baseUrl = { "https://api.example.com" },
+            clock = FakeClock(Instant.parse("2026-04-28T00:30:00Z")),
+            cache = LocalCache(InMemoryKeyValueStore()),
+            myEventsGateway = participationGateway { emptySet() },
+        )
+
+        assertEquals(9 * 60 + 30, viewModel.nowMinute.value)
+    }
+
+    @Test
     fun nowMinuteAdvancesWhenMinuteChanges() = runTest(testDispatcher) {
         val clock = FakeClock(Instant.parse("2026-04-28T09:30:45Z"))
         val viewModel = buildViewModel(mockClient { respondJson(eventsJson) }, clock = clock)
@@ -1329,7 +1356,7 @@ class ScheduleViewModelTest {
         val viewModel = buildViewModel(
             client,
             myEventsGateway = com.rectime.mobile.core.network.MyEventsApi(
-                client, "https://api.example.com", { "access-token" },
+                client, { "https://api.example.com" }, { "access-token" },
             ),
         )
         viewModel.fetchEvents()
@@ -1453,7 +1480,7 @@ class ScheduleViewModelTest {
         myEventsGateway: MyEventsGateway = participationGateway { emptySet() },
     ) = ScheduleViewModel(
         client = client,
-        baseUrl = "https://api.example.com",
+        baseUrl = { "https://api.example.com" },
         clock = clock,
         timeZone = timeZone,
         cache = cache,

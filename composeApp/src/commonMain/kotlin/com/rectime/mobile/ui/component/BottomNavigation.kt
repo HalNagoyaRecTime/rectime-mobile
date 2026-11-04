@@ -58,11 +58,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rectime.mobile.app.navigation.Screen
-import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 import com.rectime.mobile.feature.notifications.NotificationsScreen
 import com.rectime.mobile.feature.ranking.RankingScreen
-import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.feature.settings.SettingsScreen
 import com.rectime.mobile.ui.theme.AppTheme
 import org.jetbrains.compose.resources.DrawableResource
@@ -123,10 +121,7 @@ private data class NavigationItemConfig(
 fun BottomNavigationBar(
     currentScreen: Screen,
     onSelectRoot: (Screen) -> Unit,
-    session: AuthSession,
-    onLogout: () -> Unit,
     hasUnreadNotifications: Boolean,
-    notificationPermissionStartup: NotificationPermissionStartup?,
     modifier: Modifier = Modifier,
     onHeightChanged: (Dp) -> Unit = {},
 ) {
@@ -152,11 +147,7 @@ fun BottomNavigationBar(
         preferredMinimumPillWidth = 112.dp,
     ),
     NavigationItemConfig(
-        SettingsScreen(
-            session = session,
-            onLogout = onLogout,
-            notificationPermissionStartup = notificationPermissionStartup,
-        ),
+        SettingsScreen,
         "設定",
         Res.drawable.ic_settings_outline,
         Res.drawable.ic_settings_fill,

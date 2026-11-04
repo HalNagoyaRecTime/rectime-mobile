@@ -25,10 +25,10 @@ interface NotificationGateway {
 
 class NotificationApi(
     private val client: HttpClient = createAppHttpClient(),
-    baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
     private val accessTokenProvider: () -> String? = { SessionTokenHolder.accessToken },
 ) : NotificationGateway {
-    private val endpoint = "${baseUrl.trimEnd('/')}/api/v1/me/notifications"
+    private val endpoint get() = "${baseUrl().trimEnd('/')}/api/v1/me/notifications"
 
     override suspend fun getNotifications(limit: Int, offset: Int): NotificationPage {
         require(limit in 1..100) { "Limit must be between 1 and 100" }

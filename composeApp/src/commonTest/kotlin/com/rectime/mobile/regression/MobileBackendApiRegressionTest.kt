@@ -41,7 +41,7 @@ class MobileBackendApiRegressionTest {
         SessionTokenHolder.accessToken = accessToken
         val requests = mutableListOf<CapturedRequest>()
         val client = authenticatedMockClient(requests)
-        val notificationApi = NotificationApi(client, apiBaseUrl)
+        val notificationApi = NotificationApi(client, { apiBaseUrl })
 
         val calendarEvent = client.get("$apiBaseUrl/api/v1/events")
             .body<EventsResponse>()
@@ -84,7 +84,7 @@ class MobileBackendApiRegressionTest {
         SessionTokenHolder.accessToken = accessToken
         val api = NotificationApi(
             errorClient(HttpStatusCode.InternalServerError, responseBody),
-            apiBaseUrl,
+            { apiBaseUrl },
         )
 
         val error = assertFailsWith<HttpStatusException> { api.getNotifications() }
@@ -117,7 +117,7 @@ class MobileBackendApiRegressionTest {
             json(Json { ignoreUnknownKeys = true })
         }
         install(MobileAuthHeadersPlugin) {
-            baseUrl = apiBaseUrl
+            baseUrl = { apiBaseUrl }
         }
     }
 
@@ -129,7 +129,7 @@ class MobileBackendApiRegressionTest {
             json(Json { ignoreUnknownKeys = true })
         }
         install(MobileAuthHeadersPlugin) {
-            baseUrl = apiBaseUrl
+            baseUrl = { apiBaseUrl }
         }
     }
 

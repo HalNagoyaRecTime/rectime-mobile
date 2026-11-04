@@ -10,12 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
-import androidx.compose.runtime.remember
-import androidx.lifecycle.ViewModelStore
-import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -95,16 +91,7 @@ fun PushLayer(
                     .navigationAccessibility(inputEnabled),
             ) {
                 key(entry.key) {
-                    val storeOwner = remember {
-                        object : ViewModelStoreOwner {
-                            override val viewModelStore = ViewModelStore()
-                        }
-                    }
-                    DisposableEffect(Unit) {
-                        onDispose { storeOwner.viewModelStore.clear() }
-                    }
-
-                    CompositionLocalProvider(LocalViewModelStoreOwner provides storeOwner) {
+                    CompositionLocalProvider(LocalViewModelStoreOwner provides entry) {
                         ScreenLifecycleWrapper(
                             entry.screen,
                             visible = isTop,

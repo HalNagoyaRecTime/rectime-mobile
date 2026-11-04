@@ -5,11 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
 import com.rectime.mobile.feature.schedule.ScheduleScreen
 
 class NavigationController(
     initialRoot: Screen = ScheduleScreen
-) {
+) : ViewModel() {
     var state by mutableStateOf(NavigationState(rootScreen = initialRoot))
         private set
 
@@ -27,6 +28,7 @@ class NavigationController(
     }
 
     fun reset(screen: Screen) {
+        clearPushStack()
         Snapshot.withMutableSnapshot {
             backDragOffsetPx = 0f
             enterProgress = 0f
@@ -73,6 +75,7 @@ class NavigationController(
 
     private fun finishTransition(key: String, mode: PushTransitionMode, removeTop: Boolean = false) {
         if (!isCurrentTransition(key, mode)) return
+        if (removeTop) state.pushStack.last().viewModelStore.clear()
         // 履歴と位置を同時に確定し、前の画面が一瞬だけ移動する状態を作らない。
         Snapshot.withMutableSnapshot {
             backDragOffsetPx = 0f
@@ -128,4 +131,8 @@ class NavigationController(
         }
         // ModalBottomSheet / Dialog の戻るは各標準コンポーネントが先に処理する。
     }
+
+    override fun onCleared() = clearPushStack()
+
+    private fun clearPushStack() = state.pushStack.forEach { it.viewModelStore.clear() }
 }

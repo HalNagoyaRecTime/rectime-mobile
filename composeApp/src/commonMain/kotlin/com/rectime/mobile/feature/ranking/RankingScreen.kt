@@ -21,8 +21,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rectime.mobile.core.cache.FetchTrigger
 import com.rectime.mobile.app.navigation.NavigationController
 import com.rectime.mobile.app.navigation.Screen
 import com.rectime.mobile.feature.auth.LocalUserProfile
@@ -52,7 +55,8 @@ object RankingScreen : Screen {
         val user = LocalUserProfile.current
         val myTeamId = user?.teamId
         val viewModel: RankingViewModel = viewModel(factory = rankingViewModelFactory())
-        LaunchedEffect(viewModel) { viewModel.onEnter() }
+        // 画面ごとのLifecycleは表示中だけRESUMEDになるため、タブ切り替えと前面復帰の両方で呼ばれる。
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onVisible() }
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val hasRankingItems = uiState.rankingItems.isNotEmpty()
         val lazyListState = rememberLazyListState()
@@ -88,7 +92,7 @@ object RankingScreen : Screen {
                 lazyListState = lazyListState,
                 isRefreshing = uiState.isRefreshing,
                 refreshEnabled = !uiState.isLoading,
-                onRefresh = { viewModel.fetchRankings(isPullRefresh = true) },
+                onRefresh = { viewModel.fetchRankings(isPullRefresh = true, trigger = FetchTrigger.Manual) },
                 onTrailingClick = if (uiState.isLoading) null else viewModel::refresh,
                 trailing = { AppRefreshIcon(isRefreshing = uiState.isHeaderRefreshing) },
             ) {

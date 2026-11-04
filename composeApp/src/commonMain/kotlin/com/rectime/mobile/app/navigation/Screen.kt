@@ -22,9 +22,6 @@ interface Screen {
     /** 画面の表示内容。 */
     @Composable
     fun Content(navigationController: NavigationController)
-
-    /** 履歴から取り除かれた時の後処理。 */
-    fun onDispose() {}
 }
 
 /** 状態を保持したまま、表示中かどうかを親のLifecycleと組み合わせる。 */
@@ -52,7 +49,6 @@ fun ScreenLifecycleWrapper(
     DisposableEffect(owner) {
         onDispose {
             owner.registry.currentState = Lifecycle.State.DESTROYED
-            screen.onDispose()
         }
     }
     CompositionLocalProvider(

@@ -90,6 +90,9 @@ jobs:
       - name: Setup CI Firebase config
         run: cp composeApp/google-services.ci.json composeApp/google-services.json
 
+      - name: Run Android unit tests
+        run: ./gradlew :composeApp:testDebugUnitTest
+
       - name: Assemble debug and staging APK
         run: ./gradlew :composeApp:assembleDebug :composeApp:assembleStaging
 

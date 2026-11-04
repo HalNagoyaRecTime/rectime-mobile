@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import kotlinx.serialization.Serializable
 
 data class AuthUser(
@@ -41,6 +42,7 @@ data class AuthSession(
     val refreshTokenId: String,
     val expiresIn: Long,
     val user: AuthUser,
+    val campus: Campus,
 )
 
 data class PendingAuth(

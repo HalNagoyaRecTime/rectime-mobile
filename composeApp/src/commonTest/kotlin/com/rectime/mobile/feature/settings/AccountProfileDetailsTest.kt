@@ -26,33 +26,48 @@ class AccountProfileDetailsTest {
 
     @Test
     fun falseFlagsHideEvenPopulatedValues() {
-        assertTrue(accountProfileDetails(user().copy(teacher = teacher)).isEmpty())
+        assertTrue(accountProfileDetailRows(user().copy(teacher = teacher)).isEmpty())
     }
 
     @Test
     fun studentAndTeacherFlagsRemainIndependent() {
         assertEquals(
             listOf(
-                AccountProfileDetail("学籍番号", "12345"),
-                AccountProfileDetail("所属クラス", "1-A"),
-                AccountProfileDetail("担当クラス", "1-A、2-B"),
+                listOf(AccountProfileDetail("学籍番号", "12345"), AccountProfileDetail("所属クラス", "1-A")),
+                listOf(AccountProfileDetail("担当クラス", "1-A\n2-B")),
             ),
-            accountProfileDetails(user().copy(isStudent = true, isTeacher = true, teacher = teacher)),
+            accountProfileDetailRows(user().copy(isStudent = true, isTeacher = true, teacher = teacher)),
+        )
+    }
+
+    @Test
+    fun studentNumberAndClassShareOneRow() {
+        assertEquals(
+            listOf(listOf(AccountProfileDetail("学籍番号", "12345"), AccountProfileDetail("所属クラス", "1-A"))),
+            accountProfileDetailRows(user().copy(isStudent = true)),
+        )
+    }
+
+    @Test
+    fun studentWithOnlyClassKeepsSingleItemRow() {
+        assertEquals(
+            listOf(listOf(AccountProfileDetail("所属クラス", "1-A"))),
+            accountProfileDetailRows(user().copy(isStudent = true, studentIdNumber = null)),
         )
     }
 
     @Test
     fun teacherUsesOneDetailForAllClasses() {
         assertEquals(
-            listOf(AccountProfileDetail("担当クラス", "1-A、2-B")),
-            accountProfileDetails(user().copy(isTeacher = true, teacher = teacher)),
+            listOf(listOf(AccountProfileDetail("担当クラス", "1-A\n2-B"))),
+            accountProfileDetailRows(user().copy(isTeacher = true, teacher = teacher)),
         )
     }
 
     @Test
     fun missingValuesAndEmptyClassesHaveNoRows() {
         assertTrue(
-            accountProfileDetails(
+            accountProfileDetailRows(
                 user().copy(
                     isStudent = true,
                     studentIdNumber = " ",

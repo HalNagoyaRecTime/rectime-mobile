@@ -15,8 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
-import com.rectime.mobile.feature.auth.AuthSession
-import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
 import com.rectime.mobile.ui.component.BottomNavigationBar
 import com.rectime.mobile.ui.component.LocalBottomNavigationHeight
 import com.rectime.mobile.ui.theme.AppTheme
@@ -31,10 +29,7 @@ import com.rectime.mobile.ui.theme.AppTheme
 fun RootLayer(
     state: NavigationState,
     navigationController: NavigationController,
-    session: AuthSession,
-    onLogout: () -> Unit,
     hasUnreadNotifications: Boolean,
-    notificationPermissionStartup: NotificationPermissionStartup?,
 ) {
     val rootScreen = state.rootScreen ?: return
     var bottomNavigationHeight by remember { mutableStateOf(0.dp) }
@@ -71,10 +66,7 @@ fun RootLayer(
             onSelectRoot = { screen: Screen ->
                 navigationController.setRoot(screen)
             },
-            session = session,
-            onLogout = onLogout,
             hasUnreadNotifications = hasUnreadNotifications,
-            notificationPermissionStartup = notificationPermissionStartup,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth(),

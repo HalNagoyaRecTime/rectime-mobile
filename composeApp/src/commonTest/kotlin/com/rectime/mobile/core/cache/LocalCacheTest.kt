@@ -1,21 +1,36 @@
 package com.rectime.mobile.core.cache
 
-import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.Serializable
+import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.Serializable
 
 @Serializable
 private data class Sample(val id: Int, val name: String)
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class LocalCacheTest {
     @BeforeTest
     fun resetSharedState() {
+        Dispatchers.setMain(StandardTestDispatcher())
         // CacheGenerationはプロセス全体で共有されるため、テスト間で値が
         // 漏れないようリセットする。
         CacheGeneration.resetForTest()
+    }
+
+    @AfterTest
+    fun tearDown() {
+        // 共有キャッシュの通信を、テスト用Mainが有効な間にキャンセルする。
+        CacheGeneration.resetForTest()
+        Dispatchers.resetMain()
     }
 
     @Test

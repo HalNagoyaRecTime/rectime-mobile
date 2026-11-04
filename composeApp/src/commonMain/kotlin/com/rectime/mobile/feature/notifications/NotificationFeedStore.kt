@@ -1,8 +1,11 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheFreshness
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.FetchTrigger
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.canReuse
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 data class NotificationFeedStatus(
     val isUpdating: Boolean = false,
@@ -32,6 +37,7 @@ data class NotificationFeedStatus(
 class NotificationFeedStore(
     private val gateway: NotificationGateway = NotificationApi(),
     private val cache: LocalCache = LocalCache(),
+    private val clock: Clock = Clock.System,
 ) {
     private val _notifications = MutableStateFlow<List<UserNotification>>(emptyList())
     val notifications: StateFlow<List<UserNotification>> = _notifications.asStateFlow()
@@ -51,6 +57,7 @@ class NotificationFeedStore(
     private var inFlight: Deferred<CachedFetchResult<List<UserNotification>>>? = null
     private var pageInFlight: Deferred<Unit>? = null
     private var lastResult: CachedFetchResult.Fresh<List<UserNotification>>? = null
+    private var lastFetchedAt: Instant? = null
     private var session = CacheRequestGeneration()
     private var revision = 0
     private var boundUserId: String? = null
@@ -109,6 +116,7 @@ class NotificationFeedStore(
                     return@async request.validate(CachedFetchResult.Failed(IllegalStateException("通知の取得が取り消されました")))
                 }
                 lastResult = null
+                lastFetchedAt = null
                 _status.value = _status.value.copy(isUpdating = true, error = null, pageError = null)
                 val result = try {
                     fetchWithCacheFirst(
@@ -163,6 +171,7 @@ class NotificationFeedStore(
                             val values = applyDetailUpdates(valid.value)
                             publish(values)
                             lastResult = CachedFetchResult.Fresh(values)
+                            lastFetchedAt = clock.now()
                             _status.value = NotificationFeedStatus(hasMore = visibleCount < values.size || (nextOffset < total && values.isNotEmpty()))
                         }
                         is CachedFetchResult.Cached -> {
@@ -186,6 +195,10 @@ class NotificationFeedStore(
         }
         task.await()
     }
+
+    // 新着はプッシュ・前面復帰の取得で反映されるため、タブを開く操作だけ直近の結果を再利用する。
+    suspend fun loadOnEnter(): CachedFetchResult<List<UserNotification>> =
+        load(force = !lastFetchedAt.canReuse(FetchTrigger.Automatic, CacheFreshness.Notifications, clock))
 
     // 復帰・プッシュ前から進行していた応答では、新着を取り逃す可能性がある。
     suspend fun refreshAfterCurrentRequest() {
@@ -327,6 +340,7 @@ class NotificationFeedStore(
     private fun clearMemory() {
         revision++
         lastResult = null
+        lastFetchedAt = null
         _notifications.value = emptyList()
         _cachedNotifications.value = null
         session = CacheRequestGeneration()

@@ -16,6 +16,8 @@ import com.rectime.mobile.feature.auth.AuthSession
 import com.rectime.mobile.feature.auth.LocalUserProfile
 import com.rectime.mobile.feature.auth.toUserProfile
 import com.rectime.mobile.feature.notifications.NotificationPermissionStartup
+import com.rectime.mobile.feature.settings.LocalSettingsDependencies
+import com.rectime.mobile.feature.settings.SettingsDependencies
 import com.rectime.mobile.ui.theme.AppTheme
 
 @Composable
@@ -36,7 +38,10 @@ fun NavigationHost(
     // 実際のサイズが変わった時だけ、ジェスチャーとアニメーションの幅を更新する。
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
 
-    CompositionLocalProvider(LocalUserProfile provides userProfile) {
+    CompositionLocalProvider(
+        LocalUserProfile provides userProfile,
+        LocalSettingsDependencies provides SettingsDependencies(session, onLogout, notificationPermissionStartup),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -50,10 +55,7 @@ fun NavigationHost(
             RootLayer(
                 state = state,
                 navigationController = navigationController,
-                session = session,
-                onLogout = onLogout,
                 hasUnreadNotifications = hasUnreadNotifications,
-                notificationPermissionStartup = notificationPermissionStartup,
             )
 
             // 詳細画面はボトムバーを含む土台の上に表示する。

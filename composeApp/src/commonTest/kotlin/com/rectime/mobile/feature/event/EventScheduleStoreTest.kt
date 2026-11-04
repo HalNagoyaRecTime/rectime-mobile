@@ -169,25 +169,29 @@ class EventScheduleStoreTest {
     }
 
     @Test fun offlineDetailRestoresAllPersonalGatheringsAndSuccessfulEmptyListClearsThem() = runTest(dispatcher) {
-        val cache = LocalCache(MemoryStore())
+        var now = kotlin.time.Instant.parse("2026-10-15T02:00:00Z")
+        val clock = object : kotlin.time.Clock { override fun now() = now }
+        val cache = LocalCache(MemoryStore(), clock)
         var offline = false
         var ids = listOf(10, 30)
         val http = client { if (offline) error("offline") else detailBody }
         val store = EventScheduleStore(cache, http, object : MyEventsGateway {
             override suspend fun getMyEvents() = if (ids.isEmpty()) emptyList() else listOf(MyEventParticipation(1, ids))
-        })
+        }, clock = clock)
         try {
-            EventDetailViewModel(1, http, cache, store)
+            EventDetailViewModel(1, http, cache, store, clock = clock)
             advanceUntilIdle()
             offline = true
-            val offlineDetail = EventDetailViewModel(1, http, cache, store)
+            // 再利用期間内は通信しないため、期間を過ぎてから開き直す。
+            now += kotlin.time.Duration.parse("30m")
+            val offlineDetail = EventDetailViewModel(1, http, cache, store, clock = clock)
             advanceUntilIdle()
             assertEquals(setOf(10, 30), offlineDetail.uiState.value.attendingGatheringIds)
             assertEquals(2, offlineDetail.uiState.value.gatherings.size)
             assertTrue(offlineDetail.uiState.value.isOffline)
             ids = emptyList()
             store.refreshParticipation()
-            val nonParticipant = EventDetailViewModel(1, http, cache, store)
+            val nonParticipant = EventDetailViewModel(1, http, cache, store, clock = clock)
             advanceUntilIdle()
             assertTrue(nonParticipant.uiState.value.attendingGatheringIds.isEmpty())
         } finally { store.close() }

@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
 import com.rectime.mobile.feature.notifications.PushTokenLifecycle
@@ -63,7 +64,7 @@ class AuthViewModelProfilePhotoRaceTest {
         val photoRepository = ProfilePhotoRepository(
             cacheDirectory = directory.absolutePathString(),
             client = photoClient,
-            baseUrl = "https://example.test",
+            baseUrl = { "https://example.test" },
             nowMillis = { 1_000L },
         )
         val authClient = HttpClient(MockEngine) {
@@ -83,7 +84,7 @@ class AuthViewModelProfilePhotoRaceTest {
             }
         }
         val viewModel = AuthViewModel(
-            api = AuthApi(authClient, "https://example.test"),
+            api = AuthApi(authClient, { "https://example.test" }),
             sessionStore = store,
             cache = LocalCache(InMemoryKeyValueStore()),
             photoRepository = photoRepository,
@@ -115,6 +116,7 @@ class AuthViewModelProfilePhotoRaceTest {
         accessToken = accessToken,
         refreshTokenId = refreshTokenId,
         expiresIn = 3600,
+        campus = Campus.NAGOYA,
         user = AuthUser(
             id = userId,
             email = "$userId@example.test",

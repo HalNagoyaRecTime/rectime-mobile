@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -162,6 +164,7 @@ fun PushScreenScaffold(
     onTrailingClick: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
     bottomContent: @Composable (() -> Unit)? = null,
+    snackbarHostState: SnackbarHostState? = null,
     titleVisible: Boolean = true,
     lazyListState: LazyListState = rememberLazyListState(),
     contentBackground: @Composable BoxScope.() -> Unit = {},
@@ -222,6 +225,16 @@ fun PushScreenScaffold(
             ) {
                 it()
             }
+        }
+        if (snackbarHostState != null) {
+            // ナビゲーションバー（ジェスチャーバー）と重ならないよう、その高さ分だけ持ち上げる。
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            )
         }
     }
 }

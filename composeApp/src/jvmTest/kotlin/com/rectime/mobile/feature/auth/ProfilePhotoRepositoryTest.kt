@@ -29,13 +29,13 @@ class ProfilePhotoRepositoryTest {
                 requests++
                 respond(byteArrayOf(requests.toByte()), HttpStatusCode.OK)
             }
-            val first = ProfilePhotoRepository(directory, client, "https://example.test", { now })
+            val first = ProfilePhotoRepository(directory, client, { "https://example.test" }, { now })
             first.restore("user-1")
             first.refresh("user-1", "token")
             assertContentEquals(byteArrayOf(1), first.photoBytes.value)
 
             // 別プロセスで起動した場合も保存済みの写真を先に表示する。
-            val nextLaunch = ProfilePhotoRepository(directory, client, "https://example.test", { now })
+            val nextLaunch = ProfilePhotoRepository(directory, client, { "https://example.test" }, { now })
             nextLaunch.restore("user-1")
             assertContentEquals(byteArrayOf(1), nextLaunch.photoBytes.value)
             now += dayMillis - 1
@@ -63,14 +63,14 @@ class ProfilePhotoRepositoryTest {
                     else -> respond(byteArrayOf(2), HttpStatusCode.OK)
                 }
             }
-            val first = ProfilePhotoRepository(directory, client, "https://example.test", { now })
+            val first = ProfilePhotoRepository(directory, client, { "https://example.test" }, { now })
             first.restore("user-1")
             first.refresh("user-1", "token")
             now += dayMillis
             first.refresh("user-1", "token")
             assertContentEquals(byteArrayOf(1), first.photoBytes.value)
 
-            val nextLaunch = ProfilePhotoRepository(directory, client, "https://example.test", { now })
+            val nextLaunch = ProfilePhotoRepository(directory, client, { "https://example.test" }, { now })
             nextLaunch.restore("user-1")
             assertContentEquals(byteArrayOf(1), nextLaunch.photoBytes.value)
             nextLaunch.refresh("user-1", "token")
@@ -93,7 +93,7 @@ class ProfilePhotoRepositoryTest {
                     else -> respond(ByteArray(0), HttpStatusCode.NotFound)
                 }
             }
-            val repository = ProfilePhotoRepository(directory, client, "https://example.test", { now })
+            val repository = ProfilePhotoRepository(directory, client, { "https://example.test" }, { now })
             repository.restore("user-1")
             repository.refresh("user-1", "token")
             now += dayMillis
@@ -111,13 +111,13 @@ class ProfilePhotoRepositoryTest {
     fun logoutDeletesPhotoAndPreventsItAppearingForAnotherUser() = runTest {
         withCacheDirectory { directory ->
             val client = mockClient { respond(byteArrayOf(1), HttpStatusCode.OK) }
-            val repository = ProfilePhotoRepository(directory, client, "https://example.test", { 1_000L })
+            val repository = ProfilePhotoRepository(directory, client, { "https://example.test" }, { 1_000L })
             repository.restore("user-1")
             repository.refresh("user-1", "token")
             assertTrue(repository.clear())
             assertNull(repository.photoBytes.value)
 
-            val nextLaunch = ProfilePhotoRepository(directory, client, "https://example.test", { 1_000L })
+            val nextLaunch = ProfilePhotoRepository(directory, client, { "https://example.test" }, { 1_000L })
             nextLaunch.restore("user-1")
             assertNull(nextLaunch.photoBytes.value)
             nextLaunch.restore("user-2")
@@ -130,15 +130,15 @@ class ProfilePhotoRepositoryTest {
     fun restoringAnotherUserRemovesThePreviousUsersStoredPhoto() = runTest {
         withCacheDirectory { directory ->
             val client = mockClient { respond(byteArrayOf(1), HttpStatusCode.OK) }
-            val first = ProfilePhotoRepository(directory, client, "https://example.test", { 1_000L })
+            val first = ProfilePhotoRepository(directory, client, { "https://example.test" }, { 1_000L })
             first.restore("user-1")
             first.refresh("user-1", "token")
 
-            val switched = ProfilePhotoRepository(directory, client, "https://example.test", { 1_000L })
+            val switched = ProfilePhotoRepository(directory, client, { "https://example.test" }, { 1_000L })
             switched.restore("user-2")
             assertNull(switched.photoBytes.value)
 
-            val nextLaunch = ProfilePhotoRepository(directory, client, "https://example.test", { 1_000L })
+            val nextLaunch = ProfilePhotoRepository(directory, client, { "https://example.test" }, { 1_000L })
             nextLaunch.restore("user-1")
             assertNull(nextLaunch.photoBytes.value)
             client.close()
@@ -155,7 +155,7 @@ class ProfilePhotoRepositoryTest {
                 finish.await()
                 respond(byteArrayOf(1), HttpStatusCode.OK)
             }
-            val repository = ProfilePhotoRepository(directory, client, "https://example.test", { 1_000L })
+            val repository = ProfilePhotoRepository(directory, client, { "https://example.test" }, { 1_000L })
             repository.restore("user-1")
             val fetch = launch { repository.refresh("user-1", "token") }
             started.await()
@@ -164,7 +164,7 @@ class ProfilePhotoRepositoryTest {
             fetch.join()
             assertNull(repository.photoBytes.value)
 
-            val nextLaunch = ProfilePhotoRepository(directory, client, "https://example.test", { 1_000L })
+            val nextLaunch = ProfilePhotoRepository(directory, client, { "https://example.test" }, { 1_000L })
             nextLaunch.restore("user-1")
             assertNull(nextLaunch.photoBytes.value)
             client.close()

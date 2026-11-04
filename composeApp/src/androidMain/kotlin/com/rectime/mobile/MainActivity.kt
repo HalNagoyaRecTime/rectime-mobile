@@ -80,7 +80,8 @@ class MainActivity : ComponentActivity() {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         handleAuthCallback(intent)
-        handleNotificationNavigation(intent)
+        // 作り直すたびに同じ通知で遷移し直すと、開いていた画面が失われる。
+        if (savedInstanceState == null) handleNotificationNavigation(intent)
         RectimeNotificationChannel.create(this)
 
         setContent {

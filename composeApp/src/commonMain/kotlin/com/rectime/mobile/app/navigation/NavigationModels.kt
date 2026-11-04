@@ -1,5 +1,8 @@
 package com.rectime.mobile.app.navigation
 
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.ViewModelStoreOwner
+
 enum class ActiveGesture {
     None,
     Back,
@@ -12,10 +15,12 @@ enum class PushTransitionMode {
     Return,
 }
 
-data class PushEntry(
+class PushEntry(
     val key: String,
     val screen: Screen,
-)
+) : ViewModelStoreOwner {
+    override val viewModelStore = ViewModelStore()
+}
 
 data class PushTransitionState(
     val mode: PushTransitionMode = PushTransitionMode.Idle,

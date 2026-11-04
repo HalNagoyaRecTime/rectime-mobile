@@ -1,13 +1,34 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheGeneration
 import com.rectime.mobile.core.cache.KeyValueStore
 import com.rectime.mobile.core.cache.LocalCache
-import kotlinx.coroutines.test.runTest
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class NotificationReadStoreTest {
+    @BeforeTest
+    fun setup() {
+        Dispatchers.setMain(StandardTestDispatcher())
+        CacheGeneration.resetForTest()
+    }
+
+    @AfterTest
+    fun tearDown() {
+        // 共有キャッシュの通信を、テスト用Mainが有効な間にキャンセルする。
+        CacheGeneration.resetForTest()
+        Dispatchers.resetMain()
+    }
 
     // ---- 正常系 ----
 

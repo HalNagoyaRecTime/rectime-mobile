@@ -1,6 +1,10 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import com.rectime.mobile.core.config.apiBaseUrl
+import com.rectime.mobile.core.config.appEnvironment
+import com.rectime.mobile.core.config.campusApiBaseUrl
+import com.rectime.mobile.core.config.nagoyaApiBaseUrl
 import com.rectime.mobile.core.network.apiErrorException
 import com.rectime.mobile.core.network.createAppHttpClient
 import io.ktor.client.HttpClient
@@ -20,12 +24,22 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 
+/** 所属校の判定結果。toStringにMicrosoftのrefresh tokenを出さないよう、data classにしない。 */
+class ResolvedCampus(
+    val campus: Campus,
+    val baseUrl: String,
+    val msRefreshToken: String,
+)
+
 class AuthApi(
     private val client: HttpClient = createAppHttpClient(),
-    private val baseUrl: String = apiBaseUrl,
+    private val baseUrl: () -> String = { apiBaseUrl },
+    // 所属校が分かる前の通信は、ログイン中の学校によらず名古屋のAPIへ送る。
+    private val loginBaseUrl: () -> String = { nagoyaApiBaseUrl },
+    private val campusBaseUrl: (Campus) -> String? = { campusApiBaseUrl(it, appEnvironment, nagoyaApiBaseUrl) },
 ) {
     suspend fun requestAuthUrl(state: String, codeChallenge: String, desktopRedirectUri: String? = null): String {
-        val response = client.get("$baseUrl/api/v1/auth/microsoft/login") {
+        val response = client.get("${loginBaseUrl()}/api/v1/auth/microsoft/login") {
             header("X-Client-Type", "mobile")
             header("X-State", state)
             header("X-PKCE-Code-Challenge", codeChallenge)
@@ -43,8 +57,8 @@ class AuthApi(
         return authUrl
     }
 
-    suspend fun exchangeCode(code: String, state: String, codeVerifier: String): AuthSession {
-        val response = client.post("$baseUrl/api/v1/auth/microsoft/token") {
+    suspend fun resolveCampus(code: String, state: String, codeVerifier: String): ResolvedCampus {
+        val response = client.post("${loginBaseUrl()}/api/v1/auth/microsoft/resolve-campus") {
             header("X-Client-Type", "mobile")
             contentType(ContentType.Application.Json)
             setBody(
@@ -52,6 +66,35 @@ class AuthApi(
                     TokenExchangeRequest(code = code, state = state, codeVerifier = codeVerifier),
                 ),
             )
+        }
+        val body = response.bodyAsText()
+        if (response.status.value !in 200..299) {
+            throw response.toAuthApiException(body, "所属校の判定に失敗しました")
+        }
+
+        val parsed = decodeBody<ResolveCampusResponse>(body)
+        val campusCode = parsed?.campus
+            ?: throw IllegalStateException("campus がありません")
+        val msRefreshToken = parsed.msRefreshToken
+            ?: throw IllegalStateException("ms_refresh_token がありません")
+        val campus = Campus.entries.firstOrNull { it.name == campusCode }
+        val campusUrl = campus?.let(campusBaseUrl)
+        if (campus == null || campusUrl == null) {
+            throw AuthApiException(
+                statusCode = response.status.value,
+                errorCode = UNSUPPORTED_CAMPUS_CODE,
+                message = "接続先のない学校です",
+            )
+        }
+        return ResolvedCampus(campus = campus, baseUrl = campusUrl, msRefreshToken = msRefreshToken)
+    }
+
+    suspend fun loginToCampus(resolved: ResolvedCampus): AuthSession {
+        val base = resolved.baseUrl
+        val response = client.post("$base/api/v1/auth/microsoft/campus-token") {
+            header("X-Client-Type", "mobile")
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(CampusTokenRequest(msRefreshToken = resolved.msRefreshToken)))
         }
         val body = response.bodyAsText()
         if (response.status.value !in 200..299) {
@@ -65,12 +108,14 @@ class AuthApi(
             refreshTokenId = parsed.refreshTokenId
                 ?: throw IllegalStateException("refresh_token_id がありません"),
             expiresIn = parsed.expiresIn ?: 0L,
-            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(baseUrl),
+            user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(base),
+            campus = resolved.campus,
         )
     }
 
     suspend fun currentUser(accessToken: String): AuthUser {
-        val response = client.get("$baseUrl/api/v1/auth/me") {
+        val base = baseUrl()
+        val response = client.get("$base/api/v1/auth/me") {
             header("X-Client-Type", "mobile")
             header(HttpHeaders.Authorization, "Bearer $accessToken")
         }
@@ -81,11 +126,11 @@ class AuthApi(
 
         val user = decodeBody<UserEnvelope>(body)?.user
             ?: throw IllegalStateException("ユーザー情報のレスポンスが不正です")
-        return user.toAuthUser(baseUrl)
+        return user.toAuthUser(base)
     }
 
     suspend fun refresh(session: AuthSession): AuthSession {
-        val response = client.post("$baseUrl/api/v1/auth/refresh") {
+        val response = client.post("${baseUrl()}/api/v1/auth/refresh") {
             header("X-Client-Type", "mobile")
             contentType(ContentType.Application.Json)
             setBody(json.encodeToString(RefreshRequest(refreshTokenId = session.refreshTokenId)))
@@ -108,7 +153,7 @@ class AuthApi(
     }
 
     suspend fun logout(session: AuthSession, fcmToken: String? = null) {
-        val response = client.post("$baseUrl/api/v1/auth/logout") {
+        val response = client.post("${baseUrl()}/api/v1/auth/logout") {
             header("X-Client-Type", "mobile")
             header(HttpHeaders.Authorization, "Bearer ${session.accessToken}")
             contentType(ContentType.Application.Json)
@@ -183,6 +228,17 @@ private data class TokenExchangeRequest(
     val code: String,
     val state: String,
     val codeVerifier: String,
+)
+
+@Serializable
+private data class ResolveCampusResponse(
+    val campus: String? = null,
+    val msRefreshToken: String? = null,
+)
+
+@Serializable
+private data class CampusTokenRequest(
+    val msRefreshToken: String,
 )
 
 @Serializable
