@@ -1,5 +1,6 @@
 package com.rectime.mobile.feature.auth
 
+import com.rectime.mobile.core.config.Campus
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -21,6 +22,7 @@ private data class StoredAuthSession(
     val refreshTokenId: String,
     val expiresIn: Long,
     val user: StoredAuthUser,
+    val campus: String? = null,
 )
 
 @Serializable
@@ -46,6 +48,7 @@ fun encodeAuthSession(session: AuthSession): String = sessionJson.encodeToString
         accessToken = session.accessToken,
         refreshTokenId = session.refreshTokenId,
         expiresIn = session.expiresIn,
+        campus = session.campus.name,
         user = StoredAuthUser(
             id = session.user.id,
             email = session.user.email,
@@ -67,10 +70,15 @@ fun encodeAuthSession(session: AuthSession): String = sessionJson.encodeToString
 fun decodeAuthSession(value: String): AuthSession? = runCatching {
     val stored = sessionJson.decodeFromString<StoredAuthSession>(value)
     if (stored.version != SESSION_VERSION) return@runCatching null
+    // campus なし = 今のアプリで保存されたログイン情報なので名古屋として扱う
+    val campus = stored.campus
+        ?.let { code -> Campus.entries.firstOrNull { it.name == code } ?: return@runCatching null }
+        ?: Campus.NAGOYA
     AuthSession(
         accessToken = stored.accessToken,
         refreshTokenId = stored.refreshTokenId,
         expiresIn = stored.expiresIn,
+        campus = campus,
         user = AuthUser(
             id = stored.user.id,
             email = stored.user.email,

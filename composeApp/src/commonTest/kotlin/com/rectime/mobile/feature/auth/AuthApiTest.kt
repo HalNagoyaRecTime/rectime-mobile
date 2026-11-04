@@ -280,6 +280,7 @@ class AuthApiTest {
         assertEquals("55024", session.user.studentIdNumber)
         assertEquals("IA12A203", session.user.classRoomName)
         assertEquals(Role.Student, session.user.role)
+        assertEquals(Campus.OSAKA, session.campus)
     }
 
     @Test
@@ -745,6 +746,23 @@ class AuthApiTest {
     }
 
     @Test
+    fun refreshKeepsOriginalCampus() = runTest {
+        val api = AuthApi(
+            mockClient {
+                respond(
+                    content = """{"access_token":"new-access-token"}""",
+                    status = HttpStatusCode.OK,
+                    headers = jsonHeaders,
+                )
+            },
+        )
+
+        val refreshed = api.refresh(storedSession.copy(campus = Campus.OSAKA))
+
+        assertEquals(Campus.OSAKA, refreshed.campus)
+    }
+
+    @Test
     fun refreshFailsWhenRefreshTokenIsRevoked() = runTest {
         val api = AuthApi(
             mockClient {
@@ -878,6 +896,7 @@ class AuthApiTest {
             accessToken = "access-token",
             refreshTokenId = "refresh-token-id",
             expiresIn = 3600L,
+            campus = Campus.NAGOYA,
             user = AuthUser(
                 id = "6",
                 email = "test@example.com",

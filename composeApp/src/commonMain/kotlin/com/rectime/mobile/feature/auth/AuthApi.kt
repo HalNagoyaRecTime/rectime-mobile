@@ -109,6 +109,7 @@ class AuthApi(
                 ?: throw IllegalStateException("refresh_token_id がありません"),
             expiresIn = parsed.expiresIn ?: 0L,
             user = (parsed.user ?: throw IllegalStateException("ユーザー情報がありません")).toAuthUser(base),
+            campus = resolved.campus,
         )
     }
 

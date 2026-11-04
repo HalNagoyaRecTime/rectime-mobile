@@ -19,6 +19,9 @@ internal fun campusApiBaseUrl(campus: Campus, environment: AppEnvironment, nagoy
         }
     }
 
+/** 現在の環境でこの学校のAPIが無ければnull */
+internal fun Campus.apiBaseUrlOrNull(): String? = campusApiBaseUrl(this, appEnvironment, nagoyaApiBaseUrl)
+
 internal fun campusFromCode(code: String, environment: AppEnvironment, nagoyaUrl: String): Campus? =
     Campus.entries
         .firstOrNull { it.name == code }

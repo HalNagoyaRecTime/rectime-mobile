@@ -38,6 +38,7 @@ class AuthViewModel(
     private val prepareCallback: (String) -> String? = ::preparePlatformAuthCallback,
     private val cancelCallback: (String) -> Unit = ::cancelPlatformAuthCallback,
     private val selectCampus: (Campus) -> Unit = { CurrentCampus.select(it.name) },
+    private val selectSessionCampus: (AuthSession) -> Boolean = ::restoreCampus,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState(isRestoringSession = true))
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -93,6 +94,18 @@ class AuthViewModel(
                             _uiState.update {
                                 it.copy(isLoading = false, isRestoringSession = false, message = "", pendingAuth = storedPending)
                             }
+                        }
+                    }
+                    return@launch
+                }
+
+                if (!selectSessionCampus(stored)) {
+                    // 開発環境で大阪・東京のセッションが残っていた場合、接続先がないためログアウト扱いにする。
+                    // 別の学校のAPIに送らないよう、リモートのログアウトは呼ばない。
+                    sessionTransitionMutex.withLock {
+                        if (!loggingOut && sessionStore.load()?.belongsTo(stored) == true) {
+                            finishLocalSession(message = null, expectedPendingAuth = null)
+                            _uiState.update { it.copy(isRestoringSession = false, pendingAuth = storedPending) }
                         }
                     }
                     return@launch

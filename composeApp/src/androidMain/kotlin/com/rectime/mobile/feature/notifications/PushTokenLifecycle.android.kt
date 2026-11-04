@@ -21,8 +21,8 @@ internal object AndroidPushTokenLifecycle : PushTokenLifecycle {
     private val manager = PushTokenLifecycleManager(
         platform = FirebasePlatform.Android,
         scope = scope,
-        register = { fcmToken, platform, accessToken ->
-            withApi { api -> api.register(fcmToken, platform, accessToken) }
+        register = { baseUrl, fcmToken, platform, accessToken ->
+            withApi(baseUrl) { api -> api.register(fcmToken, platform, accessToken) }
         },
         currentFcmToken = { fetchFirebaseToken() },
         deleteMessagingToken = ::deleteMessagingToken,
@@ -72,8 +72,8 @@ internal object AndroidPushTokenLifecycle : PushTokenLifecycle {
         }
     }
 
-    private suspend fun <T> withApi(block: suspend (FirebaseTokenApi) -> T): T {
-        val api = FirebaseTokenApi()
+    private suspend fun <T> withApi(baseUrl: String, block: suspend (FirebaseTokenApi) -> T): T {
+        val api = FirebaseTokenApi(baseUrl = { baseUrl })
         return try {
             block(api)
         } finally {
