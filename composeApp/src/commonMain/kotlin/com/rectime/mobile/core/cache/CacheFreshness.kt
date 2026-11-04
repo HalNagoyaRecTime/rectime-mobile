@@ -35,16 +35,22 @@ internal data class CacheFreshness(
 
         /** 終了時刻のずれや点数の修正も、最大でこの期間内に反映される。 */
         val Ranking = CacheFreshness(reuseFor = 5.minutes, manualCooldown = 1.minutes)
+
+        /** タブを開く操作だけに使う。手動更新は常に取得する。 */
+        val Notifications = CacheFreshness(reuseFor = 60.seconds, manualCooldown = Duration.ZERO)
     }
 }
 
-internal fun FetchedCache<*>?.canReuse(trigger: FetchTrigger, freshness: CacheFreshness, clock: Clock): Boolean {
+internal fun FetchedCache<*>?.canReuse(trigger: FetchTrigger, freshness: CacheFreshness, clock: Clock): Boolean =
+    this?.fetchedAt?.let { runCatching { Instant.parse(it) }.getOrNull() }.canReuse(trigger, freshness, clock)
+
+internal fun Instant?.canReuse(trigger: FetchTrigger, freshness: CacheFreshness, clock: Clock): Boolean {
     val window = when (trigger) {
         FetchTrigger.Required -> return false
         FetchTrigger.Automatic -> freshness.reuseFor
         FetchTrigger.Manual -> freshness.manualCooldown
     }
-    val fetched = this?.fetchedAt?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return false
+    val fetched = this ?: return false
     val age = clock.now() - fetched
     // 時刻不明・端末時計の巻き戻りでは鮮度を断定しない。
     return age >= Duration.ZERO && age < window

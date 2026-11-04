@@ -1,8 +1,11 @@
 package com.rectime.mobile.feature.notifications
 
+import com.rectime.mobile.core.cache.CacheFreshness
 import com.rectime.mobile.core.cache.CacheRequestGeneration
 import com.rectime.mobile.core.cache.CachedFetchResult
+import com.rectime.mobile.core.cache.FetchTrigger
 import com.rectime.mobile.core.cache.LocalCache
+import com.rectime.mobile.core.cache.canReuse
 import com.rectime.mobile.core.cache.fetchWithCacheFirst
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -20,12 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
-
-/** 通知タブを開いたときに、直近の取得結果を再利用する期間。 */
-private val NotificationEnterReuseWindow = 60.seconds
 
 data class NotificationFeedStatus(
     val isUpdating: Boolean = false,
@@ -199,14 +197,8 @@ class NotificationFeedStore(
     }
 
     // 新着はプッシュ・前面復帰の取得で反映されるため、タブを開く操作だけ直近の結果を再利用する。
-    suspend fun loadOnEnter(): CachedFetchResult<List<UserNotification>> = load(force = !fetchedRecently())
-
-    private fun fetchedRecently(): Boolean {
-        val fetchedAt = lastFetchedAt ?: return false
-        val age = clock.now() - fetchedAt
-        // 端末時計の巻き戻りでは鮮度を断定しない。
-        return age >= Duration.ZERO && age < NotificationEnterReuseWindow
-    }
+    suspend fun loadOnEnter(): CachedFetchResult<List<UserNotification>> =
+        load(force = !lastFetchedAt.canReuse(FetchTrigger.Automatic, CacheFreshness.Notifications, clock))
 
     // 復帰・プッシュ前から進行していた応答では、新着を取り逃す可能性がある。
     suspend fun refreshAfterCurrentRequest() {
