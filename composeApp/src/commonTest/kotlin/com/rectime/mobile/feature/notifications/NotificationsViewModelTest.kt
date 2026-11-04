@@ -41,6 +41,42 @@ class NotificationsViewModelTest {
         Dispatchers.resetMain()
     }
 
+    // ---- 通知タブを開くときの再利用 ----
+
+    @Test
+    fun enteringTabRightAfterFetchDoesNotRequestAgain() = runTest(testDispatcher) {
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            page(listOf(notification(1)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        feed.load(force = true)
+        val viewModel = NotificationsViewModel(feed, readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEnter()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, requests)
+        assertEquals(listOf(1), viewModel.uiState.value.notifications.map(UserNotification::id))
+    }
+
+    @Test
+    fun manualRefreshRightAfterFetchStillRequests() = runTest(testDispatcher) {
+        var requests = 0
+        val gateway = FakeGateway { limit, offset ->
+            requests++
+            page(listOf(notification(requests)), 1, limit, offset)
+        }
+        val feed = feedStore(gateway)
+        feed.load(force = true)
+        val viewModel = NotificationsViewModel(feed, readStore())
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.refresh()
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertEquals(2, requests)
+        assertEquals(listOf(2), viewModel.uiState.value.notifications.map(UserNotification::id))
+    }
+
     // ---- 初回ロード 正常系 ----
 
     @Test
