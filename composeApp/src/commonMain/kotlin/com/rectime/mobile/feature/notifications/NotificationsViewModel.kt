@@ -116,8 +116,10 @@ class NotificationsViewModel(
             refreshSource.value = source
             try {
                 val result = withMinimumRefreshDuration(source != null) {
-                    if (source != null) feedStore.refreshAfterCurrentRequest()
-                    feedStore.load(force = source == null)
+                    if (source != null) {
+                        feedStore.refreshAfterCurrentRequest()
+                        feedStore.load()
+                    } else feedStore.loadOnEnter()
                 }
                 when (result) {
                     is CachedFetchResult.Cached -> result.error.printStackTrace()

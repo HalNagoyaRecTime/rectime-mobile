@@ -22,6 +22,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotificationFeedStoreTest {
@@ -30,6 +33,124 @@ class NotificationFeedStoreTest {
 
     @AfterTest
     fun tearDown() { Dispatchers.resetMain() }
+
+    @Test
+    fun enteringWithinWindowReusesLatestFetch() = runTest {
+        val clock = MutableClock()
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), clock)
+        store.load(force = true)
+        clock.advance(59)
+        assertIs<CachedFetchResult.Fresh<List<UserNotification>>>(store.loadOnEnter())
+        assertEquals(1, gateway.requestedOffsets.size)
+    }
+
+    @Test
+    fun enteringAfterWindowFetchesAgain() = runTest {
+        val clock = MutableClock()
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), clock)
+        store.load(force = true)
+        clock.advance(60)
+        store.loadOnEnter()
+        assertEquals(2, gateway.requestedOffsets.size)
+    }
+
+    @Test
+    fun enteringWithoutPreviousFetchFetches() = runTest {
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), MutableClock())
+        store.loadOnEnter()
+        assertEquals(1, gateway.requestedOffsets.size)
+    }
+
+    @Test
+    fun enteringAfterFailedFetchFetchesWithinWindow() = runTest {
+        val clock = MutableClock()
+        var calls = 0
+        val gateway = FakeGateway { limit, offset ->
+            calls++
+            if (calls == 2) error("offline")
+            page(listOf(notification(calls)), 1, limit, offset)
+        }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), clock)
+        store.load(force = true)
+        store.load(force = true)
+        store.loadOnEnter()
+        assertEquals(3, calls)
+        assertEquals(listOf(3), store.notifications.value.map(UserNotification::id))
+    }
+
+    @Test
+    fun enteringDuringFetchJoinsSameRequest() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val gateway = FakeGateway { limit, offset -> gate.await(); page(listOf(notification(1)), 1, limit, offset) }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), MutableClock())
+        val fetching = async { store.load(force = true) }
+        runCurrent()
+        val entering = async { store.loadOnEnter() }
+        runCurrent()
+        gate.complete(Unit)
+        assertEquals(fetching.await(), entering.await())
+        assertEquals(1, gateway.requestedOffsets.size)
+    }
+
+    @Test
+    fun pushRefreshWithinWindowFetchesAndEnteringShowsNewNotification() = runTest {
+        val clock = MutableClock()
+        var calls = 0
+        val gateway = FakeGateway { limit, offset ->
+            calls++
+            page(listOf(notification(calls)), 1, limit, offset)
+        }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), clock)
+        store.load(force = true)
+        clock.advance(10)
+        store.refreshAfterCurrentRequest()
+        assertEquals(2, calls)
+        clock.advance(10)
+        store.loadOnEnter()
+        assertEquals(2, calls)
+        assertEquals(listOf(2), store.notifications.value.map(UserNotification::id))
+    }
+
+    @Test
+    fun loadingMoreDoesNotExtendEnterWindow() = runTest {
+        val clock = MutableClock()
+        val gateway = FakeGateway { limit, offset ->
+            page((offset + 1..offset + limit).map(::notification), 120, limit, offset)
+        }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), clock)
+        store.load(force = true)
+        clock.advance(59)
+        // 保持中の100件を表示し終えた次の読み込みで、追加ページを取得する。
+        repeat(5) { store.loadMore() }
+        assertEquals(listOf(0, 100), gateway.requestedOffsets)
+        clock.advance(1)
+        store.loadOnEnter()
+        assertEquals(listOf(0, 100, 0), gateway.requestedOffsets)
+    }
+
+    @Test
+    fun resetDiscardsEnterWindow() = runTest {
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), MutableClock())
+        store.load(force = true)
+        store.reset()
+        store.loadOnEnter()
+        assertEquals(2, gateway.requestedOffsets.size)
+    }
+
+    @Test
+    fun clockRollbackFetchesWhenEntering() = runTest {
+        val clock = MutableClock()
+        val gateway = FakeGateway { limit, offset -> page(listOf(notification(1)), 1, limit, offset) }
+        val store = NotificationFeedStore(gateway, LocalCache(InMemoryKeyValueStore()), clock)
+        store.load(force = true)
+        clock.advance(-1)
+        store.loadOnEnter()
+        assertEquals(2, gateway.requestedOffsets.size)
+    }
 
     @Test
     fun savedFeedIsPublishedBeforeNetworkCompletes() = runTest {
@@ -391,6 +512,14 @@ class NotificationFeedStoreTest {
         scheduledAt = "2026-07-31T09:00:00+09:00",
         relatedEvent = null,
     )
+
+    private class MutableClock : Clock {
+        private var instant = Instant.parse("2026-11-04T09:00:00Z")
+
+        fun advance(seconds: Int) { instant += seconds.seconds }
+
+        override fun now() = instant
+    }
 
     private class FakeGateway(
         private val pageProvider: suspend (limit: Int, offset: Int) -> NotificationPage,
