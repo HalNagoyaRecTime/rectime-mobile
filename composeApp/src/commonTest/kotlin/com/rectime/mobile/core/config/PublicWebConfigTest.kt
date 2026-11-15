@@ -13,6 +13,32 @@ class PublicWebConfigTest {
     }
 
     @Test
+    fun rejectsTheOriginOfAnotherCampus() {
+        listOf(
+            Triple("https://recwatch-osaka.pages.dev", Campus.NAGOYA, AppEnvironment.Production),
+            Triple("https://recwatch-tokyo.pages.dev", Campus.OSAKA, AppEnvironment.Production),
+            Triple("https://recwatch.pages.dev", Campus.TOKYO, AppEnvironment.Production),
+            Triple("https://staging.recwatch-osaka.pages.dev", Campus.TOKYO, AppEnvironment.Staging),
+        ).forEach { (origin, campus, environment) ->
+            assertNull(
+                resolvePublicWebUrl(
+                    path = accountDeletionPath,
+                    origin = origin,
+                    environment = environment,
+                    campus = campus,
+                ),
+                "$campus ($environment) must reject $origin",
+            )
+        }
+    }
+
+    @Test
+    fun developmentHasNoWebOriginForOsakaAndTokyo() {
+        assertNull(campusWebOrigin(Campus.OSAKA, AppEnvironment.Development))
+        assertNull(campusWebOrigin(Campus.TOKYO, AppEnvironment.Development))
+    }
+
+    @Test
     fun publicWebOriginMatchesCurrentBuildType() {
         assertEquals(allowedWebOrigin(appEnvironment), publicWebOrigin)
     }

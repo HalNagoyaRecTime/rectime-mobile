@@ -19,6 +19,21 @@ internal fun campusApiBaseUrl(campus: Campus, environment: AppEnvironment, nagoy
         }
     }
 
+internal fun campusWebOrigin(campus: Campus, environment: AppEnvironment): String? =
+    when (campus) {
+        Campus.NAGOYA -> allowedWebOrigin(environment)
+        Campus.OSAKA -> when (environment) {
+            AppEnvironment.Production -> "https://recwatch-osaka.pages.dev"
+            AppEnvironment.Staging -> "https://staging.recwatch-osaka.pages.dev"
+            AppEnvironment.Development -> null
+        }
+        Campus.TOKYO -> when (environment) {
+            AppEnvironment.Production -> "https://recwatch-tokyo.pages.dev"
+            AppEnvironment.Staging -> "https://staging.recwatch-tokyo.pages.dev"
+            AppEnvironment.Development -> null
+        }
+    }
+
 /** 現在の環境でこの学校のAPIが無ければnull */
 internal fun Campus.apiBaseUrlOrNull(): String? = campusApiBaseUrl(this, appEnvironment, nagoyaApiBaseUrl)
 

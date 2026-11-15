@@ -38,13 +38,14 @@ private val httpsOriginPattern = Regex(
 /**
  * Resolves a path against the public web origin.
  *
- * Each build accepts only the origin of its own environment. Preview, localhost,
- * example and placeholder origins are rejected in every build.
+ * Each build accepts only the origin of its own environment and campus. Preview,
+ * localhost, example and placeholder origins are rejected in every build.
  */
 fun resolvePublicWebUrl(
     path: String,
     origin: String = publicWebOrigin,
     environment: AppEnvironment = appEnvironment,
+    campus: Campus = Campus.NAGOYA,
 ): String? {
     if (!path.startsWith('/') || path.startsWith("//")) return null
     if ('?' in path || '#' in path || '\\' in path) return null
@@ -63,7 +64,7 @@ fun resolvePublicWebUrl(
         (environment != AppEnvironment.Development && host.startsWith("develop.")) ||
         host.startsWith("development.") ||
         (environment != AppEnvironment.Staging && host.startsWith("staging."))
-    if (forbiddenHost || normalizedOrigin != allowedWebOrigin(environment)) return null
+    if (forbiddenHost || normalizedOrigin != campusWebOrigin(campus, environment)) return null
 
     return normalizedOrigin + path
 }
