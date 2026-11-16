@@ -39,7 +39,7 @@
                 <data
                     android:host="auth"
                     android:path="/callback"
-                    android:scheme="com.rectime.mobile" />
+                    android:scheme="io.github.halnagoyarectime" />
             </intent-filter>
         </activity>
 
